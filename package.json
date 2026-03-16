@@ -1,0 +1,31 @@
+{
+  "name": "@cheqi/sdk",
+  "version": "0.1.0",
+  "description": "Cheqi TypeScript SDK for encrypted receipt and credit note processing",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./entity": {
+      "types": "./dist/entity/index.d.ts",
+      "default": "./dist/entity/index.js"
+    }
+  },
+  "scripts": {
+    "prebuild": "node ./scripts/clean-dist.mjs",
+    "build": "tsc -p tsconfig.build.json",
+    "test": "npm run build && node --test test/sdk.test.js",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "typescript": "^5.9.3"
+  }
+}
