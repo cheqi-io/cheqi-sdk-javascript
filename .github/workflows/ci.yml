@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  spec-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check token presence
+        env:
+          CI_SPEC_TOKEN: ${{ secrets.CI_SPEC_TOKEN }}
+        run: |
+          if [ -z "$CI_SPEC_TOKEN" ]; then
+            echo "::error::CI_SPEC_TOKEN is missing"
+            exit 1
+          fi
+
+      - name: Fetch latest OpenAPI spec
+        env:
+          CI_SPEC_TOKEN: ${{ secrets.CI_SPEC_TOKEN }}
+        run: |
+          curl -v -fsSL \
+            -H "X-CI-Token: ${CI_SPEC_TOKEN}" \
+            -A "GitHub-Actions-CI" \
+            https://test.api.cheqi.io/v3/api-docs.yaml \
+            -o openapi-latest.yaml
+
+      - name: Check for spec drift
+        run: |
+          if ! diff -q openapi.yaml openapi-latest.yaml > /dev/null 2>&1; then
+            echo "::warning::OpenAPI spec has changed. Run make fetch-spec and update models."
+            diff openapi.yaml openapi-latest.yaml || true
+            exit 1
+          fi
+          echo "OpenAPI spec is up to date."
+
+  generate-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install pyyaml
+          npm install -g @openapitools/openapi-generator-cli
+
+      - name: Generate models
+        run: make generate
+
+      - name: Check for uncommitted changes
+        run: |
+          if ! git diff --exit-code src/models/generated/; then
+            echo "::error::Generated models are out of date. Run 'make generate' and commit."
+            exit 1
+          fi
+
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: ['18', '20', '22']
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
