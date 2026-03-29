@@ -2,6 +2,25 @@
   "name": "@cheqi/sdk",
   "version": "0.1.0",
   "description": "Cheqi TypeScript SDK for encrypted receipt and credit note processing",
+  "license": "MIT",
+  "author": "Cheqi",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cheqi/cheqi-sdk.git",
+    "directory": "cheqi-sdk-javascript"
+  },
+  "bugs": {
+    "url": "https://github.com/cheqi/cheqi-sdk/issues"
+  },
+  "homepage": "https://cheqi.io",
+  "keywords": [
+    "cheqi",
+    "receipt",
+    "digital-receipt",
+    "credit-note",
+    "encryption",
+    "sdk"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -15,11 +34,17 @@
       "default": "./dist/entity/index.js"
     }
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "prebuild": "node ./scripts/clean-dist.mjs",
     "build": "tsc -p tsconfig.build.json",
     "test": "npm run build && node --test test/sdk.test.js",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "prepublishOnly": "npm run build && npm test"
   },
   "engines": {
     "node": ">=20"

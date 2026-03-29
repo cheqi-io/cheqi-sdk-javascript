@@ -1,13 +1,17 @@
 import { constants, createDecipheriv, createPrivateKey, privateDecrypt } from "node:crypto";
+import { AES_KEY_LENGTH, GCM_IV_LENGTH, GCM_TAG_LENGTH } from "../crypto.js";
 import { DecryptionError } from "../errors.js";
 import type { EncryptedCreditNoteInitiationRequest, EncryptedReceipt } from "../types.js";
 import { parseBase64Der } from "../utils.js";
 
-const AES_KEY_LENGTH = 32;
-const GCM_IV_LENGTH = 12;
-const GCM_TAG_LENGTH = 16;
-
 function rsaDecrypt(encryptedKeyBase64: string, privateKeyBase64: string): Buffer {
+  if (!encryptedKeyBase64) {
+    throw new DecryptionError("Encrypted key cannot be empty");
+  }
+  if (!privateKeyBase64) {
+    throw new DecryptionError("Private key is required for decryption");
+  }
+
   const privateKey = createPrivateKey({
     key: parseBase64Der(privateKeyBase64),
     format: "der",
@@ -24,14 +28,23 @@ function rsaDecrypt(encryptedKeyBase64: string, privateKeyBase64: string): Buffe
   );
 
   if (decryptedKey.length !== AES_KEY_LENGTH) {
-    throw new DecryptionError(`Decrypted AES key is not ${AES_KEY_LENGTH} bytes: ${decryptedKey.length}`);
+    throw new DecryptionError(`Decrypted AES key has invalid length: expected ${AES_KEY_LENGTH} bytes, got ${decryptedKey.length}`);
   }
 
   return decryptedKey;
 }
 
 function aesDecrypt(encryptedDataBase64: string, aesKey: Buffer): string {
+  if (!encryptedDataBase64) {
+    throw new DecryptionError("Encrypted data cannot be empty");
+  }
+
   const combined = Buffer.from(encryptedDataBase64, "base64");
+  const minLength = GCM_IV_LENGTH + GCM_TAG_LENGTH;
+  if (combined.length < minLength) {
+    throw new DecryptionError(`Encrypted data too short: expected at least ${minLength} bytes, got ${combined.length}`);
+  }
+
   const iv = combined.subarray(0, GCM_IV_LENGTH);
   const ciphertext = combined.subarray(GCM_IV_LENGTH, combined.length - GCM_TAG_LENGTH);
   const tag = combined.subarray(combined.length - GCM_TAG_LENGTH);
@@ -40,23 +53,35 @@ function aesDecrypt(encryptedDataBase64: string, aesKey: Buffer): string {
   return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
 }
 
+/**
+ * Decrypts encrypted receipts and credit-note initiation requests using
+ * the seller's RSA private key.
+ */
 export class DecryptionService {
+  /**
+   * Decrypt an encrypted receipt payload.
+   * @param encryptedReceipt  The encrypted receipt from the Cheqi backend.
+   * @param privateKeyBase64  Base64-encoded PKCS#8 DER private key.
+   * @returns The decrypted receipt content and optional customer details.
+   */
   decryptReceipt(encryptedReceipt: EncryptedReceipt, privateKeyBase64: string): {
     receiptContent: string;
     customerDetails: string | null;
   } {
+    if (!encryptedReceipt) {
+      throw new DecryptionError("Encrypted receipt cannot be null");
+    }
+
     try {
-      const encryptedKey = (encryptedReceipt.encryptedSymmetricKey ?? encryptedReceipt.encrypted_symmetric_key) ?? "";
-      const encryptedPayload = (encryptedReceipt.encryptedReceipt ?? encryptedReceipt.encrypted_receipt) ?? "";
+      const encryptedKey = encryptedReceipt.encryptedSymmetricKey ?? "";
+      const encryptedPayload = encryptedReceipt.encryptedReceipt ?? "";
       const receiptKey = rsaDecrypt(encryptedKey, privateKeyBase64);
       const receiptContent = aesDecrypt(encryptedPayload, receiptKey);
 
       let customerDetails: string | null = null;
-      const encryptedCustomerDetails = encryptedReceipt.encryptedCustomerDetails ?? encryptedReceipt.encrypted_customer_details;
-      const encryptedCustomerAesKey = encryptedReceipt.encryptedCustomerAesKey ?? encryptedReceipt.encrypted_customer_aes_key;
-      if (encryptedCustomerDetails && encryptedCustomerAesKey) {
-        const customerKey = rsaDecrypt(encryptedCustomerAesKey, privateKeyBase64);
-        customerDetails = aesDecrypt(encryptedCustomerDetails, customerKey);
+      if (encryptedReceipt.encryptedCustomerDetails && encryptedReceipt.encryptedCustomerAesKey) {
+        const customerKey = rsaDecrypt(encryptedReceipt.encryptedCustomerAesKey, privateKeyBase64);
+        customerDetails = aesDecrypt(encryptedReceipt.encryptedCustomerDetails, customerKey);
       }
 
       return { receiptContent, customerDetails };
@@ -70,20 +95,23 @@ export class DecryptionService {
     }
   }
 
+  /**
+   * Decrypt an encrypted credit-note initiation request.
+   * @param encryptedCreditNote  The encrypted credit-note from a webhook.
+   * @param privateKeyBase64     Base64-encoded PKCS#8 DER private key.
+   * @returns The decrypted credit-note content.
+   */
   decryptCreditNote(
     encryptedCreditNote: EncryptedCreditNoteInitiationRequest,
     privateKeyBase64: string
   ): { content: string } {
+    if (!encryptedCreditNote) {
+      throw new DecryptionError("Encrypted credit note cannot be null");
+    }
+
     try {
-      const encryptedKey = encryptedCreditNote.encryptedSymmetricKey ??
-        encryptedCreditNote.encrypted_symmetric_key ??
-        "";
-      const encryptedPayload =
-        encryptedCreditNote.encryptedCreditNoteInitiationRequest ??
-        encryptedCreditNote.encrypted_credit_note_initiation_request ??
-        encryptedCreditNote.encryptedCreditNote ??
-        encryptedCreditNote.encrypted_credit_note ??
-        "";
+      const encryptedKey = encryptedCreditNote.encryptedSymmetricKey ?? "";
+      const encryptedPayload = encryptedCreditNote.encryptedCreditNoteInitiationRequest ?? "";
 
       const aesKey = rsaDecrypt(encryptedKey, privateKeyBase64);
       return {

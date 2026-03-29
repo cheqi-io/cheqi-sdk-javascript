@@ -8,8 +8,8 @@ import type {
   EncryptedCreditNote,
   EncryptedCreditNoteInitiationRequest,
   IdentificationDetails,
+  MatchedRecipient,
   ReceiptFormat,
-  Recipient,
   RecipientResolutionResponse
 } from "../types.js";
 import { serializeJson, sha256Hex } from "../utils.js";
@@ -17,12 +17,12 @@ import { DecryptionService } from "./decryption.js";
 import { EncryptionService } from "./encryption.js";
 import { MatchingService } from "./matching.js";
 
-function uniqueFormats(recipients: Recipient[] = []): ReceiptFormat[] {
+function uniqueFormats(recipients: MatchedRecipient[] = []): ReceiptFormat[] {
   const seen = new Set<ReceiptFormat>();
   const formats: ReceiptFormat[] = [];
 
   for (const recipient of recipients) {
-    for (const format of recipient.acceptedFormats ?? recipient.accepted_formats ?? []) {
+    for (const format of recipient.acceptedFormats ?? []) {
       if (!seen.has(format)) {
         seen.add(format);
         formats.push(format);
@@ -62,7 +62,7 @@ export class CreditNoteService {
       });
     }
 
-    const originalReceiptId = identificationDetails.cheqiReceiptId ?? identificationDetails.cheqi_receipt_id;
+    const originalReceiptId = identificationDetails.cheqiReceiptId;
     if (!originalReceiptId) {
       throw new CheqiSDKError("Original receipt ID (cheqiReceiptId) is required for credit note processing", {
         errorCode: ErrorCodes.VALIDATION_ERROR,
@@ -79,7 +79,10 @@ export class CreditNoteService {
       const templateResponse = await this.generateCreditNoteTemplate(
         {
           creditNoteTemplateRequest,
-          receiptFormats: uniqueFormats(matchResponse.recipients)
+          formats: uniqueFormats(matchResponse.recipients),
+          buyerCountryCode: matchResponse.buyerCountryCode ?? "",
+          buyerType: matchResponse.buyerType ?? ("CONSUMER" as any),
+          taxesApplied: true
         },
         accessToken
       );
@@ -87,7 +90,7 @@ export class CreditNoteService {
       const encryptedCreditNotes = this.buildEncryptedCreditNotes(matchResponse, templateResponse);
       const templateContent = templateResponse.cheqi
         ? serializeJson(templateResponse.cheqi)
-        : (templateResponse.ubl ?? "");
+        : (templateResponse.ublPurchaseReceipt ?? "");
       const templateHash = sha256Hex(templateContent);
       const createdResponse = await this.sendEncryptedCreditNotes(
         originalReceiptId,
@@ -121,7 +124,7 @@ export class CreditNoteService {
     return this.apiClient.generateCreditNoteTemplate(request, accessToken);
   }
 
-  createEncryptedCreditNote(creditNoteEnvelope: string, recipient: Recipient): EncryptedCreditNote {
+  createEncryptedCreditNote(creditNoteEnvelope: string, recipient: MatchedRecipient): EncryptedCreditNote {
     if (!creditNoteEnvelope.trim()) {
       throw new CheqiSDKError("Purchase receipt cannot be null or empty", {
         errorCode: ErrorCodes.VALIDATION_ERROR,
@@ -130,8 +133,8 @@ export class CreditNoteService {
     }
     return {
       ...this.encryptionService.encryptCreditNoteForRecipient(creditNoteEnvelope, recipient),
-      receiptFormats: recipient.acceptedFormats ?? recipient.accepted_formats
-    };
+      receiptFormats: recipient.acceptedFormats
+    } as EncryptedCreditNote;
   }
 
   sendEncryptedCreditNotes(
@@ -188,14 +191,14 @@ export class CreditNoteService {
     const encryptedCreditNotes: EncryptedCreditNote[] = [];
 
     for (const recipient of matchResponse.recipients ?? []) {
-      const acceptedFormats = recipient.acceptedFormats ?? recipient.accepted_formats ?? [];
+      const acceptedFormats = recipient.acceptedFormats ?? [];
       const envelope: Record<string, unknown> = {};
 
-      if (acceptedFormats.includes("CHEQI") && templateResponse.cheqi) {
+      if (acceptedFormats.includes("CHEQI" as any) && templateResponse.cheqi) {
         envelope.cheqiCreditNote = templateResponse.cheqi;
       }
-      if (acceptedFormats.includes("UBL_XML") && templateResponse.ubl) {
-        envelope.ublXml = templateResponse.ubl;
+      if (acceptedFormats.includes("UBL_CREDIT_NOTE" as any) && templateResponse.ubl) {
+        envelope.ublPurchaseReceipt = templateResponse.ubl;
       }
 
       encryptedCreditNotes.push(this.createEncryptedCreditNote(serializeJson(envelope), recipient));

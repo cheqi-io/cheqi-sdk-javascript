@@ -2,25 +2,26 @@ import { CheqiSDKError, ErrorCodes, ReceiptProcessingError } from "../errors.js"
 import { ReceiptResult } from "../models.js";
 import type {
   CheqiApiClient,
-  EncryptedReceiptRequestDto,
+  EncryptedReceiptRequest,
   IdentificationDetails,
+  MatchedRecipient,
   NotificationDisplayCode,
   ReceiptFormat,
-  Recipient,
-  RecipientResolutionResponse,
+  ReceiptTemplateGenerationRequest,
   ReceiptTemplateRequest,
-  ReceiptTemplateResponse
+  ReceiptTemplateResponse,
+  RecipientResolutionResponse
 } from "../types.js";
-import { serializeJson, sha256Hex } from "../utils.js";
+import { isValidEmail, serializeJson, sha256Hex } from "../utils.js";
 import { EncryptionService } from "./encryption.js";
 import { MatchingService } from "./matching.js";
 
-function uniqueFormats(recipients: Recipient[] = []): ReceiptFormat[] {
+function uniqueFormats(recipients: MatchedRecipient[] = []): ReceiptFormat[] {
   const seen = new Set<ReceiptFormat>();
   const formats: ReceiptFormat[] = [];
 
   for (const recipient of recipients) {
-    for (const format of recipient.acceptedFormats ?? recipient.accepted_formats ?? []) {
+    for (const format of recipient.acceptedFormats ?? []) {
       if (!seen.has(format)) {
         seen.add(format);
         formats.push(format);
@@ -51,7 +52,7 @@ export class ReceiptService {
 
     try {
       const matchResponse = await this.matchingService.matchCustomer(identificationDetails, accessToken);
-      const recipientEmail = identificationDetails.recipientEmail ?? identificationDetails.recipient_email;
+      const recipientEmail = identificationDetails.recipientEmail;
 
       if (!matchResponse.customerFound && !recipientEmail) {
         return ReceiptResult.customerNotFound();
@@ -59,11 +60,12 @@ export class ReceiptService {
 
       const templateResponse = await this.generateReceiptTemplate(
         {
-          ...receiptRequest,
-          buyerCountryCode: receiptRequest.buyerCountryCode ?? matchResponse.buyerCountryCode,
-          recipientEntityType: receiptRequest.recipientEntityType ?? matchResponse.recipientEntityType
+          receiptTemplateRequest: receiptRequest,
+          formats: uniqueFormats(matchResponse.recipients),
+          buyerCountryCode: matchResponse.buyerCountryCode ?? "",
+          buyerType: matchResponse.buyerType ?? ("CONSUMER" as any),
+          taxesApplied: true
         },
-        uniqueFormats(matchResponse.recipients),
         accessToken
       );
 
@@ -75,7 +77,7 @@ export class ReceiptService {
         );
         const templateContent = templateResponse.cheqi
           ? serializeJson(templateResponse.cheqi)
-          : (templateResponse.ubl ?? "");
+          : (templateResponse.ublPurchaseReceipt ?? "");
         const templateHash = sha256Hex(templateContent);
         const createdResponse = await this.sendEncryptedReceipts(
           encryptedReceipts,
@@ -86,7 +88,7 @@ export class ReceiptService {
         return ReceiptResult.deliveredToApp(createdResponse, templateContent);
       }
 
-      return this.sendReceiptViaEmail(recipientEmail ?? "", templateResponse.cheqi ?? {}, accessToken);
+      return this.sendReceiptViaEmail(recipientEmail ?? "", (templateResponse.cheqi ?? {}) as Record<string, unknown>, accessToken);
     } catch (error) {
       if (error instanceof CheqiSDKError) {
         throw error;
@@ -98,8 +100,7 @@ export class ReceiptService {
   }
 
   generateReceiptTemplate(
-    request: ReceiptTemplateRequest,
-    receiptFormats: ReceiptFormat[] = [],
+    request: ReceiptTemplateGenerationRequest,
     accessToken: string | null = null
   ): Promise<ReceiptTemplateResponse> {
     if (!request) {
@@ -108,14 +109,14 @@ export class ReceiptService {
         httpStatusCode: 400
       });
     }
-    return this.apiClient.generateReceiptTemplate(request, receiptFormats, accessToken);
+    return this.apiClient.generateReceiptTemplate(request, accessToken);
   }
 
   createEncryptedReceipts(
     purchaseReceipt: string,
-    recipient: Recipient,
+    recipient: MatchedRecipient,
     notificationDisplayCode: NotificationDisplayCode | null = null
-  ): EncryptedReceiptRequestDto {
+  ): EncryptedReceiptRequest {
     if (!purchaseReceipt.trim()) {
       throw new CheqiSDKError("Purchase receipt cannot be null or empty", {
         errorCode: ErrorCodes.VALIDATION_ERROR,
@@ -131,13 +132,13 @@ export class ReceiptService {
 
     return {
       ...this.encryptionService.encryptReceiptForRecipient(purchaseReceipt, recipient),
-      receiptFormats: recipient.acceptedFormats ?? recipient.accepted_formats,
+      receiptFormats: recipient.acceptedFormats,
       notificationDisplayCode: notificationDisplayCode ?? undefined
     };
   }
 
   sendEncryptedReceipts(
-    encryptedReceipts: EncryptedReceiptRequestDto[],
+    encryptedReceipts: EncryptedReceiptRequest[],
     templateHash: string,
     matchResponse: RecipientResolutionResponse,
     accessToken: string | null = null
@@ -174,7 +175,7 @@ export class ReceiptService {
     cheqiReceipt: Record<string, unknown>,
     accessToken: string | null = null
   ): Promise<ReceiptResult> {
-    if (!customerEmail.includes("@")) {
+    if (!isValidEmail(customerEmail)) {
       throw new CheqiSDKError("Valid customer email is required", {
         errorCode: ErrorCodes.VALIDATION_ERROR,
         httpStatusCode: 400
@@ -188,18 +189,18 @@ export class ReceiptService {
     matchResponse: RecipientResolutionResponse,
     templateResponse: ReceiptTemplateResponse,
     notificationDisplayCode: NotificationDisplayCode | null
-  ): EncryptedReceiptRequestDto[] {
-    const encryptedReceipts: EncryptedReceiptRequestDto[] = [];
+  ): EncryptedReceiptRequest[] {
+    const encryptedReceipts: EncryptedReceiptRequest[] = [];
 
     for (const recipient of matchResponse.recipients ?? []) {
-      const acceptedFormats = recipient.acceptedFormats ?? recipient.accepted_formats ?? [];
+      const acceptedFormats = recipient.acceptedFormats ?? [];
       const envelope: Record<string, unknown> = {};
 
-      if (acceptedFormats.includes("CHEQI") && templateResponse.cheqi) {
+      if (acceptedFormats.includes("CHEQI" as any) && templateResponse.cheqi) {
         envelope.cheqiReceipt = templateResponse.cheqi;
       }
-      if (acceptedFormats.includes("UBL_XML") && templateResponse.ubl) {
-        envelope.ublXml = templateResponse.ubl;
+      if (acceptedFormats.includes("UBL_PURCHASE_RECEIPT" as any) && templateResponse.ublPurchaseReceipt) {
+        envelope.ublPurchaseReceipt = templateResponse.ublPurchaseReceipt;
       }
       if (templateResponse.vatMetadata) {
         envelope.vatMetadata = templateResponse.vatMetadata;

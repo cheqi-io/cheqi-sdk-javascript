@@ -1,5 +1,6 @@
 import { CheqiSDKError, ErrorCodes } from "../errors.js";
-import type { CheqiApiClient, Company } from "../types.js";
+import type { CheqiApiClient, CompanyDTO } from "../types.js";
+import { Company } from "../models/domain.js";
 import { getCompanyValidationErrors } from "../validators.js";
 
 export class CompanyService {
@@ -7,7 +8,7 @@ export class CompanyService {
     private readonly apiClient: Pick<CheqiApiClient, "provisionCompany">
   ) {}
 
-  provisionCompany(company: Company, adminEmail: string): Promise<Record<string, unknown>> {
+  provisionCompany(company: Company | CompanyDTO, adminEmail: string): Promise<Record<string, unknown>> {
     if (!company) {
       throw new CheqiSDKError("Company cannot be null", {
         errorCode: ErrorCodes.VALIDATION_ERROR,
@@ -30,6 +31,7 @@ export class CompanyService {
       });
     }
 
-    return this.apiClient.provisionCompany({ company, adminEmail });
+    const companyDTO = company instanceof Company ? company.toCompanyDTO() : company;
+    return this.apiClient.provisionCompany({ company: companyDTO, adminEmail });
   }
 }

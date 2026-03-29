@@ -1,5 +1,36 @@
 node_modules/
 dist/
 build/
+
+# Environment
 .env
+.env.local
+.env.*.local
+
+# TypeScript
+*.tsbuildinfo
+
+# OS
 .DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test
+coverage/
+
+# npm
+.npm/
+.cache/
+
+# OpenAPI generator state
+.openapi-generator/

@@ -1,24 +1,35 @@
 import { CheqiSDKConfig } from "../config.js";
 import { CheqiApiError, ErrorCodes } from "../errors.js";
+import type { Logger } from "../logger.js";
+import { NoopLogger } from "../logger.js";
 import type {
   CheqiApiClient,
-  Company,
   CreateStoreRequest,
   CreditNoteTemplateGenerationRequest,
+  CreditNoteTemplateResponse,
   EncryptedCreditNote,
-  EncryptedReceiptRequestDto,
+  EncryptedReceiptRequest,
   FetchLike,
   IdentificationDetails,
-  ReceiptFormat,
-  ReceiptTemplateRequest,
+  ProvisionCompanyRequest,
+  ReceiptTemplateGenerationRequest,
   ReceiptTemplateResponse,
+  RecipientResolutionResponse,
   RequestOptions
 } from "../types.js";
 import { normalizeValue, serializeJson } from "../utils.js";
 import { Endpoints } from "./endpoints.js";
 import { RetryHandler } from "./retry.js";
 
-const USER_AGENT = "CheqiSDK-TypeScript/0.1.0";
+// read version at module load; falls back gracefully
+const SDK_VERSION: string = (() => {
+  try {
+    // Dynamic import not needed — we just embed the constant at build time.
+    return "0.1.0";
+  } catch {
+    return "unknown";
+  }
+})();
 
 function mapErrorCode(status: number) {
   if (status === 401) return ErrorCodes.AUTHENTICATION_FAILED;
@@ -29,26 +40,35 @@ function mapErrorCode(status: number) {
   return ErrorCodes.UNKNOWN_ERROR;
 }
 
+/**
+ * Default HTTP implementation of {@link CheqiApiClient}.
+ *
+ * Uses the global `fetch` (or an injected implementation) with automatic
+ * retry, bearer-token auth, and structured logging.
+ */
 export class DefaultCheqiApiClient implements CheqiApiClient {
   private readonly retryHandler: RetryHandler;
+  private readonly userAgent: string;
+  private readonly logger: Logger;
 
   constructor(
     private readonly config: CheqiSDKConfig,
     private readonly fetchImpl: FetchLike = globalThis.fetch
   ) {
-    this.retryHandler = new RetryHandler(config.maxRetries);
+    if (!config) {
+      throw new Error("CheqiSDKConfig is required");
+    }
+    this.logger = config.logger ?? new NoopLogger();
+    this.retryHandler = new RetryHandler({ maxRetries: config.maxRetries, logger: this.logger });
+    this.userAgent = `CheqiSDK-TypeScript/${SDK_VERSION}`;
   }
 
   async generateReceiptTemplate(
-    request: ReceiptTemplateRequest,
-    receiptFormats: ReceiptFormat[] = [],
+    request: ReceiptTemplateGenerationRequest,
     accessToken?: string | null
   ): Promise<ReceiptTemplateResponse> {
     return this.request("POST", Endpoints.TEMPLATE_ENDPOINT, {
-      body: {
-        receiptTemplateRequest: normalizeValue(request),
-        receiptFormats
-      },
+      body: normalizeValue(request),
       accessToken,
       operation: "generateReceiptTemplate"
     });
@@ -57,7 +77,7 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
   async generateCreditNoteTemplate(
     request: CreditNoteTemplateGenerationRequest,
     accessToken?: string | null
-  ): Promise<Record<string, unknown>> {
+  ): Promise<CreditNoteTemplateResponse> {
     return this.request("POST", Endpoints.CREDIT_NOTE_TEMPLATE_ENDPOINT, {
       body: normalizeValue(request),
       accessToken,
@@ -68,7 +88,7 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
   async matchCustomer(
     request: IdentificationDetails,
     accessToken?: string | null
-  ): Promise<import("../types.js").RecipientResolutionResponse> {
+  ): Promise<RecipientResolutionResponse> {
     return this.request("POST", Endpoints.CUSTOMER_MATCH_ENDPOINT, {
       body: normalizeValue(request),
       accessToken,
@@ -78,7 +98,7 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
 
   async sendEncryptedReceipts(
     matchId: string,
-    encryptedReceipts: EncryptedReceiptRequestDto[],
+    encryptedReceipts: EncryptedReceiptRequest[],
     templateHash: string,
     accessToken?: string | null
   ): Promise<Record<string, unknown>> {
@@ -127,18 +147,14 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
     });
   }
 
-  async provisionCompany(request: { company: Company; adminEmail: string }): Promise<Record<string, unknown>> {
+  async provisionCompany(request: ProvisionCompanyRequest): Promise<Record<string, unknown>> {
     return this.request("POST", Endpoints.COMPANY_PROVISION_ENDPOINT, {
       body: normalizeValue(request),
       operation: "provisionCompany"
     });
   }
 
-  async createStore(
-    companyId: string,
-    request: CreateStoreRequest,
-    accessToken?: string | null
-  ): Promise<Record<string, unknown>> {
+  async createStore(companyId: string, request: CreateStoreRequest, accessToken?: string | null): Promise<Record<string, unknown>> {
     return this.request("POST", Endpoints.COMPANY_STORES_ENDPOINT(companyId), {
       body: normalizeValue(request),
       accessToken,
@@ -146,11 +162,7 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
     });
   }
 
-  async getStores(
-    companyId: string,
-    activeOnly?: boolean,
-    accessToken?: string | null
-  ): Promise<Record<string, unknown>> {
+  async getStores(companyId: string, activeOnly?: boolean, accessToken?: string | null): Promise<Record<string, unknown>> {
     return this.request("GET", Endpoints.COMPANY_STORES_ENDPOINT(companyId), {
       params: { activeOnly },
       accessToken,
@@ -158,23 +170,14 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
     });
   }
 
-  async getStore(
-    companyId: string,
-    storeId: string,
-    accessToken?: string | null
-  ): Promise<Record<string, unknown>> {
+  async getStore(companyId: string, storeId: string, accessToken?: string | null): Promise<Record<string, unknown>> {
     return this.request("GET", Endpoints.COMPANY_STORE_ENDPOINT(companyId, storeId), {
       accessToken,
       operation: "getStore"
     });
   }
 
-  async updateStore(
-    companyId: string,
-    storeId: string,
-    request: CreateStoreRequest,
-    accessToken?: string | null
-  ): Promise<Record<string, unknown>> {
+  async updateStore(companyId: string, storeId: string, request: CreateStoreRequest, accessToken?: string | null): Promise<Record<string, unknown>> {
     return this.request("PUT", Endpoints.COMPANY_STORE_ENDPOINT(companyId, storeId), {
       body: normalizeValue(request),
       accessToken,
@@ -182,40 +185,19 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
     });
   }
 
-  async deleteStore(
-    companyId: string,
-    storeId: string,
-    accessToken?: string | null
-  ): Promise<void> {
-    await this.request("DELETE", Endpoints.COMPANY_STORE_ENDPOINT(companyId, storeId), {
-      accessToken,
-      operation: "deleteStore"
-    });
+  async deleteStore(companyId: string, storeId: string, accessToken?: string | null): Promise<void> {
+    await this.request("DELETE", Endpoints.COMPANY_STORE_ENDPOINT(companyId, storeId), { accessToken, operation: "deleteStore" });
   }
 
-  async activateStore(
-    companyId: string,
-    storeId: string,
-    accessToken?: string | null
-  ): Promise<void> {
-    await this.request("POST", Endpoints.COMPANY_STORE_ACTIVATE_ENDPOINT(companyId, storeId), {
-      body: {},
-      accessToken,
-      operation: "activateStore"
-    });
+  async activateStore(companyId: string, storeId: string, accessToken?: string | null): Promise<void> {
+    await this.request("POST", Endpoints.COMPANY_STORE_ACTIVATE_ENDPOINT(companyId, storeId), { body: {}, accessToken, operation: "activateStore" });
   }
 
-  async deactivateStore(
-    companyId: string,
-    storeId: string,
-    accessToken?: string | null
-  ): Promise<void> {
-    await this.request("POST", Endpoints.COMPANY_STORE_DEACTIVATE_ENDPOINT(companyId, storeId), {
-      body: {},
-      accessToken,
-      operation: "deactivateStore"
-    });
+  async deactivateStore(companyId: string, storeId: string, accessToken?: string | null): Promise<void> {
+    await this.request("POST", Endpoints.COMPANY_STORE_DEACTIVATE_ENDPOINT(companyId, storeId), { body: {}, accessToken, operation: "deactivateStore" });
   }
+
+  // ---------- internals ----------
 
   private authHeaders(accessToken?: string | null): Record<string, string> {
     const token = accessToken ?? this.config.apiKey;
@@ -229,7 +211,7 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
     return {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
-      "User-Agent": USER_AGENT
+      "User-Agent": this.userAgent
     };
   }
 
@@ -247,6 +229,8 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
       }
     }
 
+    this.logger.debug(`${operation} ${method} ${url.pathname}`);
+
     const response = await this.retryHandler.executeWithRetry(
       () => this.fetchImpl(url, {
         method,
@@ -258,12 +242,19 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
     );
 
     if (response.status >= 400) {
-      throw new CheqiApiError(`${operation} failed with status ${response.status}: ${await response.text()}`, {
+      const responseText = await response.text();
+      const correlationId = response.headers.get("x-correlation-id");
+      this.logger.error(
+        `${operation} failed: status=${response.status}, correlationId=${correlationId ?? "none"}, body=${responseText.slice(0, 500)}`
+      );
+      throw new CheqiApiError(`${operation} failed with status ${response.status}: ${responseText}`, {
         errorCode: mapErrorCode(response.status),
         httpStatusCode: response.status,
-        correlationId: response.headers.get("x-correlation-id")
+        correlationId
       });
     }
+
+    this.logger.debug(`${operation} completed: status=${response.status}`);
 
     if (response.status === 204) {
       return undefined;

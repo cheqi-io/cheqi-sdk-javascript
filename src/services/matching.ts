@@ -31,22 +31,14 @@ export class MatchingService {
       return false;
     }
 
-    const cardDetails = identificationDetails.cardDetails ?? identificationDetails.card_details;
-    const paymentAccountDetails = identificationDetails.paymentAccountDetails ?? identificationDetails.payment_account_details;
-
     return Boolean(
       coalesceString(
-        cardDetails?.paymentAccountNumber,
-        cardDetails?.payment_account_number,
-        cardDetails?.paymentAccountReference,
-        cardDetails?.payment_account_reference,
-        paymentAccountDetails?.identifier,
+        identificationDetails.cardDetails?.paymentAccountNumber,
+        identificationDetails.cardDetails?.paymentAccountReference,
+        identificationDetails.paymentAccountDetails?.identifier,
         identificationDetails.recipientEmail,
-        identificationDetails.recipient_email,
         identificationDetails.cheqiReceiptId,
-        identificationDetails.cheqi_receipt_id,
-        identificationDetails.pairingCode,
-        identificationDetails.pairing_code
+        identificationDetails.pairingCode
       )
     );
   }

@@ -19,11 +19,11 @@ export class VerificationService {
     return this.canonicalizeAndHashJson(json) === expectedHash;
   }
 
-  calculateUblXmlHash(xml: string): string {
+  calculateUblHash(xml: string): string {
     return this.canonicalizeAndHashXml(xml);
   }
 
-  canonicalizeUblXml(xml: string): string {
+  canonicalizeUbl(xml: string): string {
     return canonicalizeXml(xml);
   }
 

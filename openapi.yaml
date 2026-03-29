@@ -1,0 +1,5093 @@
+openapi: 3.0.1
+info:
+  title: Cheqi API
+  description: Cheqi provides APIs for creating receipts and reading receipts for
+    customers
+  version: v1
+servers:
+- url: https://api.cheqi.io
+  description: Production
+- url: https://sandbox.api.cheqi.io
+  description: Sandbox
+security:
+- cheqi_oauth: []
+tags:
+- name: Store Management
+  description: Endpoints for managing company stores/locations
+- name: Client Application Management
+  description: "Endpoints for managing OAuth2 client applications, including registration,\
+    \ secret management, and public key configuration"
+- name: Credit Note Management
+  description: "Endpoints for creating, managing, and retrieving credit notes (refund\
+    \ receipts)"
+- name: Company Management
+  description: "Endpoints for managing companies, including creation, configuration,\
+    \ webhooks, and public key management"
+- name: Recipient Management
+  description: Endpoints for resolving and matching receipt recipients
+- name: Receipt Management
+  description: Endpoints for creating and managing purchase receipts with end-to-end
+    encryption
+- name: Webhook Management
+  description: Endpoints for managing webhook subscriptions to receive real-time event
+    notifications
+paths:
+  /company/{companyId}/stores/{storeId}:
+    get:
+      tags:
+      - Store Management
+      summary: Get store by ID
+      description: Get a specific store by its ID
+      operationId: getStore
+      parameters:
+      - name: companyId
+        in: path
+        description: Company ID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: storeId
+        in: path
+        description: Store ID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "403":
+          description: Not authorized to view this store
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/StoreDTO"
+        "404":
+          description: Store or company not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/StoreDTO"
+        "200":
+          description: Store retrieved successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/StoreDTO"
+      security:
+      - bearerAuth: []
+    put:
+      tags:
+      - Store Management
+      summary: Update store
+      description: Update an existing store
+      operationId: updateStore
+      parameters:
+      - name: companyId
+        in: path
+        description: Company ID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: storeId
+        in: path
+        description: Store ID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateStoreRequest"
+        required: true
+      responses:
+        "404":
+          description: Store or company not found
+          content:
+            '*/*':
+              schema:
+                type: object
+        "403":
+          description: Not authorized to update this store
+          content:
+            '*/*':
+              schema:
+                type: object
+        "400":
+          description: Invalid request data
+          content:
+            '*/*':
+              schema:
+                type: object
+        "200":
+          description: Store updated successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/StoreDTO"
+      security:
+      - bearerAuth: []
+    delete:
+      tags:
+      - Store Management
+      summary: Delete store
+      description: Permanently delete a store
+      operationId: deleteStore
+      parameters:
+      - name: companyId
+        in: path
+        description: Company ID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: storeId
+        in: path
+        description: Store ID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "403":
+          description: Not authorized to delete this store
+        "404":
+          description: Store or company not found
+        "204":
+          description: Store deleted successfully
+      security:
+      - bearerAuth: []
+  /company/{companyId}/members/{userId}/role:
+    put:
+      tags:
+      - Company Management
+      summary: Change member role
+      description: |-
+        Changes the role of a company member. Only company administrators can change member roles.
+
+        **Accessible for:** User, Company
+      operationId: changeMemberRole
+      parameters:
+      - name: companyId
+        in: path
+        description: Company ID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: userId
+        in: path
+        description: User ID of the member
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangeMemberRoleRequest"
+        required: true
+      responses:
+        "403":
+          description: Not authorized to change member roles
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanyMemberResponse"
+        "200":
+          description: Member role updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanyMemberResponse"
+        "404":
+          description: Company or member not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanyMemberResponse"
+        "400":
+          description: Cannot demote the last admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanyMemberResponse"
+      x-accessible-for: "User, Company"
+  /webhook/subscription:
+    post:
+      tags:
+      - Webhook Management
+      summary: Create webhook subscription
+      description: |-
+        Creates a webhook subscription to receive real-time notifications for receipt and credit note events. The webhook URL will be called when events occur for the authenticated company or client application.
+
+        **Accessible for:** Company, Client Application
+      operationId: handleWebhook
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookRequestBody"
+        required: true
+      responses:
+        "200":
+          description: Webhook subscription created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookResponse"
+        "400":
+          description: Invalid webhook request data
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/WebhookResponse"
+        "409":
+          description: Duplicate webhook subscription already exists
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/WebhookResponse"
+        "403":
+          description: Insufficient permissions - requires read_receipts scope
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/WebhookResponse"
+      security:
+      - cheqi_oauth:
+        - read_receipts
+      x-accessible-for: "Company, Client Application"
+  /recipient/resolve:
+    post:
+      tags:
+      - Recipient Management
+      summary: Resolve receipt recipient
+      description: |-
+        Resolves and matches a receipt recipient based on the provided identification details (email, phone number, IBAN, or card number). Returns the matched recipient's details if found, enabling receipt delivery to the correct user.
+
+        **Accessible for:** Company, Client Application
+      operationId: matchCustomer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IdentificationDetails"
+        required: true
+      responses:
+        "403":
+          description: Insufficient permissions - requires write_receipts scope
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/RecipientResolutionResponse"
+        "404":
+          description: No recipient found matching the provided identification details
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/RecipientResolutionResponse"
+        "200":
+          description: Recipient successfully resolved and matched
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/RecipientResolutionResponse"
+        "401":
+          description: Authentication required
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/RecipientResolutionResponse"
+        "400":
+          description: Invalid identification details provided
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/RecipientResolutionResponse"
+      security:
+      - cheqi_oauth:
+        - write_receipts
+      x-accessible-for: "Company, Client Application"
+  /receipt/template:
+    post:
+      tags:
+      - Receipt Management
+      summary: Generate receipt template
+      description: |-
+        Generates a UBL-compliant purchase receipt template without customer personal data. The template can be used by the SDK to inject customer information and encrypt the receipt. Requires write_receipts OAuth scope.
+
+        **Accessible for:** Company, Client Application
+      operationId: createReceiptTemplate
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReceiptTemplateGenerationRequest"
+        required: true
+      responses:
+        "400":
+          description: Invalid template request data
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ReceiptTemplateResponse"
+        "403":
+          description: Insufficient permissions - requires write_receipts scope
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ReceiptTemplateResponse"
+        "201":
+          description: Receipt template created successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ReceiptTemplateResponse"
+      security:
+      - cheqi_oauth:
+        - write_receipts
+      x-accessible-for: "Company, Client Application"
+  /receipt/encrypted:
+    post:
+      tags:
+      - Receipt Management
+      summary: Submit encrypted receipt
+      description: |-
+        Submits an encrypted purchase receipt to the queue for delivery to customer devices. The receipt is encrypted with customer device keys for end-to-end privacy. Requires write_receipts OAuth scope.
+
+        **Accessible for:** Company, Client Application
+      operationId: submitEncryptedReceipt
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EncryptedReceiptsRequest"
+        required: true
+      responses:
+        "403":
+          description: Insufficient permissions - requires write_receipts scope
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ReceiptCreatedResponse"
+        "400":
+          description: Invalid encrypted receipt data
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ReceiptCreatedResponse"
+        "201":
+          description: Receipt created successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ReceiptCreatedResponse"
+      security:
+      - cheqi_oauth:
+        - write_receipts
+      x-accessible-for: "Company, Client Application"
+  /receipt/email:
+    post:
+      tags:
+      - Receipt Management
+      summary: Send receipt via email
+      description: |-
+        Sends a purchase receipt directly to a customer via email. The receipt is delivered as a PDF attachment. Requires write_receipts OAuth scope.
+
+        **Accessible for:** Company, Client Application
+      operationId: submitReceiptWithEmail
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmailReceiptRequest"
+        required: true
+      responses:
+        "403":
+          description: Insufficient permissions - requires write_receipts scope
+        "400":
+          description: Invalid email receipt request data
+        "201":
+          description: Receipt sent successfully via email
+      security:
+      - cheqi_oauth:
+        - write_receipts
+      x-accessible-for: "Company, Client Application"
+  /credit-note/template:
+    post:
+      tags:
+      - Credit Note Management
+      summary: Generate credit note template
+      description: |-
+        Generates a UBL-compliant credit note template without customer personal data. The template can be used by the SDK to inject customer information and encrypt the credit note. Requires write_receipts OAuth scope.
+
+        **Accessible for:** Company, Client Application
+      operationId: createReceiptTemplate_1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreditNoteTemplateGenerationRequest"
+        required: true
+      responses:
+        "400":
+          description: Invalid template request data
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/CreditNoteTemplateResponse"
+        "403":
+          description: Insufficient permissions - requires write_receipts scope
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/CreditNoteTemplateResponse"
+        "201":
+          description: Credit note template created successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/CreditNote"
+      security:
+      - cheqi_oauth:
+        - write_receipts
+      x-accessible-for: "Company, Client Application"
+  /credit-note/initiate:
+    post:
+      tags:
+      - Credit Note Management
+      summary: Initiate credit note request
+      description: |-
+        Initiates a credit note (refund) request from a customer's device. The request is encrypted and queued for processing.
+
+        **Accessible for:** User
+      operationId: createCreditNote
+      parameters:
+      - name: X-Device-ID
+        in: header
+        description: Device ID of the requesting device
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EncryptedCreditNoteInitiationRequest"
+        required: true
+      responses:
+        "403":
+          description: Not authorized to initiate credit notes
+        "200":
+          description: Credit note initiation request accepted
+        "400":
+          description: Invalid request data
+      x-accessible-for: User
+  /credit-note/encrypted:
+    post:
+      tags:
+      - Credit Note Management
+      summary: Submit encrypted credit note
+      description: |-
+        Submits an encrypted credit note to the queue for delivery to customer devices. The credit note is encrypted with customer device keys for end-to-end privacy.
+
+        **Accessible for:** Company, Client Application
+      operationId: submitEncryptedReceipt_1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EncryptedCreditNotesRequest"
+        required: true
+      responses:
+        "400":
+          description: Invalid encrypted credit note data
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/CreditNoteCreatedResponse"
+        "201":
+          description: Encrypted credit note queued successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/CreditNoteCreatedResponse"
+        "403":
+          description: Insufficient permissions - requires write_receipts scope
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/CreditNoteCreatedResponse"
+      security:
+      - cheqi_oauth:
+        - write_receipts
+      x-accessible-for: "Company, Client Application"
+  /company/{parentId}/children:
+    post:
+      tags:
+      - Company Management
+      summary: Create child company
+      description: |-
+        Creates a child company under an existing parent company. The authenticated user must be an admin of the parent company.
+
+        **Accessible for:** User
+      operationId: addChildCompany
+      parameters:
+      - name: parentId
+        in: path
+        description: ID of the parent company
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateChildCompanyRequest"
+        required: true
+      responses:
+        "403":
+          description: User is not authorized to create child companies for this parent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanyDTO"
+        "404":
+          description: Parent company not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanyDTO"
+        "201":
+          description: Child company created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanyDTO"
+      x-accessible-for: User
+  /company/{id}/receipt-token:
+    post:
+      tags:
+      - Company Management
+      summary: Issue short-lived receipt token
+      description: |-
+        Exchanges the authenticated user session for a short-lived company-scoped token that can be used by mobile receipt issuance flows and SDK calls.
+
+        **Accessible for:** User
+      operationId: issueReceiptToken
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Receipt token issued successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReceiptAccessTokenResponse"
+        "404":
+          description: Company not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReceiptAccessTokenResponse"
+        "403":
+          description: User is not affiliated with the requested company
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReceiptAccessTokenResponse"
+      x-accessible-for: User
+  /company/{id}/invite/employees:
+    post:
+      tags:
+      - Company Management
+      summary: Invite employees to company
+      description: |-
+        Sends invitation emails to one or more employees to join the company with a specified role
+
+        **Accessible for:** User, Company
+      operationId: inviteEmployees
+      parameters:
+      - name: id
+        in: path
+        description: Company ID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InviteEmployeeRequest"
+        required: true
+      responses:
+        "200":
+          description: Invitations sent successfully
+        "404":
+          description: Company not found
+        "403":
+          description: Not authorized to invite employees to this company
+      x-accessible-for: "User, Company"
+  /company/{companyId}/webhook/rotate-secret:
+    post:
+      tags:
+      - Company Management
+      summary: Rotate webhook signing secret
+      description: |-
+        Generates a new signing secret for all webhook subscriptions owned by this company. The old secret will be invalidated immediately.
+
+        **Accessible for:** User, Company
+      operationId: rotateCompanyWebhookSecret
+      parameters:
+      - name: companyId
+        in: path
+        description: Company ID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "403":
+          description: Not authorized to rotate webhook secret for this company
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookSecretRotationResponse"
+        "404":
+          description: Company not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookSecretRotationResponse"
+        "200":
+          description: Secret rotated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookSecretRotationResponse"
+      x-accessible-for: "User, Company"
+  /company/{companyId}/stores:
+    get:
+      tags:
+      - Store Management
+      summary: Get all stores
+      description: Get all stores for a company
+      operationId: getStores
+      parameters:
+      - name: companyId
+        in: path
+        description: Company ID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: active
+        in: query
+        description: Filter by active status
+        required: false
+        schema:
+          type: boolean
+      responses:
+        "404":
+          description: Company not found
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StoreDTO"
+        "200":
+          description: Stores retrieved successfully
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StoreDTO"
+        "403":
+          description: Not authorized to view stores for this company
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StoreDTO"
+      security:
+      - bearerAuth: []
+    post:
+      tags:
+      - Store Management
+      summary: Create a new store
+      description: Create a new store/location for a company
+      operationId: createStore
+      parameters:
+      - name: companyId
+        in: path
+        description: Company ID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStoreRequest"
+        required: true
+      responses:
+        "403":
+          description: Not authorized to create stores for this company
+          content:
+            '*/*':
+              schema:
+                type: object
+        "404":
+          description: Company not found
+          content:
+            '*/*':
+              schema:
+                type: object
+        "400":
+          description: Invalid request data
+          content:
+            '*/*':
+              schema:
+                type: object
+        "201":
+          description: Store created successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/StoreDTO"
+      security:
+      - bearerAuth: []
+  /company/{companyId}/public-key:
+    get:
+      tags:
+      - Company Management
+      summary: Get company public key
+      description: |-
+        Retrieves the company's public key information including the key data, algorithm, and upload timestamp. This key is used to verify receipt signatures.
+
+        **Accessible for:** Company, User
+      operationId: getCompanyPublicKey
+      parameters:
+      - name: companyId
+        in: path
+        description: Company ID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "403":
+          description: Not authorized to access this company's public key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicKeyResponse"
+        "200":
+          description: Public key retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicKeyResponse"
+        "404":
+          description: Company not found or public key not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicKeyResponse"
+      x-accessible-for: "Company, User"
+    post:
+      tags:
+      - Company Management
+      summary: Upload company public key (User auth)
+      description: |-
+        Uploads the company's public key for receipt signature verification. Used when authenticating as a user with access to the company. The public key is used to verify receipts signed by the company's private key.
+
+        **Accessible for:** User
+      operationId: uploadPublicKeyWithUser
+      parameters:
+      - name: companyId
+        in: path
+        description: Company ID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadPublicKeyRequest"
+        required: true
+      responses:
+        "400":
+          description: Invalid public key format
+        "200":
+          description: Public key uploaded successfully
+        "404":
+          description: Company not found
+        "403":
+          description: User not authorized to manage keys for this company
+      x-accessible-for: User
+  /company/{companyId}/card-authorization:
+    post:
+      tags:
+      - company-card-authorization-controller
+      operationId: authorizeCard
+      parameters:
+      - name: companyId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompanyCardAuthorizationRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/CompanyCardAuthorizationResponse"
+  /company/{companyId}/card-authorization/bulk:
+    post:
+      tags:
+      - company-card-authorization-controller
+      operationId: authorizeCardsBulk
+      parameters:
+      - name: companyId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/CompanyCardAuthorizationRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/BulkAuthorizationResponse"
+  /company/public-key:
+    post:
+      tags:
+      - Company Management
+      summary: Upload company public key (API Key auth)
+      description: |-
+        Uploads the company's public key for receipt signature verification. Used when authenticating with API Key (company token). The public key is used to verify receipts signed by the company's private key.
+
+        **Accessible for:** Company
+      operationId: uploadPublicKeyWithApiKey
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadPublicKeyRequest"
+        required: true
+      responses:
+        "400":
+          description: Invalid public key format
+        "200":
+          description: Public key uploaded successfully
+        "403":
+          description: Not authorized - API Key authentication required
+      x-accessible-for: Company
+  /company/provision:
+    post:
+      tags:
+      - Company Management
+      operationId: provisionCompany
+      parameters:
+      - name: Authorization
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProvisionCompanyRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ProvisionCompanyResponse"
+  /client-application/{id}/webhook/rotate-secret:
+    post:
+      tags:
+      - Client Application Management
+      summary: Rotate webhook signing secret
+      description: |-
+        Generates a new signing secret for all webhook subscriptions owned by this client application. Only the owning company or admin users can rotate the secret. The old secret will be invalidated immediately.
+
+        **Accessible for:** User, Company
+      operationId: rotateWebhookSecret
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Secret rotated successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/WebhookSecretRotationResponse"
+        "403":
+          description: Not authorized to rotate webhook secret for this client application
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/WebhookSecretRotationResponse"
+        "404":
+          description: Client application not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/WebhookSecretRotationResponse"
+      x-accessible-for: "User, Company"
+  /client-application/{clientApplicationId}/public-key:
+    get:
+      tags:
+      - Client Application Management
+      summary: Get client application public key
+      description: |-
+        Retrieves the public key information for a client application, including the key data, algorithm, and upload timestamp. This key is used to verify signatures from the client application.
+
+        **Accessible for:** Company, User
+      operationId: getClientApplicationPublicKey
+      parameters:
+      - name: clientApplicationId
+        in: path
+        description: Client application ID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "404":
+          description: Client application not found or public key not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicKeyResponse"
+        "200":
+          description: Public key retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicKeyResponse"
+        "403":
+          description: Not authorized to access this client application's public key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicKeyResponse"
+      x-accessible-for: "Company, User"
+    post:
+      tags:
+      - Client Application Management
+      summary: Upload client application public key
+      description: |-
+        Uploads a public key for the client application. This key is used to verify signatures from the client application when it signs receipts or other data. Can be called by company admins or using company API key authentication.
+
+        **Accessible for:** Company, User
+      operationId: uploadClientApplicationPublicKey
+      parameters:
+      - name: clientApplicationId
+        in: path
+        description: Client application ID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadPublicKeyRequest"
+        required: true
+      responses:
+        "200":
+          description: Public key uploaded successfully
+        "403":
+          description: Not authorized to manage keys for this client application
+        "400":
+          description: Invalid public key format or algorithm
+        "404":
+          description: Client application not found
+      x-accessible-for: "Company, User"
+  /company/{companyId}/stores/{storeId}/deactivate:
+    patch:
+      tags:
+      - Store Management
+      summary: Deactivate store
+      description: Deactivate a store without deleting it
+      operationId: deactivateStore
+      parameters:
+      - name: companyId
+        in: path
+        description: Company ID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: storeId
+        in: path
+        description: Store ID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Store deactivated successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/StoreDTO"
+        "404":
+          description: Store or company not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/StoreDTO"
+        "403":
+          description: Not authorized to deactivate this store
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/StoreDTO"
+      security:
+      - bearerAuth: []
+  /company/{companyId}/stores/{storeId}/activate:
+    patch:
+      tags:
+      - Store Management
+      summary: Activate store
+      description: Activate a previously deactivated store
+      operationId: activateStore
+      parameters:
+      - name: companyId
+        in: path
+        description: Company ID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: storeId
+        in: path
+        description: Store ID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Store activated successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/StoreDTO"
+        "404":
+          description: Store or company not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/StoreDTO"
+        "403":
+          description: Not authorized to activate this store
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/StoreDTO"
+      security:
+      - bearerAuth: []
+  /credit-note:
+    get:
+      tags:
+      - Credit Note Management
+      summary: Get all outstanding credit note initiation requests
+      description: |-
+        Retrieves all outstanding credit note initiation requests for the authenticated company or client application. These are customer-initiated refund requests that are pending processing.
+
+        **Accessible for:** Company, Client Application
+      operationId: getAllCreditNotes
+      responses:
+        "200":
+          description: Credit notes retrieved successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EncryptedCreditNoteDto"
+        "403":
+          description: Not authorized to access credit notes
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EncryptedCreditNoteDto"
+      x-accessible-for: "Company, Client Application"
+  /company/{id}/members:
+    get:
+      tags:
+      - Company Management
+      summary: Get company members
+      description: |-
+        Returns all members of the company with their roles. Only company administrators can view the member list.
+
+        **Accessible for:** User, Company
+      operationId: getCompanyMembers
+      parameters:
+      - name: id
+        in: path
+        description: Company ID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Member list retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CompanyMemberResponse"
+        "404":
+          description: Company not found
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CompanyMemberResponse"
+        "403":
+          description: Not authorized to view members of this company
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CompanyMemberResponse"
+      x-accessible-for: "User, Company"
+  /company/{id}:
+    delete:
+      tags:
+      - Company Management
+      summary: Deactivate company
+      description: |-
+        Deactivates a company account. Revokes all API keys and removes memberships. The company data is retained for legal/tax compliance but can no longer be used.
+
+        **Accessible for:** User
+      operationId: deactivateCompany
+      parameters:
+      - name: id
+        in: path
+        description: Company ID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "204":
+          description: Company deactivated successfully
+        "403":
+          description: Not authorized — must be company admin
+        "404":
+          description: Company not found
+      x-accessible-for: User
+  /company/{companyId}/members/{userId}:
+    delete:
+      tags:
+      - Company Management
+      summary: Remove member from company
+      description: |-
+        Removes a member from the company. Only company administrators can remove members. Cannot remove the last admin.
+
+        **Accessible for:** User, Company
+      operationId: removeMember
+      parameters:
+      - name: companyId
+        in: path
+        description: Company ID
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: userId
+        in: path
+        description: User ID of the member to remove
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "404":
+          description: Company or member not found
+        "204":
+          description: Member removed successfully
+        "403":
+          description: Not authorized to remove members
+        "400":
+          description: Cannot remove the last admin
+      x-accessible-for: "User, Company"
+components:
+  schemas:
+    AddressDTO:
+      required:
+      - cityName
+      - countryIsoCode
+      - postalZone
+      - streetName
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        streetName:
+          type: string
+        additionalStreetName:
+          type: string
+        addressLine:
+          type: string
+        region:
+          type: string
+        cityName:
+          type: string
+        postalZone:
+          type: string
+        countryIsoCode:
+          type: string
+    UpdateStoreRequest:
+      type: object
+      properties:
+        storeName:
+          maxLength: 255
+          minLength: 0
+          type: string
+        addressDto:
+          $ref: "#/components/schemas/AddressDTO"
+        phoneNumber:
+          maxLength: 20
+          minLength: 0
+          type: string
+        email:
+          maxLength: 255
+          minLength: 0
+          type: string
+        isActive:
+          type: boolean
+        openingHours:
+          maxLength: 500
+          minLength: 0
+          type: string
+    StoreDTO:
+      required:
+      - storeCode
+      - storeName
+      type: object
+      properties:
+        active:
+          type: boolean
+        id:
+          type: string
+          format: uuid
+        companyId:
+          type: string
+          format: uuid
+        storeName:
+          maxLength: 255
+          minLength: 0
+          type: string
+        storeCode:
+          maxLength: 50
+          minLength: 0
+          type: string
+        addressDto:
+          $ref: "#/components/schemas/AddressDTO"
+        phoneNumber:
+          maxLength: 20
+          minLength: 0
+          type: string
+        email:
+          maxLength: 255
+          minLength: 0
+          type: string
+        isActive:
+          type: boolean
+        openingHours:
+          maxLength: 500
+          minLength: 0
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ChangeMemberRoleRequest:
+      type: object
+      properties:
+        role:
+          $ref: "#/components/schemas/CompanyRole"
+      description: New role for the member
+    CompanyRole:
+      type: string
+      description: The role of a user in a company
+      example: COMPANY_ADMIN
+      enum:
+      - COMPANY_ADMIN
+      - COMPANY_USER
+    CompanyMemberResponse:
+      type: object
+      properties:
+        userId:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+        role:
+          $ref: "#/components/schemas/CompanyRole"
+    WebhookRequestBody:
+      type: object
+      properties:
+        name:
+          type: string
+        events:
+          type: array
+          items:
+            type: string
+            enum:
+            - RECEIPT_CREATED
+            - RECEIPT_FINALIZED
+            - RETURN_REQUESTED
+            - CREDIT_NOTE_CREATED
+        notificationUrl:
+          type: string
+      description: Webhook subscription request with URL and event types
+    WebhookDTO:
+      type: object
+      properties:
+        name:
+          type: string
+        notificationUrl:
+          type: string
+        event:
+          type: string
+        clientApplicationId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        companyId:
+          type: string
+    WebhookResponse:
+      type: object
+      properties:
+        createdWebhooks:
+          type: array
+          items:
+            $ref: "#/components/schemas/WebhookDTO"
+        failedEvents:
+          type: array
+          items:
+            type: string
+    CardDetails:
+      type: object
+      properties:
+        cardProvider:
+          type: string
+          enum:
+          - MAESTRO
+          - MASTERCARD
+          - VISA
+          - AMERICAN_EXPRESS
+        paymentAccountNumber:
+          type: string
+        paymentAccountReference:
+          type: string
+        additionalProperties:
+          type: object
+          additionalProperties:
+            type: object
+      description: The card details
+    IdentificationDetails:
+      required:
+      - paymentType
+      type: object
+      properties:
+        paymentType:
+          type: string
+          description: The payment type
+          example: CREDIT_CARD
+          enum:
+          - CARD_PAYMENT
+          - DIRECT_DEBIT
+          - CASH
+        cardDetails:
+          $ref: "#/components/schemas/CardDetails"
+        paymentAccountDetails:
+          $ref: "#/components/schemas/PaymentAccountDetails"
+        paymentIds:
+          type: array
+          description: The payment IDs that are used to identify the payment on your
+            side
+          items:
+            type: string
+            description: The payment IDs that are used to identify the payment on
+              your side
+        recipientEmail:
+          type: string
+          description: The recipient email
+          example: recipient@example.com
+        cheqiReceiptId:
+          type: string
+          description: "The Cheqi receipt ID, only needed for credit notes"
+          example: CHQ-12345678-123456-123456
+        userId:
+          type: string
+          description: The user ID
+          format: uuid
+        pairingCode:
+          type: string
+          description: A temporary 6-digit pairing code generated by the receipt recipient
+          example: "847392"
+    PaymentAccountDetails:
+      type: object
+      properties:
+        identifier:
+          type: string
+        accountIdentifierType:
+          type: string
+          enum:
+          - IBAN
+          - ROUTING_ACCOUNT
+          - SORT_CODE_ACCOUNT
+          - TOKEN
+          - WALLET
+          - OTHER
+        bic:
+          type: string
+        bankName:
+          type: string
+        accountHolderName:
+          type: string
+        institutionName:
+          type: string
+      description: "The payment account details, for now only IBAN/WERO is supported"
+    BuyerType:
+      type: string
+      description: Type of recipient entity
+      enum:
+      - BUSINESS
+      - CONSUMER
+    MatchedRecipient:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Temporary opaque recipient identifier for this match session.
+        publicKey:
+          type: string
+          description: Public key for encrypting receipts for this recipient.
+        keyAlgorithm:
+          type: string
+          description: "Algorithm used for the public key (e.g., \"RSA\", \"RSA_2048\"\
+            )."
+        acceptedFormats:
+          type: array
+          description: "Receipt formats this recipient accepts (e.g., CHEQI, UBL_PURCHASE_RECEIPT)."
+          items:
+            $ref: "#/components/schemas/ReceiptFormat"
+      description: The list of recipients found for the given recipient
+    ReceiptFormat:
+      type: string
+      description: Receipt output format
+      enum:
+      - CHEQI
+      - UBL_PURCHASE_RECEIPT
+      - UBL_INVOICE
+      - UBL_CREDIT_NOTE
+    RecipientResolutionResponse:
+      type: object
+      properties:
+        recipients:
+          type: array
+          items:
+            $ref: "#/components/schemas/MatchedRecipient"
+        customerFound:
+          type: boolean
+          description: Indicates if a customer was found for the given recipient
+          example: true
+        matchId:
+          type: string
+          description: The unique identifier for the matching process
+          example: 123e4567-e89b-12d3-a456-426614174000
+        matchedRecipients:
+          type: array
+          description: The list of recipients found for the given recipient
+          items:
+            $ref: "#/components/schemas/MatchedRecipient"
+        expiresAt:
+          type: string
+          description: The expiration time for the matching process
+          format: date-time
+          example: 2023-01-01T00:00:00Z
+        instructions:
+          type: string
+          description: Instructions on what to do with this response
+        buyerCountryCode:
+          type: string
+          description: The country code of the buyer
+          example: NL
+        buyerType:
+          $ref: "#/components/schemas/BuyerType"
+    Barcode:
+      type: object
+      properties:
+        type:
+          type: string
+          description: The type of barcode or scannable code
+          example: QR_CODE
+        data:
+          type: string
+          description: The data encoded in the barcode
+          example: https://example.com/return/12345
+        label:
+          type: string
+          description: A human-readable label for the barcode
+          example: Return code
+      description: Optional list of barcodes or QR codes embedded in the receipt
+    BarcodeType:
+      type: string
+      description: The type of barcode or scannable code
+      example: QR_CODE
+      enum:
+      - QR_CODE
+      - EAN_13
+      - EAN_8
+      - CODE_128
+      - UPC_A
+      - DATA_MATRIX
+    Charge:
+      required:
+      - amount
+      type: object
+      properties:
+        amount:
+          type: number
+          description: The charge amount
+          example: 5.0
+        percentage:
+          type: number
+          description: The percentage charge
+          format: double
+          example: 3.0
+        label:
+          type: string
+          description: "The charge label, for example \"Shipping fee\" or \"Service\
+            \ fee\""
+          example: Shipping
+      description: "The list of charges applied to the receipt on total receipt level.\
+        \ Example: service fee, shipping fee, etc."
+    Discount:
+      required:
+      - amount
+      type: object
+      properties:
+        amount:
+          type: number
+          description: The total discount amount
+          example: 5.0
+        percentage:
+          type: number
+          description: The percentage discount
+          format: double
+          example: 20
+        label:
+          type: string
+          description: A human-readable label for the discount
+          example: Black Friday
+      description: "The list of discounts applied to the receipt on total receipt\
+        \ level. Example: discount on total receipt level, 20% discount on complete\
+        \ order, etc."
+    Identifier:
+      type: object
+      properties:
+        value:
+          type: string
+        schemeAgencyID:
+          type: string
+          xml:
+            attribute: true
+        schemeAgencyName:
+          type: string
+          xml:
+            attribute: true
+        schemeDataURI:
+          type: string
+          xml:
+            attribute: true
+        schemeID:
+          type: string
+          xml:
+            attribute: true
+        schemeName:
+          type: string
+          xml:
+            attribute: true
+        schemeURI:
+          type: string
+          xml:
+            attribute: true
+        schemeVersionID:
+          type: string
+          xml:
+            attribute: true
+    Period:
+      type: object
+      properties:
+        startDate:
+          type: string
+          xml:
+            name: StartDate
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        startTime:
+          type: string
+          xml:
+            name: StartTime
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        endDate:
+          type: string
+          xml:
+            name: EndDate
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        endTime:
+          type: string
+          xml:
+            name: EndTime
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        durationMeasure:
+          $ref: "#/components/schemas/Measure"
+        descriptionCode:
+          $ref: "#/components/schemas/Code"
+        description:
+          type: string
+          xml:
+            name: Description
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+    Product:
+      required:
+      - brandName
+      - identifier
+      - name
+      - quantity
+      - subtotal
+      - taxes
+      - total
+      - unitCode
+      - unitPrice
+      type: object
+      properties:
+        name:
+          type: string
+          description: The product name
+          example: Product Name
+        brandName:
+          type: string
+          description: The brand name
+          example: Brand Name
+        identifier:
+          type: string
+          description: "The identifier or article number of the product, this can\
+            \ for example also be a SKU/EAN code."
+          example: "123456"
+        description:
+          type: string
+          description: The description of the product
+        quantity:
+          type: number
+          description: The quantity of this item
+          format: double
+          example: 20
+        baseQuantity:
+          type: number
+          description: The base quantity of this item
+          format: double
+          example: 20
+        unitCode:
+          $ref: "#/components/schemas/UnitCode"
+        period:
+          $ref: "#/components/schemas/Period"
+        unitPrice:
+          type: number
+          description: The unit price of this item
+          example: 10.0
+        discounts:
+          type: array
+          description: The discounts applied to this line item
+          items:
+            $ref: "#/components/schemas/Discount"
+        charges:
+          type: array
+          description: The extra charges applied to this line item
+          items:
+            $ref: "#/components/schemas/Charge"
+        taxes:
+          type: array
+          description: The taxes applied to this line item
+          items:
+            $ref: "#/components/schemas/Tax"
+        subtotal:
+          type: number
+          description: "The line subtotal, before tax. Typically: quantity * unitPrice\
+            \ - discounts + charges (net)."
+          example: 10.0
+        total:
+          type: number
+          description: "The line total, after tax. Typically: subtotal + tax amounts\
+            \ (gross)."
+          example: 10.0
+        barcodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Barcode"
+      description: The list of products included in the receipt. Must contain at least
+        one product.
+    ReceiptTemplateGenerationRequest:
+      required:
+      - buyerCountryCode
+      - buyerType
+      - formats
+      - receiptTemplateRequest
+      - taxesApplied
+      type: object
+      properties:
+        receiptTemplateRequest:
+          $ref: "#/components/schemas/ReceiptTemplateRequest"
+        formats:
+          type: array
+          description: List of formats for the receipt template
+          items:
+            $ref: "#/components/schemas/ReceiptFormat"
+        buyerCountryCode:
+          type: string
+          description: "ISO country code of the buyer, used for tax metadata enrichment"
+        buyerType:
+          $ref: "#/components/schemas/BuyerType"
+        taxesApplied:
+          type: boolean
+          description: "Whether taxes were applied to this transaction. Set to false\
+            \ when no taxes apply (e.g. US sales tax not charged, non-VAT jurisdiction).\
+            \ When false, the taxes list can be empty in the ReceiptTemplateRequest."
+      description: Receipt template request with transaction details
+    ReceiptTemplateRequest:
+      required:
+      - currency
+      - documentNumber
+      - issueDate
+      - products
+      - receiptSubtotal
+      - totalAmount
+      - totalBeforeTax
+      - totalTaxAmount
+      type: object
+      properties:
+        childCompanyId:
+          type: string
+          description: "The UUID of the child company (franchisee location or branch\
+            \ store) issuing this receipt. Required for franchise organizations managing\
+            \ multiple locations. If not provided, the receipt will be issued under\
+            \ the parent company."
+          format: uuid
+          example: 550e8400-e29b-41d4-a716-446655440000
+        documentNumber:
+          type: string
+          description: "This document number is a unique identifier provided by the\
+            \ seller, you use this number to uniquely identify this value in your\
+            \ system."
+          example: "INVOICE-123456, RECEIPT-123456"
+        identifiers:
+          type: array
+          description: "A list of identifiers for the receipt. For example order number,\
+            \ purchase order number, etc."
+          example: "ORDER-123456, PURCHASE-ORDER-123456s"
+          items:
+            $ref: "#/components/schemas/Identifier"
+        issueDate:
+          type: string
+          description: The date when the purchase receipt was issued.
+          format: date-time
+          example: 2022-01-01T00:00:00Z
+        currency:
+          type: string
+          description: The currency in which the purchase receipt is issued.
+          example: "EUR, USD, GBP"
+        receiptSubtotal:
+          type: number
+          description: "The subtotal of the purchase receipt, calculated as the sum\
+            \ of all line items before any overall purchase receipt-level adjustments\
+            \ or taxes. This amount represents the total value of goods or services\
+            \ listed on the invoice."
+          example: 100.0
+        totalBeforeTax:
+          type: number
+          description: "The total amount of the purchase receipt excluding taxes,\
+            \ but including any overall discounts or charges. This amount may differ\
+            \ from the purchase receipt subtotal if there are purchase receipt-level\
+            \ adjustments."
+          example: 100.0
+        totalTaxAmount:
+          type: number
+          description: The total tax amount for the purchase receipt. This should
+            equal the sum of all tax amounts in the taxes list.
+          example: 100.0
+        totalAmount:
+          type: number
+          description: The total amount charged to the customer. Should equal totalBeforeTax
+            + totalTaxAmount.
+          example: 100.0
+        products:
+          type: array
+          description: The list of products included in the purchase receipt. Must
+            contain at least one product.
+          items:
+            $ref: "#/components/schemas/Product"
+        discounts:
+          type: array
+          description: "Overall discounts applied at the purchase receipt level (not\
+            \ product-specific). Examples: \"Loyalty discount\", \"Coupon code\",\
+            \ \"Volume discount\""
+          items:
+            $ref: "#/components/schemas/Discount"
+        charges:
+          type: array
+          description: "Overall charges applied at the purchase receipt level (not\
+            \ product-specific). Examples: \"Delivery fee\", \"Administration free\"\
+            , \"Services charge\""
+          items:
+            $ref: "#/components/schemas/Charge"
+        taxes:
+          type: array
+          description: "Tax breakdown for the purchase receipt. Each Tax entry represents\
+            \ a tax category applied to the purchase receipt (e.g., VAT 21%, VAT 9%).\
+            \ The total tax amount is the sum of all tax amounts in this list."
+          items:
+            $ref: "#/components/schemas/Tax"
+        transactionDate:
+          type: string
+          description: The date when the purchase transaction was initiated. Only
+            needed when different from the issue date.
+          format: date-time
+        purchaseDate:
+          type: string
+          description: The date when the purchase was made. Only needed when different
+            from the issue date.
+          format: date-time
+        period:
+          $ref: "#/components/schemas/Period"
+        note:
+          type: string
+          description: A note that the seller wants to include on the credit note
+        barcodes:
+          type: array
+          description: "Optional list of barcodes or QR codes to embed in the receipt.\
+            \ These can be used for returns, loyalty programs, tickets, or any other\
+            \ scannable codes."
+          items:
+            $ref: "#/components/schemas/Barcode"
+      description: Receipt template request with transaction details
+    Tax:
+      required:
+      - rate
+      - taxableAmount
+      - type
+      type: object
+      properties:
+        rate:
+          type: number
+          description: The tax rate as a percentage (e.g. 21.0 for 21%)
+          format: double
+          example: 21.0
+        type:
+          type: string
+          description: "The type of tax, e.g. \"VAT\", \"GST\", \"Sales Tax\""
+          example: VAT
+        amount:
+          type: number
+          description: The calculated tax amount
+          example: 10.0
+        taxableAmount:
+          type: number
+          description: The total taxable amount for this tax rate
+          example: 10.0
+        label:
+          type: string
+          description: The label of the tax
+          example: VAT 21%
+      description: The list of taxes applied to the receipt
+    UnitCode:
+      type: string
+      description: Unit of measure codes based on UN/ECE Recommendation 20
+      example: C62
+      enum:
+      - C62
+      - EA
+      - KGM
+      - GRM
+      - MGM
+      - TNE
+      - LBR
+      - ONZ
+      - LTR
+      - MLT
+      - CLT
+      - HLT
+      - MTQ
+      - CMQ
+      - GLL
+      - GLI
+      - MTR
+      - CMT
+      - MMT
+      - KMT
+      - INH
+      - FOT
+      - YRD
+      - SMI
+      - MTK
+      - CMK
+      - FTK
+      - INK
+      - SEC
+      - MIN
+      - HUR
+      - DAY
+      - WEE
+      - MON
+      - ANN
+      - SET
+      - PR
+      - DZN
+      - NMP
+      - XPK
+      - BX
+      - CT
+      - CS
+      - PK
+      - PF
+      - BO
+      - CA
+      - BG
+      - E48
+      - ACT
+      - E51
+      - AD
+      - 2P
+      - 4L
+    CheqiReceipt:
+      type: object
+      properties:
+        totalAmount:
+          type: number
+          description: The total amount of the receipt
+          example: 10.0
+        documentNumber:
+          type: string
+          description: "The document number of the receipt, given by the seller, for\
+            \ example invoice number."
+          example: INV-12356
+        identifiers:
+          type: array
+          description: "The identifiers for the purchase, given by the seller, for\
+            \ example order reference, transaction number"
+          example: "ORD-12356, TRN-12356"
+          items:
+            $ref: "#/components/schemas/Identifier"
+        issueDate:
+          type: string
+          description: The issue date of the receipt
+          format: date-time
+          example: 2024-01-01T00:00:00Z
+        currency:
+          type: string
+          description: The currency of the receipt
+          example: EUR
+        receiptSubtotal:
+          type: number
+          description: The subtotal of the receipt
+          example: 10.0
+        totalBeforeTax:
+          type: number
+          description: The total before tax of the receipt
+          example: 10.0
+        totalTaxAmount:
+          type: number
+          description: The total tax amount of the receipt
+          example: 10.0
+        products:
+          type: array
+          description: The list of products included in the receipt. Must contain
+            at least one product.
+          items:
+            $ref: "#/components/schemas/Product"
+        discounts:
+          type: array
+          description: "The list of discounts applied to the receipt on total receipt\
+            \ level. Example: discount on total receipt level, 20% discount on complete\
+            \ order, etc."
+          items:
+            $ref: "#/components/schemas/Discount"
+        charges:
+          type: array
+          description: "The list of charges applied to the receipt on total receipt\
+            \ level. Example: service fee, shipping fee, etc."
+          items:
+            $ref: "#/components/schemas/Charge"
+        taxes:
+          type: array
+          description: The list of taxes applied to the receipt
+          items:
+            $ref: "#/components/schemas/Tax"
+        period:
+          $ref: "#/components/schemas/Period"
+        note:
+          type: string
+          description: The note of the receipt.
+          example: "Thank you for your purchase, have a nice day!"
+        sellingParty:
+          $ref: "#/components/schemas/SellingParty"
+        receivingParty:
+          $ref: "#/components/schemas/ReceivingParty"
+        barcodes:
+          type: array
+          description: Optional list of barcodes or QR codes embedded in the receipt
+          items:
+            $ref: "#/components/schemas/Barcode"
+        receiptUuid:
+          type: string
+          description: The verification nonce of the receipt
+      description: "Cheqi JSON receipt template object. This contains a complete CheqiReceipt\
+        \ structure with products, taxes, parties, and all receipt details."
+    CompanyIdentifierDTO:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique identifier of this company identifier entry
+          format: uuid
+          example: 550e8400-e29b-41d4-a716-446655440000
+        identifierType:
+          $ref: "#/components/schemas/CompanyIdentifierType"
+        registrationScheme:
+          type: string
+          description: The local registration scheme or registry name. Use a known
+            value or a custom string for unsupported registries.
+          example: KVK
+          enum:
+          - KVK
+          - HRB
+          - HRA
+          - SIREN
+          - SIRET
+          - KBO
+          - COMPANIES_HOUSE
+          - CNPJ
+          - ABN
+          - CIK
+          - OTHER
+        value:
+          type: string
+          description: The actual identifier value
+          example: "12345678"
+        countryCode:
+          type: string
+          description: ISO 3166-1 alpha-2 country code
+          example: NL
+        isVerified:
+          type: boolean
+          description: Whether this identifier has been verified by Cheqi
+          example: false
+        verifiedAt:
+          type: string
+          description: Timestamp when this identifier was verified
+          format: date-time
+          example: 2024-01-15T10:30:00Z
+    CompanyIdentifierType:
+      type: string
+      description: The type of identifier for a company
+      example: COMPANY_REGISTRATION
+      enum:
+      - COMPANY_REGISTRATION
+      - VAT
+      - TAX
+      - EIN
+      - DUNS
+      - OTHER
+      - COMPANY_REGISTRATION
+      - VAT
+      - TAX
+      - EIN
+      - DUNS
+      - OTHER
+    PartyAddress:
+      type: object
+      properties:
+        street:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        zipCode:
+          type: string
+        country:
+          type: string
+      description: The addressDto of the receiving party
+    ReceiptTemplateResponse:
+      type: object
+      properties:
+        ublPurchaseReceipt:
+          type: string
+          description: "UBL 2.4 XML receipt template as a serialized XML string following\
+            \ the PurchaseReceipt schema. See [UBL XML Receipt Format](https://docs.cheqi.io/receipts/ubl-format)\
+            \ for the full structure and field reference."
+          example: <?xml version="1.0" encoding="UTF-8"?><PurchaseReceipt xmlns="urn:oasis:names:specification:ubl:schema:xsd:PurchaseReceipt-2">...</PurchaseReceipt>
+        ublInvoice:
+          type: string
+          description: UBL 2.4 XML Invoice template as a serialized XML string following
+            the Invoice schema. Widely supported by accounting systems.
+          example: <?xml version="1.0" encoding="UTF-8"?><Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2">...</Invoice>
+        cheqi:
+          $ref: "#/components/schemas/CheqiReceipt"
+        vatMetadata:
+          $ref: "#/components/schemas/VatMetadata"
+    ReceivingParty:
+      type: object
+      properties:
+        companyLegalName:
+          type: string
+          description: The legal name of the receiving company (B2B only). Use this
+            for business recipients.
+          example: Acme Corporation B.V.
+        taxNumber:
+          type: string
+          description: The tax number of the receiving party (B2B only)
+          example: "987654321"
+        companyIdentifiers:
+          type: array
+          description: The company identifiers of the receiving party (B2B only)
+          example: 987654321
+          items:
+            $ref: "#/components/schemas/CompanyIdentifierDTO"
+        consumerName:
+          type: string
+          description: The full name of the consumer (B2C only). Use this for individual
+            recipients.
+          example: John Doe
+        email:
+          type: string
+          description: The email addressDto of the receiving party
+          example: john.doe@example.com
+        phone:
+          type: string
+          description: The phone number of the receiving party
+          example: "+31612345678"
+        address:
+          $ref: "#/components/schemas/PartyAddress"
+        companyRegistration:
+          type: array
+          writeOnly: true
+          items:
+            $ref: "#/components/schemas/CompanyIdentifierDTO"
+      description: The receiving party of the receipt (the buyer/customer).
+    SellingParty:
+      type: object
+      properties:
+        companyName:
+          type: string
+          description: The name of the company
+          example: Cheqi
+        companyLegalName:
+          type: string
+          description: The legal name of the company
+          example: Cheqi B.V.
+        taxNumber:
+          type: string
+          description: The tax number of the selling party
+          example: "123456789"
+        identifiers:
+          type: array
+          description: All company identifiers of the selling party
+          items:
+            $ref: "#/components/schemas/CompanyIdentifierDTO"
+        address:
+          $ref: "#/components/schemas/PartyAddress"
+      description: The selling party of the receipt.
+    VatMetadata:
+      type: object
+      properties:
+        supplierCountry:
+          type: string
+        buyerCountry:
+          type: string
+        crossBorder:
+          type: boolean
+        buyerType:
+          $ref: "#/components/schemas/BuyerType"
+        vatOnReceipt:
+          type: boolean
+        vatRegime:
+          $ref: "#/components/schemas/VatRegime"
+        taxesApplied:
+          type: boolean
+      description: "VAT metadata for cross-border tax handling. Contains supplier/buyer\
+        \ countries, VAT regime classification, and whether VAT was charged on the\
+        \ receipt."
+    VatRegime:
+      type: string
+      description: The VAT regime compute for given selling party and recipient
+      enum:
+      - DOMESTIC
+      - DOMESTIC_NO_VAT
+      - REVERSE_CHARGE_EU
+      - REVERSE_CHARGE_NON_EU
+      - INTRA_EU_VAT_CHARGED
+      - EXPORT
+      - FOREIGN_VAT
+      - TAX_EXEMPT
+    EncryptedReceiptRequest:
+      type: object
+      properties:
+        recipientId:
+          type: string
+          description: ID of the recipient
+        receiptFormats:
+          type: array
+          description: List of receipt formats to generate for this recipient
+          items:
+            $ref: "#/components/schemas/ReceiptFormat"
+        encryptedReceipt:
+          type: string
+          description: Encrypted receipt
+        encryptedSymmetricKey:
+          type: string
+          description: The symmetric key that is encrypted with the public key of
+            the recipient
+        finalHash:
+          type: string
+          description: The final hash of the canonnicalized CheqiReceipt
+        publicKey:
+          type: string
+          description: The public key that is used to encrypt the receipt
+        supplierPartyId:
+          type: string
+          description: The id of the selling party
+          format: uuid
+        notificationDisplayCode:
+          $ref: "#/components/schemas/NotificationDisplayCode"
+      description: The encrypted receipts
+    EncryptedReceiptsRequest:
+      required:
+      - encryptedReceiptRequests
+      - matchId
+      - templateHash
+      type: object
+      properties:
+        encryptedReceiptRequests:
+          uniqueItems: true
+          type: array
+          description: The encrypted receipts
+          items:
+            $ref: "#/components/schemas/EncryptedReceiptRequest"
+        matchId:
+          type: string
+          description: The match ID that was return during the recipient matching
+            process
+        templateHash:
+          type: string
+          description: The template hash that was return during the recipient matching
+            process
+      description: Encrypted receipt request with device-specific encryption
+    NotificationDisplayCode:
+      required:
+      - data
+      - type
+      type: object
+      properties:
+        type:
+          $ref: "#/components/schemas/BarcodeType"
+        data:
+          type: string
+      description: With this object the selling party can inject a barcode into the
+        notification of the receipt (e.g. QR code)
+    ReceiptCreatedResponse:
+      type: object
+      properties:
+        cheqiReceiptId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        templateHash:
+          type: string
+    EmailReceiptRequest:
+      required:
+      - cheqiReceipt
+      - customerEmail
+      type: object
+      properties:
+        customerEmail:
+          type: string
+        cheqiReceipt:
+          $ref: "#/components/schemas/CheqiReceipt"
+      description: Email receipt request with customer email and receipt details
+    CreditNoteTemplateGenerationRequest:
+      required:
+      - buyerCountryCode
+      - buyerType
+      - creditNoteTemplateRequest
+      - formats
+      - taxesApplied
+      type: object
+      properties:
+        creditNoteTemplateRequest:
+          $ref: "#/components/schemas/CreditNoteTemplateRequest"
+        formats:
+          type: array
+          description: List of formats for the receipt template
+          items:
+            $ref: "#/components/schemas/ReceiptFormat"
+        buyerCountryCode:
+          type: string
+          description: "ISO country code of the buyer, used for tax metadata enrichment"
+        buyerType:
+          $ref: "#/components/schemas/BuyerType"
+        taxesApplied:
+          type: boolean
+          description: "Whether taxes were applied to this transaction. Set to false\
+            \ when no taxes apply (e.g. US sales tax not charged, non-VAT jurisdiction).\
+            \ When false, the taxes list can be empty."
+      description: Credit note template request with refund details
+    CreditNoteTemplateRequest:
+      required:
+      - creditNoteSubtotal
+      - currency
+      - documentNumber
+      - issueDate
+      - originatorDocumentReference
+      - products
+      - taxes
+      - totalAmount
+      - totalBeforeTax
+      - totalTaxAmount
+      type: object
+      properties:
+        childCompanyId:
+          type: string
+          description: "The UUID of the child company (franchisee location or branch\
+            \ store) issuing this credit note. Required for franchise organizations\
+            \ managing multiple locations. If not provided, the receipt will be issued\
+            \ under the parent company."
+          format: uuid
+          example: 550e8400-e29b-41d4-a716-446655440000
+        documentNumber:
+          type: string
+          description: "This document number is a unique identifier provided by the\
+            \ seller, you use this number to uniquely identify this value in your\
+            \ system."
+          example: CREDIT-NOTE-123456
+        originatorDocumentReference:
+          type: string
+          description: This is the document number of the original purchase receipt
+            this credit note refers to.
+          example: RECEIPT-123456
+        identifiers:
+          type: array
+          description: "A list of identifiers for the credit note. For example order\
+            \ number, purchase order number, etc."
+          example: "ORDER-123456, PURCHASE-ORDER-123456s"
+          items:
+            $ref: "#/components/schemas/Identifier"
+        issueDate:
+          type: string
+          description: The date when the credit note was issued.
+          format: date-time
+          example: 2022-01-01T00:00:00Z
+        currency:
+          type: string
+          description: The currency in which the credit note is issued.
+          example: "EUR, USD, GBP"
+        creditNoteSubtotal:
+          type: number
+          description: "The subtotal of the credit note, calculated as the sum of\
+            \ all line items before any overall credit note-level adjustments or taxes.\
+            \ This amount represents the total value of goods or services listed on\
+            \ the credit note."
+          example: 100.0
+        totalBeforeTax:
+          type: number
+          description: "The total amount of the credit note excluding taxes, but including\
+            \ any overall discounts or charges. This amount may differ from the creditNoteSubtotal\
+            \ if there are invoice-level adjustments."
+          example: 100.0
+        totalTaxAmount:
+          type: number
+          description: The total tax amount for the credit note. This should equal
+            the sum of all tax amounts in the taxes list.
+          example: 100.0
+        totalAmount:
+          type: number
+          description: The total amount charged to the customer. Should equal totalBeforeTax
+            + totalTaxAmount.
+          example: 100.0
+        products:
+          type: array
+          description: The list of products included in the credit note. Must contain
+            at least one product.
+          items:
+            $ref: "#/components/schemas/Product"
+        discounts:
+          type: array
+          description: "Overall discounts applied at the credit note level (not product-specific).\
+            \ Examples: \"Loyalty discount\", \"Coupon code\", \"Volume discount\""
+          items:
+            $ref: "#/components/schemas/Discount"
+        period:
+          $ref: "#/components/schemas/Period"
+        charges:
+          type: array
+          description: "Overall charges applied at the credit note level (not product-specific).\
+            \ Examples: \"Delivery fee\", \"Administration free\", \"Services charge\""
+          items:
+            $ref: "#/components/schemas/Charge"
+        taxes:
+          type: array
+          description: "Tax breakdown for the credit note. Each Tax entry represents\
+            \ a tax category applied to the credit note (e.g., VAT 21%, VAT 9%). The\
+            \ total tax amount is the sum of all tax amounts in this list."
+          items:
+            $ref: "#/components/schemas/Tax"
+        note:
+          type: string
+          description: A note that the seller wants to include on the credit note
+      description: Receipt template request with transaction details
+    Address:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Identifier"
+        addressTypeCode:
+          $ref: "#/components/schemas/Code"
+        addressFormatCode:
+          $ref: "#/components/schemas/Code"
+        postbox:
+          type: string
+          xml:
+            name: Postbox
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        floor:
+          type: string
+          xml:
+            name: Floor
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        room:
+          type: string
+          xml:
+            name: Room
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        streetName:
+          type: string
+          xml:
+            name: StreetName
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        additionalStreetName:
+          type: string
+          xml:
+            name: AdditionalStreetName
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        blockName:
+          type: string
+          xml:
+            name: BlockName
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        buildingName:
+          type: string
+          xml:
+            name: BuildingName
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        buildingNumber:
+          type: string
+          xml:
+            name: BuildingNumber
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        description:
+          type: array
+          xml:
+            name: Description
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+          items:
+            type: string
+            xml:
+              name: Description
+        inhouseMail:
+          type: string
+          xml:
+            name: InhouseMail
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        department:
+          type: string
+          xml:
+            name: Department
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        markAttention:
+          type: string
+          xml:
+            name: MarkAttention
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        markCare:
+          type: string
+          xml:
+            name: MarkCare
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        plotIdentification:
+          type: string
+          xml:
+            name: PlotIdentification
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        citySubdivisionName:
+          type: string
+          xml:
+            name: CitySubdivisionName
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        cityName:
+          type: string
+          xml:
+            name: CityName
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        postalZone:
+          type: string
+          xml:
+            name: PostalZone
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        countrySubentity:
+          type: string
+          xml:
+            name: CountrySubentity
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        countrySubentityCode:
+          $ref: "#/components/schemas/Code"
+        region:
+          type: string
+          xml:
+            name: Region
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        district:
+          type: string
+          xml:
+            name: District
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        timezoneOffset:
+          type: string
+          xml:
+            name: TimezoneOffset
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        addressLine:
+          type: array
+          xml:
+            name: AddressLine
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
+          items:
+            $ref: "#/components/schemas/AddressLine"
+        country:
+          $ref: "#/components/schemas/Country"
+        locationCoordinate:
+          $ref: "#/components/schemas/LocationCoordinate"
+    AddressLine:
+      type: object
+      properties:
+        line:
+          type: string
+          xml:
+            name: Line
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+    AllowanceCharge:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Identifier"
+        chargeIndicator:
+          type: boolean
+          xml:
+            name: ChargeIndicator
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        allowanceChargeReasonCode:
+          $ref: "#/components/schemas/Code"
+        allowanceChargeReason:
+          type: array
+          xml:
+            name: AllowanceChargeReason
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+          items:
+            type: string
+            xml:
+              name: AllowanceChargeReason
+        multiplierFactorNumeric:
+          type: number
+          format: double
+          xml:
+            name: MultiplierFactorNumeric
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        prepaidIndicator:
+          type: boolean
+          xml:
+            name: PrepaidIndicator
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        sequenceNumeric:
+          type: integer
+          format: int32
+          xml:
+            name: SequenceNumeric
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        amount:
+          $ref: "#/components/schemas/Amount"
+        taxInclusiveAmount:
+          $ref: "#/components/schemas/Amount"
+        baseAmount:
+          $ref: "#/components/schemas/Amount"
+        accountingCostCode:
+          $ref: "#/components/schemas/Code"
+        accountingCost:
+          type: string
+          xml:
+            name: AccountingCost
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        perUnitAmount:
+          $ref: "#/components/schemas/Amount"
+        taxCategory:
+          $ref: "#/components/schemas/TaxCategory"
+        taxTotal:
+          $ref: "#/components/schemas/TaxTotal"
+        paymentMeans:
+          type: array
+          xml:
+            name: PaymentMeans
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
+          items:
+            $ref: "#/components/schemas/PaymentMeans"
+    Amount:
+      type: object
+      properties:
+        currencyID:
+          type: string
+          xml:
+            attribute: true
+        value:
+          type: number
+    Attachment:
+      type: object
+      properties:
+        embeddedDocumentBinaryObject:
+          $ref: "#/components/schemas/EmbeddedDocument"
+        externalReference:
+          $ref: "#/components/schemas/ExternalReference"
+    Branch:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Identifier"
+        name:
+          $ref: "#/components/schemas/Name"
+        financialInstitution:
+          $ref: "#/components/schemas/FinancialInstitution"
+        address:
+          $ref: "#/components/schemas/Address"
+    CardAccount:
+      type: object
+      properties:
+        primaryAccountNumberID:
+          $ref: "#/components/schemas/Identifier"
+        networkID:
+          $ref: "#/components/schemas/Identifier"
+        cardTypeCode:
+          $ref: "#/components/schemas/Code"
+        validityStartDate:
+          type: string
+          format: date
+          xml:
+            name: ValidityStartDate
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        expiryDate:
+          type: string
+          format: date
+          xml:
+            name: ExpiryDate
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        issuerID:
+          $ref: "#/components/schemas/Identifier"
+        issueNumberID:
+          $ref: "#/components/schemas/Identifier"
+        getcV2ID:
+          $ref: "#/components/schemas/Identifier"
+        cardChipCode:
+          $ref: "#/components/schemas/Code"
+        chipApplicationID:
+          $ref: "#/components/schemas/Identifier"
+        holderName:
+          type: string
+          xml:
+            name: HolderName
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        roleCode:
+          $ref: "#/components/schemas/Code"
+    Certificate:
+      required:
+      - id
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Identifier"
+        certificateTypeCode:
+          type: string
+          xml:
+            name: CertificateTypeCode
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        certificateType:
+          type: array
+          xml:
+            name: CertificateType
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+          items:
+            type: string
+            xml:
+              name: CertificateType
+        remarks:
+          type: array
+          xml:
+            name: Remarks
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+          items:
+            type: string
+            xml:
+              name: Remarks
+        issuerParty:
+          $ref: "#/components/schemas/Party"
+        documentReference:
+          type: array
+          xml:
+            name: DocumentReference
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
+          items:
+            $ref: "#/components/schemas/DocumentReference"
+        signature:
+          type: array
+          xml:
+            name: Signature
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
+          items:
+            $ref: "#/components/schemas/Signature"
+    Clause:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Identifier"
+        content:
+          type: array
+          items:
+            type: string
+    Code:
+      type: object
+      properties:
+        value:
+          type: string
+        languageID:
+          type: string
+          xml:
+            attribute: true
+        listAgencyID:
+          type: string
+          xml:
+            attribute: true
+        listAgencyName:
+          type: string
+          xml:
+            attribute: true
+        listID:
+          type: string
+          xml:
+            attribute: true
+        listName:
+          type: string
+          xml:
+            attribute: true
+        listSchemeURI:
+          type: string
+          xml:
+            attribute: true
+        listURI:
+          type: string
+          xml:
+            attribute: true
+        listVersionID:
+          type: string
+          xml:
+            attribute: true
+        name:
+          type: string
+          xml:
+            attribute: true
+    CommodityClassification:
+      type: object
+      properties:
+        natureCode:
+          type: string
+          xml:
+            name: NatureCode
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        cargoTypeCode:
+          type: string
+          xml:
+            name: CargoTypeCode
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        commodityCode:
+          type: string
+          xml:
+            name: CommodityCode
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        itemClassificationCode:
+          $ref: "#/components/schemas/Code"
+    Communication:
+      type: object
+      properties:
+        channelCode:
+          $ref: "#/components/schemas/Code"
+        channel:
+          type: string
+          xml:
+            name: Channel
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        value:
+          type: string
+          xml:
+            name: Value
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+    Contact:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Identifier"
+        name:
+          type: string
+          xml:
+            name: Name
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        jobTitle:
+          type: string
+          xml:
+            name: JobTitle
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        department:
+          type: string
+          xml:
+            name: Department
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        telephone:
+          type: string
+          xml:
+            name: Telephone
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        telefax:
+          type: string
+          xml:
+            name: Telefax
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        electronicMail:
+          type: string
+          xml:
+            name: ElectronicMail
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        note:
+          type: string
+          xml:
+            name: Note
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        otherCommunication:
+          type: array
+          xml:
+            name: OtherCommunication
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
+          items:
+            $ref: "#/components/schemas/Communication"
+    Country:
+      type: object
+      properties:
+        identificationCode:
+          type: string
+          xml:
+            name: IdentificationCode
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        name:
+          type: string
+          xml:
+            name: Name
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+    CreditAccount:
+      type: object
+      properties:
+        accountID:
+          $ref: "#/components/schemas/Identifier"
+    CreditNote:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Identifier"
+        issueDate:
+          type: string
+          xml:
+            name: IssueDate
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        issueTime:
+          type: string
+          xml:
+            name: IssueTime
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        documentCurrencyCode:
+          type: string
+          xml:
+            name: DocumentCurrencyCode
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        note:
+          type: string
+          xml:
+            name: Note
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        creditNoteTypeCode:
+          $ref: "#/components/schemas/Code"
+        accountingSupplierParty:
+          $ref: "#/components/schemas/Party"
+        accountingCustomerParty:
+          $ref: "#/components/schemas/Party"
+        legalMonetaryTotal:
+          $ref: "#/components/schemas/MonetaryTotal"
+        originatorDocumentReference:
+          type: array
+          xml:
+            name: OriginatorDocumentReference
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
+          items:
+            $ref: "#/components/schemas/DocumentReference"
+        creditNoteLine:
+          type: array
+          xml:
+            name: CreditNoteLine
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+          items:
+            $ref: "#/components/schemas/CreditNoteLine"
+        taxTotal:
+          type: array
+          xml:
+            name: TaxTotal
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
+          items:
+            $ref: "#/components/schemas/TaxTotal"
+        receiptUuid:
+          type: string
+          xml:
+            name: UUID
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+      xml:
+        name: CreditNote
+        namespace: urn:oasis:names:specification:ubl:schema:xsd:CreditNote-2
+    CreditNoteLine:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Identifier"
+        creditedQuantity:
+          $ref: "#/components/schemas/Quantity"
+        lineExtensionAmount:
+          $ref: "#/components/schemas/Amount"
+        invoicePeriod:
+          $ref: "#/components/schemas/Period"
+        item:
+          $ref: "#/components/schemas/Item"
+        price:
+          $ref: "#/components/schemas/Price"
+        note:
+          type: string
+          xml:
+            name: Note
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        taxTotal:
+          type: array
+          xml:
+            name: TaxTotal
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
+          items:
+            $ref: "#/components/schemas/TaxTotal"
+    Dimension:
+      type: object
+      properties:
+        attributeID:
+          $ref: "#/components/schemas/Identifier"
+        measure:
+          $ref: "#/components/schemas/Measure"
+        description:
+          type: string
+          xml:
+            name: Description
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        minimumMeasure:
+          $ref: "#/components/schemas/Measure"
+        maximumMeasure:
+          $ref: "#/components/schemas/Measure"
+    DocumentDistribution:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Identifier"
+        documentTypeCode:
+          $ref: "#/components/schemas/Code"
+        distributionTypeCode:
+          $ref: "#/components/schemas/Code"
+        distributionType:
+          type: array
+          xml:
+            name: DistributionType
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+          items:
+            type: string
+            xml:
+              name: DistributionType
+        printQualifier:
+          type: string
+          xml:
+            name: PrintQualifier
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        copyIndicator:
+          type: boolean
+          xml:
+            name: CopyIndicator
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        maximumCopiesNumeric:
+          type: number
+          format: double
+          xml:
+            name: MaximumCopiesNumeric
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        maximumOriginalsNumeric:
+          type: number
+          format: double
+          xml:
+            name: MaximumOriginalsNumeric
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        communication:
+          $ref: "#/components/schemas/Communication"
+        party:
+          $ref: "#/components/schemas/Party"
+    DocumentReference:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Identifier"
+        copyIndicator:
+          type: boolean
+          xml:
+            name: CopyIndicator
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        uuid:
+          type: string
+          format: uuid
+          xml:
+            name: UUID
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        issueDate:
+          type: string
+          xml:
+            name: IssueDate
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        issueTime:
+          type: string
+          xml:
+            name: IssueTime
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        documentTypeCode:
+          type: string
+          xml:
+            name: DocumentTypeCode
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        referencedDocumentInternalAddress:
+          type: string
+          xml:
+            name: ReferencedDocumentInternalAddress
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        languageID:
+          type: string
+          xml:
+            name: LanguageID
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        localeCode:
+          type: string
+          xml:
+            name: LocaleCode
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        versionID:
+          type: string
+          xml:
+            name: VersionID
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        documentStatusCode:
+          type: string
+          xml:
+            name: DocumentStatusCode
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        documentDescription:
+          type: string
+          xml:
+            name: DocumentDescription
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        attachment:
+          $ref: "#/components/schemas/Attachment"
+        validityPeriod:
+          $ref: "#/components/schemas/Period"
+        issuerParty:
+          $ref: "#/components/schemas/Party"
+        resultOfVerification:
+          $ref: "#/components/schemas/ResultOfVerification"
+    EmbeddedDocument:
+      type: object
+      properties:
+        mimeCode:
+          type: string
+          xml:
+            attribute: true
+        filename:
+          type: string
+          xml:
+            attribute: true
+        embeddedDocumentBinaryObject:
+          type: string
+          format: byte
+          xml:
+            name: EmbeddedDocumentBinaryObject
+    EmissionCalculationMethod:
+      type: object
+      properties:
+        calculationMethodCode:
+          type: string
+          xml:
+            name: CalculationMethodCode
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        fullnessIndicationCode:
+          type: string
+          xml:
+            name: FullnessIndicationCode
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        measurementFromLocation:
+          $ref: "#/components/schemas/Location"
+        measurementToLocation:
+          $ref: "#/components/schemas/Location"
+    EnvironmentalEmission:
+      required:
+      - environmentalEmissionTypeCode
+      - valueMeasure
+      type: object
+      properties:
+        environmentalEmissionTypeCode:
+          type: string
+          xml:
+            name: EnvironmentalEmissionTypeCode
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        valueMeasure:
+          $ref: "#/components/schemas/Measure"
+        description:
+          type: array
+          xml:
+            name: Description
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+          items:
+            type: string
+            xml:
+              name: Description
+        emissionCalculationMethod:
+          type: array
+          xml:
+            name: EmissionCalculationMethod
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
+          items:
+            $ref: "#/components/schemas/EmissionCalculationMethod"
+    ExternalReference:
+      type: object
+      properties:
+        uri:
+          type: string
+          xml:
+            name: URI
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+    FinancialAccount:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Identifier"
+        name:
+          $ref: "#/components/schemas/Name"
+        aliasName:
+          $ref: "#/components/schemas/Name"
+        accountTypeCode:
+          $ref: "#/components/schemas/Code"
+        accountFormatCode:
+          $ref: "#/components/schemas/Code"
+        currencyCode:
+          $ref: "#/components/schemas/Code"
+        paymentNote:
+          type: array
+          xml:
+            name: PaymentNote
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+          items:
+            type: string
+            xml:
+              name: PaymentNote
+        financialInstitutionBranch:
+          $ref: "#/components/schemas/Branch"
+        country:
+          $ref: "#/components/schemas/Country"
+    FinancialInstitution:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Identifier"
+        name:
+          $ref: "#/components/schemas/Name"
+        address:
+          $ref: "#/components/schemas/Address"
+    Item:
+      type: object
+      properties:
+        description:
+          type: string
+          xml:
+            name: Description
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        packQuantity:
+          $ref: "#/components/schemas/Quantity"
+        packSizeNumeric:
+          type: number
+          format: double
+          xml:
+            name: PackSizeNumeric
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        catalogueIndicator:
+          type: boolean
+          xml:
+            name: CatalogueIndicator
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        name:
+          type: string
+          xml:
+            name: Name
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        itemTypeCode:
+          $ref: "#/components/schemas/Code"
+        hazardousRiskIndicator:
+          type: boolean
+          xml:
+            name: HazardousRiskIndicator
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        additionalInformation:
+          type: array
+          xml:
+            name: AdditionalInformation
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+          items:
+            type: string
+            xml:
+              name: AdditionalInformation
+        keyword:
+          type: array
+          xml:
+            name: Keyword
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+          items:
+            type: string
+            xml:
+              name: Keyword
+        brandName:
+          uniqueItems: true
+          type: array
+          xml:
+            name: BrandName
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+          items:
+            type: string
+            xml:
+              name: BrandName
+        modelName:
+          type: array
+          xml:
+            name: ModelName
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+          items:
+            type: string
+            xml:
+              name: ModelName
+        warrantyInformation:
+          type: array
+          xml:
+            name: WarrantyInformation
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+          items:
+            type: string
+            xml:
+              name: WarrantyInformation
+        buyersItemIdentification:
+          $ref: "#/components/schemas/ItemIdentification"
+        sellersItemIdentification:
+          $ref: "#/components/schemas/ItemIdentification"
+        manufacturersItemIdentification:
+          $ref: "#/components/schemas/ItemIdentification"
+        standardItemIdentification:
+          $ref: "#/components/schemas/ItemIdentification"
+        catalogueItemIdentification:
+          $ref: "#/components/schemas/ItemIdentification"
+        additionalItemIdentification:
+          type: array
+          xml:
+            name: AdditionalItemIdentification
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
+          items:
+            $ref: "#/components/schemas/ItemIdentification"
+        catalogueDocumentReference:
+          $ref: "#/components/schemas/DocumentReference"
+        itemSpecificationDocumentReference:
+          type: array
+          xml:
+            name: ItemSpecificationDocumentReference
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
+          items:
+            $ref: "#/components/schemas/DocumentReference"
+        originCountry:
+          $ref: "#/components/schemas/Country"
+        commodityClassification:
+          type: array
+          xml:
+            name: CommodityClassification
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
+          items:
+            $ref: "#/components/schemas/CommodityClassification"
+        transactionConditions:
+          type: array
+          xml:
+            name: TransactionConditions
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
+          items:
+            $ref: "#/components/schemas/TransactionConditions"
+        classifiedTaxCategory:
+          type: array
+          xml:
+            name: ClassifiedTaxCategory
+          items:
+            $ref: "#/components/schemas/TaxCategory"
+        additionalItemProperty:
+          type: array
+          xml:
+            name: AdditionalItemProperty
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
+          items:
+            $ref: "#/components/schemas/ItemProperty"
+        manufacturerParty:
+          type: array
+          xml:
+            name: ManufacturerParty
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
+          items:
+            $ref: "#/components/schemas/Party"
+        informationContentProviderParty:
+          $ref: "#/components/schemas/Party"
+        originAddress:
+          type: array
+          xml:
+            name: OriginAddress
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
+          items:
+            $ref: "#/components/schemas/Address"
+        itemInstance:
+          type: array
+          xml:
+            name: ItemInstance
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
+          items:
+            $ref: "#/components/schemas/ItemInstance"
+        certificate:
+          type: array
+          xml:
+            name: Certificate
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
+          items:
+            $ref: "#/components/schemas/Certificate"
+        dimension:
+          type: array
+          xml:
+            name: Dimension
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
+          items:
+            $ref: "#/components/schemas/Dimension"
+        environmentalEmission:
+          type: array
+          xml:
+            name: EnvironmentalEmission
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
+          items:
+            $ref: "#/components/schemas/EnvironmentalEmission"
+    ItemIdentification:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Identifier"
+        extendedID:
+          $ref: "#/components/schemas/Identifier"
+        barcodeSymbologyID:
+          $ref: "#/components/schemas/Identifier"
+        issuerScopeID:
+          $ref: "#/components/schemas/Identifier"
+        physicalAttribute:
+          type: array
+          xml:
+            name: PhysicalAttribute
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
+          items:
+            $ref: "#/components/schemas/PhysicalAttribute"
+        measurementDimension:
+          type: array
+          xml:
+            name: MeasurementDimension
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
+          items:
+            $ref: "#/components/schemas/Dimension"
+        issuerParty:
+          $ref: "#/components/schemas/Party"
+    ItemInstance:
+      type: object
+      properties:
+        productTraceID:
+          $ref: "#/components/schemas/Identifier"
+        manufactureDate:
+          type: string
+          format: date
+          xml:
+            name: ManufactureDate
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        manufactureTime:
+          $ref: "#/components/schemas/LocalTime"
+        bestBeforeDate:
+          type: string
+          format: date
+          xml:
+            name: BestBeforeDate
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        registrationID:
+          $ref: "#/components/schemas/Identifier"
+        serialID:
+          $ref: "#/components/schemas/Identifier"
+        additionalItemProperty:
+          type: array
+          xml:
+            name: AdditionalItemProperty
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
+          items:
+            $ref: "#/components/schemas/ItemProperty"
+        lotIdentification:
+          $ref: "#/components/schemas/LotIdentification"
+    ItemProperty:
+      required:
+      - name
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Identifier"
+        name:
+          $ref: "#/components/schemas/Name"
+        nameCode:
+          $ref: "#/components/schemas/Code"
+        testMethod:
+          type: string
+          xml:
+            name: TestMethod
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        value:
+          type: string
+          xml:
+            name: Value
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        valueQuantity:
+          $ref: "#/components/schemas/Quantity"
+        valueQualifier:
+          type: array
+          xml:
+            name: ValueQualifier
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+          items:
+            type: string
+            xml:
+              name: ValueQualifier
+        importanceCode:
+          $ref: "#/components/schemas/Code"
+        listValue:
+          type: array
+          xml:
+            name: ListValue
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+          items:
+            type: string
+            xml:
+              name: ListValue
+        usabilityPeriod:
+          $ref: "#/components/schemas/Period"
+        itemPropertyGroup:
+          type: array
+          xml:
+            name: ItemPropertyGroup
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
+          items:
+            $ref: "#/components/schemas/ItemPropertyGroup"
+        rangeDimension:
+          $ref: "#/components/schemas/Dimension"
+        itemPropertyRange:
+          $ref: "#/components/schemas/ItemPropertyRange"
+        standardPropertyIdentification:
+          $ref: "#/components/schemas/PropertyIdentification"
+    ItemPropertyGroup:
+      required:
+      - id
+      type: object
+      properties:
+        id:
+          type: string
+          xml:
+            name: ID
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        name:
+          type: string
+          xml:
+            name: Name
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        importanceCode:
+          type: string
+          xml:
+            name: ImportanceCode
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+    ItemPropertyRange:
+      type: object
+      properties:
+        minimumValue:
+          type: string
+          xml:
+            name: MinimumValue
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        maximumValue:
+          type: string
+          xml:
+            name: MaximumValue
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+    LocalTime:
+      type: object
+      properties:
+        hour:
+          type: integer
+          format: int32
+        minute:
+          type: integer
+          format: int32
+        second:
+          type: integer
+          format: int32
+        nano:
+          type: integer
+          format: int32
+    Location:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Identifier"
+        description:
+          type: array
+          xml:
+            name: Description
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+          items:
+            type: string
+            xml:
+              name: Description
+        conditions:
+          type: array
+          xml:
+            name: Conditions
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+          items:
+            type: string
+            xml:
+              name: Conditions
+        countrySubentity:
+          type: string
+          xml:
+            name: CountrySubentity
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        countrySubentityCode:
+          $ref: "#/components/schemas/Code"
+        locationTypeCode:
+          $ref: "#/components/schemas/Code"
+        informationURI:
+          $ref: "#/components/schemas/Identifier"
+        name:
+          $ref: "#/components/schemas/Name"
+        validityPeriod:
+          type: array
+          xml:
+            name: ValidityPeriod
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
+          items:
+            $ref: "#/components/schemas/Period"
+        address:
+          $ref: "#/components/schemas/Address"
+        locationCoordinate:
+          type: array
+          xml:
+            name: LocationCoordinate
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
+          items:
+            $ref: "#/components/schemas/LocationCoordinate"
+    LocationCoordinate:
+      type: object
+      properties:
+        coordinateSystemCode:
+          $ref: "#/components/schemas/Code"
+        latitudeDegreesMeasure:
+          $ref: "#/components/schemas/Measure"
+        latitudeMinutesMeasure:
+          $ref: "#/components/schemas/Measure"
+        latitudeDirectionCode:
+          $ref: "#/components/schemas/Code"
+        longitudeDegreesMeasure:
+          $ref: "#/components/schemas/Measure"
+        longitudeMinutesMeasure:
+          $ref: "#/components/schemas/Measure"
+        longitudeDirectionCode:
+          $ref: "#/components/schemas/Code"
+        altitudeMeasure:
+          $ref: "#/components/schemas/Measure"
+    LotIdentification:
+      type: object
+      properties:
+        lotNumberID:
+          $ref: "#/components/schemas/Identifier"
+        expiryDate:
+          type: string
+          format: date
+          xml:
+            name: ExpiryDate
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        additionalItemProperty:
+          type: array
+          xml:
+            name: AdditionalItemProperty
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
+          items:
+            $ref: "#/components/schemas/ItemProperty"
+    Measure:
+      type: object
+      properties:
+        value:
+          type: number
+        unitCode:
+          type: string
+          xml:
+            attribute: true
+        unitCodeListVersionID:
+          type: string
+          xml:
+            attribute: true
+    MonetaryTotal:
+      type: object
+      properties:
+        lineExtensionAmount:
+          $ref: "#/components/schemas/Amount"
+        taxExclusiveAmount:
+          $ref: "#/components/schemas/Amount"
+        taxInclusiveAmount:
+          $ref: "#/components/schemas/Amount"
+        allowanceTotalAmount:
+          $ref: "#/components/schemas/Amount"
+        allowanceTotalTaxInclusiveAmount:
+          $ref: "#/components/schemas/Amount"
+        chargeTotalAmount:
+          $ref: "#/components/schemas/Amount"
+        chargeTotalTaxInclusiveAmount:
+          $ref: "#/components/schemas/Amount"
+        withholdingTaxTotalAmount:
+          $ref: "#/components/schemas/Amount"
+        prepaidAmount:
+          $ref: "#/components/schemas/Amount"
+        payableRoundingAmount:
+          $ref: "#/components/schemas/Amount"
+        payableAmount:
+          $ref: "#/components/schemas/Amount"
+        payableAlternativeAmount:
+          $ref: "#/components/schemas/Amount"
+    Name:
+      type: object
+      properties:
+        value:
+          type: string
+        languageID:
+          type: string
+          xml:
+            attribute: true
+        languageLocaleID:
+          type: string
+          xml:
+            attribute: true
+    Party:
+      type: object
+      properties:
+        endpointID:
+          $ref: "#/components/schemas/Identifier"
+        partyIdentification:
+          type: array
+          xml:
+            name: PartyIdentification
+          items:
+            $ref: "#/components/schemas/PartyIdentification"
+        partyName:
+          $ref: "#/components/schemas/PartyName"
+        postalAddress:
+          $ref: "#/components/schemas/Address"
+        partyTaxScheme:
+          type: array
+          xml:
+            name: PartyTaxScheme
+          items:
+            $ref: "#/components/schemas/PartyTaxScheme"
+        partyLegalEntity:
+          $ref: "#/components/schemas/PartyLegalEntity"
+        contact:
+          $ref: "#/components/schemas/Contact"
+        partyLegalEntities:
+          type: array
+          items:
+            $ref: "#/components/schemas/PartyLegalEntity"
+    PartyIdentification:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Identifier"
+    PartyLegalEntity:
+      type: object
+      properties:
+        registrationName:
+          type: string
+          xml:
+            name: RegistrationName
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        companyLegalForm:
+          type: string
+          xml:
+            name: CompanyLegalForm
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        companyID:
+          $ref: "#/components/schemas/Identifier"
+    PartyName:
+      type: object
+      properties:
+        name:
+          type: string
+          xml:
+            name: Name
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+    PartyTaxScheme:
+      type: object
+      properties:
+        companyID:
+          type: string
+          xml:
+            name: CompanyID
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        taxScheme:
+          $ref: "#/components/schemas/TaxScheme"
+    PaymentMandate:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Identifier"
+        mandateTypeCode:
+          $ref: "#/components/schemas/Code"
+        maximumPaidAmount:
+          $ref: "#/components/schemas/Amount"
+        signatureID:
+          $ref: "#/components/schemas/Identifier"
+        payerParty:
+          $ref: "#/components/schemas/Party"
+        payerFinancialAccount:
+          $ref: "#/components/schemas/FinancialAccount"
+        validityPeriod:
+          $ref: "#/components/schemas/Period"
+        paymentReversalPeriod:
+          $ref: "#/components/schemas/Period"
+        clause:
+          $ref: "#/components/schemas/Clause"
+        maximumPaymentInstructionsNumeric:
+          type: number
+          format: double
+    PaymentMeans:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Identifier"
+        paymentMeansCode:
+          $ref: "#/components/schemas/Code"
+        paymentMeansDescription:
+          type: array
+          xml:
+            name: PaymentMeansDescription
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+          items:
+            type: string
+            xml:
+              name: PaymentMeansDescription
+        paymentID:
+          type: array
+          xml:
+            name: PaymentID
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+          items:
+            $ref: "#/components/schemas/Identifier"
+        paymentDueDate:
+          type: string
+          format: date
+          xml:
+            name: PaymentDueDate
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        paymentChannelCode:
+          $ref: "#/components/schemas/Code"
+        instructionID:
+          $ref: "#/components/schemas/Identifier"
+        instructionNote:
+          type: array
+          xml:
+            name: InstructionNote
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+          items:
+            type: string
+            xml:
+              name: InstructionNote
+        chargeBearerCode:
+          $ref: "#/components/schemas/Code"
+        serviceLevelCode:
+          $ref: "#/components/schemas/Code"
+        cardAccount:
+          type: array
+          xml:
+            name: CardAccount
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
+          items:
+            $ref: "#/components/schemas/CardAccount"
+        payerFinancialAccount:
+          $ref: "#/components/schemas/FinancialAccount"
+        payeeFinancialAccount:
+          $ref: "#/components/schemas/FinancialAccount"
+        creditAccount:
+          $ref: "#/components/schemas/CreditAccount"
+        paymentMandate:
+          $ref: "#/components/schemas/PaymentMandate"
+        tradeFinancing:
+          $ref: "#/components/schemas/TradeFinancing"
+        remittanceDocumentDistribution:
+          $ref: "#/components/schemas/DocumentDistribution"
+    PhysicalAttribute:
+      type: object
+      properties:
+        attributeID:
+          $ref: "#/components/schemas/Identifier"
+        positionCode:
+          $ref: "#/components/schemas/Code"
+        descriptionCode:
+          $ref: "#/components/schemas/Code"
+        description:
+          type: array
+          xml:
+            name: Description
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+          items:
+            type: string
+            xml:
+              name: Description
+    Price:
+      required:
+      - priceAmount
+      type: object
+      properties:
+        priceAmount:
+          $ref: "#/components/schemas/Amount"
+        taxInclusivePriceAmount:
+          $ref: "#/components/schemas/Amount"
+        baseQuantity:
+          $ref: "#/components/schemas/Quantity"
+        priceChangeReason:
+          type: array
+          xml:
+            name: PriceChangeReason
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+          items:
+            type: string
+            xml:
+              name: PriceChangeReason
+        priceTypeCode:
+          $ref: "#/components/schemas/Code"
+        priceType:
+          type: string
+          xml:
+            name: PriceType
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        orderableUnitFactorRate:
+          type: number
+          xml:
+            name: OrderableUnitFactorRate
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        validityPeriod:
+          type: array
+          xml:
+            name: ValidityPeriod
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
+          items:
+            $ref: "#/components/schemas/Period"
+        priceList:
+          $ref: "#/components/schemas/PriceList"
+        allowanceCharge:
+          type: array
+          xml:
+            name: AllowanceCharge
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
+          items:
+            $ref: "#/components/schemas/AllowanceCharge"
+    PriceList:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Identifier"
+        statusCode:
+          $ref: "#/components/schemas/Code"
+        validityPeriod:
+          type: array
+          xml:
+            name: ValidityPeriod
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
+          items:
+            $ref: "#/components/schemas/Period"
+    PropertyIdentification:
+      required:
+      - id
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Identifier"
+        issuerScopeId:
+          $ref: "#/components/schemas/Identifier"
+        issuerParty:
+          $ref: "#/components/schemas/Party"
+    Quantity:
+      type: object
+      properties:
+        value:
+          type: number
+        unitCode:
+          type: string
+          xml:
+            attribute: true
+        unitCodeListAgencyID:
+          type: string
+          xml:
+            attribute: true
+        unitCodeListAgencyName:
+          type: string
+          xml:
+            attribute: true
+        unitCodeListID:
+          type: string
+          xml:
+            attribute: true
+    ResultOfVerification:
+      type: object
+      properties:
+        validatorID:
+          $ref: "#/components/schemas/Identifier"
+        validationResultCode:
+          type: string
+          xml:
+            name: ValidationResultCode
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        validationDate:
+          type: string
+          xml:
+            name: ValidationDate
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        validationTime:
+          type: string
+          xml:
+            name: ValidationTime
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        validateProcess:
+          type: string
+          xml:
+            name: ValidateProcess
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        validateTool:
+          type: string
+          xml:
+            name: ValidateTool
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        validateToolVersion:
+          type: string
+          xml:
+            name: ValidateToolVersion
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        signatoryParty:
+          $ref: "#/components/schemas/Party"
+    Signature:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Identifier"
+        reasonCode:
+          $ref: "#/components/schemas/Code"
+        note:
+          type: array
+          xml:
+            name: Note
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+          items:
+            type: string
+            xml:
+              name: Note
+        validationDate:
+          type: string
+          format: date
+          xml:
+            name: ValidationDate
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        validationTime:
+          $ref: "#/components/schemas/LocalTime"
+        validatorID:
+          $ref: "#/components/schemas/Identifier"
+        canonicalizationMethod:
+          type: string
+          xml:
+            name: CanonicalizationMethod
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        signatureMethod:
+          type: string
+          xml:
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        signatoryParty:
+          $ref: "#/components/schemas/Party"
+        digitalSignatureAttachment:
+          $ref: "#/components/schemas/Attachment"
+        documentReference:
+          $ref: "#/components/schemas/DocumentReference"
+    TaxCategory:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Identifier"
+        name:
+          $ref: "#/components/schemas/Name"
+        percent:
+          type: number
+          format: double
+          xml:
+            name: Percent
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        baseUnitMeasure:
+          $ref: "#/components/schemas/Measure"
+        perUnitAmount:
+          $ref: "#/components/schemas/Amount"
+        taxExemptionReasonCode:
+          $ref: "#/components/schemas/Code"
+        taxExemptionReason:
+          type: array
+          xml:
+            name: TaxExemptionReason
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+          items:
+            type: string
+            xml:
+              name: TaxExemptionReason
+        tierRange:
+          type: string
+          xml:
+            name: TierRange
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        tierRatePercent:
+          type: number
+          format: double
+          xml:
+            name: TierRatePercent
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        taxScheme:
+          $ref: "#/components/schemas/TaxScheme"
+    TaxScheme:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Identifier"
+        name:
+          $ref: "#/components/schemas/Name"
+        taxTypeCode:
+          $ref: "#/components/schemas/Code"
+        currencyCode:
+          $ref: "#/components/schemas/Code"
+        jurisdictionRegionAddress:
+          $ref: "#/components/schemas/Address"
+    TaxSubtotal:
+      type: object
+      properties:
+        taxableAmount:
+          $ref: "#/components/schemas/Amount"
+        taxAmount:
+          $ref: "#/components/schemas/Amount"
+        taxInclusiveAmount:
+          $ref: "#/components/schemas/Amount"
+        calculationSequenceNumeric:
+          type: integer
+          format: int32
+          xml:
+            name: CalculationSequenceNumeric
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        transactionCurrencyTaxAmount:
+          $ref: "#/components/schemas/Amount"
+        percent:
+          type: number
+          format: double
+          xml:
+            name: Percent
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        baseUnitMeasure:
+          $ref: "#/components/schemas/Measure"
+        perUnitAmount:
+          $ref: "#/components/schemas/Amount"
+        tierRange:
+          type: string
+          xml:
+            name: TierRange
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        tierRatePercent:
+          type: number
+          format: double
+          xml:
+            name: TierRatePercent
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        taxCategory:
+          $ref: "#/components/schemas/TaxCategory"
+        country:
+          $ref: "#/components/schemas/Country"
+    TaxTotal:
+      type: object
+      properties:
+        taxAmount:
+          $ref: "#/components/schemas/Amount"
+        calculationSequenceNumeric:
+          type: integer
+          format: int32
+          xml:
+            name: CalculationSequenceNumeric
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        roundingAmount:
+          $ref: "#/components/schemas/Amount"
+        taxEvidenceIndicator:
+          type: boolean
+          xml:
+            name: TaxEvidenceIndicator
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        taxIncludedIndicator:
+          type: boolean
+          xml:
+            name: TaxIncludedIndicator
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+        taxSubtotals:
+          type: array
+          xml:
+            name: TaxSubtotal
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
+          items:
+            $ref: "#/components/schemas/TaxSubtotal"
+    TradeFinancing:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Identifier"
+        financingInstrumentCode:
+          $ref: "#/components/schemas/Code"
+        contractDocumentReference:
+          $ref: "#/components/schemas/DocumentReference"
+        documentReference:
+          type: array
+          xml:
+            name: DocumentReference
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
+          items:
+            $ref: "#/components/schemas/DocumentReference"
+        financingParty:
+          $ref: "#/components/schemas/Party"
+        financingFinancialAccount:
+          $ref: "#/components/schemas/FinancialAccount"
+        clause:
+          $ref: "#/components/schemas/Clause"
+    TransactionConditions:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Identifier"
+        actionCode:
+          $ref: "#/components/schemas/Code"
+        description:
+          type: array
+          xml:
+            name: Description
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2
+          items:
+            type: string
+            xml:
+              name: Description
+        documentReference:
+          type: array
+          xml:
+            name: DocumentReference
+            namespace: urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2
+          items:
+            $ref: "#/components/schemas/DocumentReference"
+    CheqiCreditNote:
+      type: object
+      properties:
+        cheqiCreditNoteId:
+          type: string
+          description: The unique identifier of the Cheqi credit note
+          example: CHQ-CN-12345678-123456-123456
+        documentNumber:
+          type: string
+          description: "The document number of the credit note, given by the seller."
+          example: CN-12356
+        originatorDocumentReference:
+          type: string
+          description: The document number of the original purchase receipt this credit
+            note refers to.
+          example: RECEIPT-123456
+        identifiers:
+          type: array
+          description: "The identifiers for the credit note, given by the seller,\
+            \ for example order reference, transaction number"
+          example: "ORD-12356, TRN-12356"
+          items:
+            $ref: "#/components/schemas/Identifier"
+        issueDate:
+          type: string
+          description: The issue date of the credit note
+          format: date-time
+          example: 2024-01-01T00:00:00Z
+        currency:
+          type: string
+          description: The currency of the credit note
+          example: EUR
+        creditNoteSubtotal:
+          type: number
+          description: "The subtotal of the credit note, calculated as the sum of\
+            \ all line items before any overall credit note-level adjustments or taxes."
+          example: 10.0
+        totalBeforeTax:
+          type: number
+          description: "The total before tax of the credit note, including any overall\
+            \ discounts or charges."
+          example: 10.0
+        totalTaxAmount:
+          type: number
+          description: The total tax amount of the credit note
+          example: 10.0
+        totalAmount:
+          type: number
+          description: The total amount of the credit note
+          example: 10.0
+        products:
+          type: array
+          description: The list of products included in the credit note. Must contain
+            at least one product.
+          items:
+            $ref: "#/components/schemas/Product"
+        discounts:
+          type: array
+          description: The list of discounts applied to the credit note on total credit
+            note level.
+          items:
+            $ref: "#/components/schemas/Discount"
+        charges:
+          type: array
+          description: The list of charges applied to the credit note on total credit
+            note level.
+          items:
+            $ref: "#/components/schemas/Charge"
+        taxes:
+          type: array
+          description: The list of taxes applied to the credit note
+          items:
+            $ref: "#/components/schemas/Tax"
+        period:
+          $ref: "#/components/schemas/Period"
+        note:
+          type: string
+          description: A note included on the credit note.
+          example: Refund for returned items
+        sellingParty:
+          $ref: "#/components/schemas/SellingParty"
+        receivingParty:
+          $ref: "#/components/schemas/ReceivingParty"
+        receiptUuid:
+          type: string
+          description: The verification nonce of the credit note
+      description: "Cheqi JSON credit note template object. This contains a complete\
+        \ CheqiCreditNote structure with products, taxes, parties, and all credit\
+        \ note details."
+    CreditNoteTemplateResponse:
+      type: object
+      properties:
+        ubl:
+          type: string
+          description: "UBL XML credit note template as a serialized XML string following\
+            \ the CreditNote schema. See [UBL XML Credit Note Format](https://docs.cheqi.io/creditNote/ubl-format)\
+            \ for the full structure and field reference."
+        cheqi:
+          $ref: "#/components/schemas/CheqiCreditNote"
+    EncryptedCreditNoteInitiationRequest:
+      type: object
+      properties:
+        cheqiReceiptId:
+          type: string
+          description: The Cheqi receipt ID for the original receipt
+        publicKey:
+          type: string
+          description: The public key of the requesting device
+        encryptedCreditNoteInitiationRequest:
+          type: string
+          description: The encrypted credit note initiation request payload
+        encryptedSymmetricKey:
+          type: string
+          description: The AES symmetric key encrypted with the recipient's RSA public
+            key
+      description: Encrypted credit note initiation request
+    EncryptedCreditNote:
+      required:
+      - encryptedCreditNote
+      - encryptedCustomerAesKey
+      - encryptedCustomerDetails
+      - encryptedSymmetricKey
+      - publicKey
+      - supplierPartyId
+      type: object
+      properties:
+        receiptFormats:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReceiptFormat"
+        recipientId:
+          type: string
+          description: The recipient ID of the credit note
+          example: UUID
+        creditNoteId:
+          type: string
+          description: The credit note ID
+          example: UUID
+        originalReceiptId:
+          type: string
+          description: The original receipt ID
+          example: UUID
+        receiverType:
+          $ref: "#/components/schemas/ReceiverType"
+        encryptedCreditNote:
+          type: string
+          description: The encrypted credit note
+          example: encryptedCreditNote
+        encryptedSymmetricKey:
+          type: string
+          description: Base64-encoded device-specific encrypted symmetric key
+        encryptedCustomerDetails:
+          type: string
+          description: Base64-encoded encrypted customer details.
+        encryptedCustomerAesKey:
+          type: string
+          description: Base64-encoded encrypted customer details AES key
+        finalHash:
+          type: string
+        publicKey:
+          type: string
+          description: Base64-encoded public key used to encrypt the request
+        supplierPartyId:
+          type: string
+          description: Supplier party ID for storage
+          format: uuid
+      description: A set of encrypted credit notes
+    EncryptedCreditNotesRequest:
+      required:
+      - encryptedCreditNotes
+      - matchId
+      - parentCheqiReceiptId
+      - templateHash
+      type: object
+      properties:
+        matchId:
+          type: string
+          description: The match id that you received during customer matching
+          example: match_123456789
+        parentCheqiReceiptId:
+          type: string
+          description: The parent Cheqi this credit note refers to
+          example: CHQ-1234567-123456-123456
+        encryptedCreditNotes:
+          uniqueItems: true
+          type: array
+          description: A set of encrypted credit notes
+          items:
+            $ref: "#/components/schemas/EncryptedCreditNote"
+        templateHash:
+          type: string
+          description: The hash of the credit note template
+      description: Encrypted credit note request with device-specific encryption
+    ReceiverType:
+      type: string
+      description: Type of receiver for this receipt
+      example: WEBHOOK/DEVICE
+      enum:
+      - DEVICE
+      - CLIENT_APPLICATION
+      - COMPANY
+    CreditNoteCreatedResponse:
+      type: object
+      properties:
+        cheqiReceiptId:
+          type: string
+          description: The Cheqi receipt ID of the credit note
+          example: CHQ-CREDIT-12345678-123456-123456
+        parentCheqiReceiptId:
+          type: string
+          description: The Cheqi receipt ID of the parent receipt
+          example: CHQ-12345678-123456-123456
+        templateHash:
+          type: string
+          description: The hash of the credit note template
+          example: 9a39f25618892cc6d2ca6cd651af864543a34e7ee5b5c3efff6b0de3437a8383
+        createdAt:
+          type: string
+          description: The timestamp of the credit note creation
+          format: date-time
+          example: 1970-01-01T00:00:00Z
+    ClientApplicationDTO:
+      required:
+      - applicationName
+      - clientId
+      - companyId
+      - id
+      - scopes
+      - status
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        companyId:
+          type: string
+          format: uuid
+        companyName:
+          type: string
+        companyLegalName:
+          type: string
+        companyWebsite:
+          type: string
+        company:
+          $ref: "#/components/schemas/CompanyDTO"
+        applicationName:
+          type: string
+        clientId:
+          type: string
+        clientSecrets:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClientApplicationSecretHistoryDTO"
+        redirectUris:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+        scopes:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            enum:
+            - READ_RECEIPTS
+            - WRITE_RECEIPTS
+            - READ_STORES
+            - WRITE_STORES
+            - COMPANY_ACCESS
+            - ACCOUNT_ACCESS
+        formatPreferences:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReceiptFormat"
+        applicationDescription:
+          type: string
+        applicationWebsite:
+          type: string
+        applicationPrivacyPolicyUrl:
+          type: string
+        applicationTermsUrl:
+          type: string
+        rejectionReason:
+          type: string
+        suspensionReason:
+          type: string
+        status:
+          type: string
+          enum:
+          - PENDING
+          - APPROVED
+          - REJECTED
+          - SUSPENDED
+        reviewedBy:
+          $ref: "#/components/schemas/UserDTO"
+        reviewedAt:
+          type: string
+          format: date-time
+        hasPublicKey:
+          type: boolean
+    ClientApplicationSecretHistoryDTO:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        clientSecret:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        revokedAt:
+          type: string
+          format: date-time
+    CompanyDTO:
+      required:
+      - address
+      - companyEmail
+      - companyLegalName
+      - companyName
+      - taxNumber
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        companyName:
+          type: string
+        companyLegalName:
+          type: string
+        taxNumber:
+          type: string
+        address:
+          $ref: "#/components/schemas/AddressDTO"
+        companyEmail:
+          type: string
+        phoneNumber:
+          type: string
+        contactDetails:
+          uniqueItems: true
+          type: array
+          items:
+            $ref: "#/components/schemas/ContactDetailDto"
+        identifiers:
+          uniqueItems: true
+          type: array
+          items:
+            $ref: "#/components/schemas/CompanyIdentifierDTO"
+        website:
+          type: string
+        returnDays:
+          type: integer
+          format: int32
+        companyReceiptText:
+          type: string
+        companyLogoUrl:
+          type: string
+        companyLogoUrlExpiresAt:
+          type: string
+          format: date-time
+        clientApplications:
+          uniqueItems: true
+          type: array
+          items:
+            $ref: "#/components/schemas/ClientApplicationDTO"
+        returnProcessingMode:
+          $ref: "#/components/schemas/ReturnProcessingMode"
+        userRole:
+          $ref: "#/components/schemas/CompanyRole"
+        accountPaused:
+          type: boolean
+        accountPausedReason:
+          type: string
+        notificationCodeEnabled:
+          type: boolean
+    ContactDetailDto:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        contactType:
+          type: string
+        contactValue:
+          type: string
+        displayName:
+          type: string
+    CreateChildCompanyRequest:
+      type: object
+      properties:
+        company:
+          $ref: "#/components/schemas/CompanyDTO"
+        adminEmail:
+          type: string
+      description: Child company details
+    DeviceDto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        appDeviceId:
+          type: string
+        pushToken:
+          type: string
+        keyAlgorithm:
+          type: string
+        keyCreatedAt:
+          type: string
+          format: date-time
+        deviceName:
+          type: string
+        publicKey:
+          type: string
+        platform:
+          type: string
+          enum:
+          - IOS
+          - ANDROID
+          - SERVER
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        userId:
+          type: string
+          format: uuid
+        companyId:
+          type: string
+          format: uuid
+    EmailDto:
+      type: object
+      properties:
+        primary:
+          type: boolean
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        isPrimary:
+          type: boolean
+    ReturnProcessingMode:
+      type: string
+      description: The processing mode for returns
+      example: MANUAL
+      enum:
+      - MANUAL
+      - AUTOMATED
+    UserDTO:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          uniqueItems: true
+          type: array
+          items:
+            $ref: "#/components/schemas/EmailDto"
+        phoneNumber:
+          type: string
+        gender:
+          type: string
+          enum:
+          - MALE
+          - FEMALE
+          - OTHER
+        hasCompletedOnboarding:
+          type: boolean
+        address:
+          $ref: "#/components/schemas/AddressDTO"
+        profileImageId:
+          type: string
+        roles:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            enum:
+            - USER
+            - ADMIN
+        devices:
+          type: array
+          items:
+            $ref: "#/components/schemas/DeviceDto"
+    ReceiptAccessTokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        token_type:
+          type: string
+    InviteEmployeeRequest:
+      required:
+      - role
+      type: object
+      properties:
+        emails:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+        role:
+          $ref: "#/components/schemas/CompanyRole"
+      description: Invitation request with email addresses and role
+    WebhookSecretRotationResponse:
+      type: object
+      properties:
+        ownerId:
+          type: string
+          format: uuid
+        ownerType:
+          type: string
+        webhookSecret:
+          type: string
+        rotatedAt:
+          type: string
+          format: date-time
+        message:
+          type: string
+    CreateStoreRequest:
+      required:
+      - addressDto
+      - storeCode
+      - storeName
+      type: object
+      properties:
+        storeName:
+          maxLength: 255
+          minLength: 0
+          type: string
+        storeCode:
+          maxLength: 50
+          minLength: 0
+          type: string
+        addressDto:
+          $ref: "#/components/schemas/AddressDTO"
+        phoneNumber:
+          maxLength: 20
+          minLength: 0
+          type: string
+        email:
+          maxLength: 255
+          minLength: 0
+          type: string
+        openingHours:
+          maxLength: 500
+          minLength: 0
+          type: string
+    KeyAlgorithm:
+      type: string
+      description: Key algorithm for encryption
+      enum:
+      - RSA_2048
+      - RSA_4096
+      - ECDSA_P256
+      - ECDSA_P384
+      - ED25519
+    UploadPublicKeyRequest:
+      required:
+      - keyAlgorithm
+      - publicKey
+      type: object
+      properties:
+        publicKey:
+          type: string
+        keyAlgorithm:
+          $ref: "#/components/schemas/KeyAlgorithm"
+      description: Public key upload request with key data and algorithm
+    CompanyCardAuthorizationRequest:
+      type: object
+      properties:
+        paymentAccountReference:
+          type: string
+        paymentAccountNumber:
+          type: string
+        cardProvider:
+          type: string
+          enum:
+          - MAESTRO
+          - MASTERCARD
+          - VISA
+          - AMERICAN_EXPRESS
+        lastFourDigits:
+          type: string
+        userId:
+          type: string
+          format: uuid
+        userEmail:
+          type: string
+    CompanyCardAuthorizationResponse:
+      type: object
+      properties:
+        authorizationId:
+          type: string
+          format: uuid
+        paymentAccountReference:
+          type: string
+        cardProvider:
+          type: string
+          enum:
+          - MAESTRO
+          - MASTERCARD
+          - VISA
+          - AMERICAN_EXPRESS
+        lastFourDigits:
+          type: string
+        status:
+          type: string
+          enum:
+          - PENDING
+          - ACTIVE
+          - REVOKED
+          - EXPIRED
+          - CLAIMED
+        companyId:
+          type: string
+          format: uuid
+        authorizedUserId:
+          type: string
+          format: uuid
+        authorizationToken:
+          type: string
+        claimUrl:
+          type: string
+        authorizedAt:
+          type: string
+          format: date-time
+        success:
+          type: boolean
+        message:
+          type: string
+    BulkAuthorizationError:
+      type: object
+      properties:
+        paymentAccountReference:
+          type: string
+        cardProvider:
+          type: string
+        lastFourDigits:
+          type: string
+        errorMessage:
+          type: string
+        errorCode:
+          type: string
+    BulkAuthorizationResponse:
+      type: object
+      properties:
+        totalRequested:
+          type: integer
+          format: int32
+        successCount:
+          type: integer
+          format: int32
+        failureCount:
+          type: integer
+          format: int32
+        successfulAuthorizations:
+          type: array
+          items:
+            $ref: "#/components/schemas/CompanyCardAuthorizationResponse"
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/BulkAuthorizationError"
+        allSuccessful:
+          type: boolean
+        message:
+          type: string
+    ProvisionCompanyRequest:
+      required:
+      - company
+      type: object
+      properties:
+        company:
+          $ref: "#/components/schemas/CompanyDTO"
+        adminEmail:
+          type: string
+    ProvisionCompanyResponse:
+      type: object
+      properties:
+        companyId:
+          type: string
+        status:
+          type: string
+        message:
+          type: string
+        invitationSent:
+          type: boolean
+        requiresOAuth:
+          type: boolean
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        expiresIn:
+          type: integer
+          format: int64
+        tokenType:
+          type: string
+    EncryptedCreditNoteDto:
+      required:
+      - encryptedCreditNote
+      - encryptedCustomerAesKey
+      - encryptedCustomerDetails
+      - encryptedSymmetricKey
+      - publicKey
+      - recipientId
+      - supplierPartyId
+      type: object
+      properties:
+        receiptFormats:
+          uniqueItems: true
+          type: array
+          items:
+            $ref: "#/components/schemas/ReceiptFormat"
+        recipientId:
+          type: string
+          description: The recipient ID of the credit note
+          format: uuid
+        creditNoteId:
+          type: string
+          description: The credit note ID
+          example: UUID
+        originalReceiptId:
+          type: string
+          description: The original receipt ID
+          example: UUID
+        receiverType:
+          $ref: "#/components/schemas/ReceiverType"
+        encryptedCreditNote:
+          type: string
+          description: The encrypted credit note
+          example: encryptedCreditNote
+        encryptedSymmetricKey:
+          type: string
+          description: Base64-encoded device-specific encrypted symmetric key
+        encryptedCustomerDetails:
+          type: string
+          description: Base64-encoded encrypted customer details.
+        encryptedCustomerAesKey:
+          type: string
+          description: Base64-encoded encrypted customer details AES key
+        finalHash:
+          type: string
+        publicKey:
+          type: string
+          description: Base64-encoded public key used to encrypt the request
+        supplierPartyId:
+          type: string
+          description: Supplier party ID for storage
+          format: uuid
+    PublicKeyResponse:
+      type: object
+      properties:
+        publicKey:
+          type: string
+        keyAlgorithm:
+          $ref: "#/components/schemas/KeyAlgorithm"
+        keyCreatedAt:
+          type: string
+          format: date-time
+        hasKey:
+          type: boolean
+  securitySchemes:
+    cheqi_oauth:
+      type: oauth2
+      flows:
+        implicit:
+          authorizationUrl: https://test.api.cheqi.io/oauth/authorize
+          scopes:
+            write_receipts: Write receipts
+            read_receipts: Read receipts
+            manage_client_applications: Manage client applications
+            read_client_applications: Read client applications

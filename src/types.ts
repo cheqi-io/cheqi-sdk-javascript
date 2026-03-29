@@ -6,187 +6,63 @@ export interface JsonObject {
   [key: string]: JsonValue | undefined;
 }
 
-export type PaymentType = "CARD_PAYMENT" | "DIRECT_DEBIT" | "CASH";
-export type ReceiptFormat = "CHEQI" | "UBL_XML";
-export type ReceiverType = "WEBHOOK" | "DEVICE" | "CLIENT_APPLICATION" | "COMPANY";
-export type RecipientEntityType = "BUSINESS" | "CONSUMER";
-export type BarcodeType = "QR_CODE" | "EAN_13" | "EAN_8" | "CODE_128" | "UPC_A" | "DATA_MATRIX";
+// Re-export generated types so existing consumers continue to work
+export type {
+  AddressDTO,
+  BarcodeType,
+  BuyerType,
+  CardDetails,
+  Charge,
+  CheqiCreditNote,
+  CheqiReceipt,
+  CompanyDTO,
+  CreateStoreRequest,
+  CreditNoteTemplateGenerationRequest,
+  CreditNoteTemplateRequest,
+  CreditNoteTemplateResponse,
+  Discount,
+  EncryptedCreditNote,
+  EncryptedCreditNoteInitiationRequest,
+  EncryptedReceiptRequest,
+  EncryptedReceiptsRequest,
+  IdentificationDetails,
+  IdentificationDetailsPaymentTypeEnum,
+  Identifier,
+  MatchedRecipient,
+  NotificationDisplayCode,
+  PaymentAccountDetails,
+  Period,
+  Product,
+  ProvisionCompanyRequest,
+  ProvisionCompanyResponse,
+  ReceiptCreatedResponse,
+  ReceiptFormat,
+  ReceiptTemplateGenerationRequest,
+  ReceiptTemplateRequest,
+  ReceiptTemplateResponse,
+  ReceiverType,
+  RecipientResolutionResponse,
+  SellingParty,
+  ReceivingParty,
+  StoreDTO,
+  Tax,
+  VatMetadata,
+} from "./models/generated/index.js";
 
-export interface CardDetails {
-  paymentAccountNumber?: string;
-  paymentAccountReference?: string;
-  cardProvider?: string;
-  payment_account_number?: string;
-  payment_account_reference?: string;
-}
-
-export interface PaymentAccountDetails {
-  identifier?: string;
-  identifierType?: string;
-}
-
-export interface IdentificationDetails extends Record<string, unknown> {
-  paymentType?: PaymentType;
-  cardDetails?: CardDetails;
-  paymentAccountDetails?: PaymentAccountDetails;
-  paymentIds?: string[];
-  recipientEmail?: string;
-  cheqiReceiptId?: string;
-  pairingCode?: string;
-  recipient_email?: string;
-  cheqi_receipt_id?: string;
-  pairing_code?: string;
-  payment_account_details?: PaymentAccountDetails;
-  card_details?: CardDetails;
-}
-
-export interface Recipient extends Record<string, unknown> {
-  id?: string;
-  receiverType?: ReceiverType;
-  publicKey?: string;
-  keyAlgorithm?: string;
-  acceptedFormats?: ReceiptFormat[];
-  receiver_type?: ReceiverType;
-  public_key?: string;
-  accepted_formats?: ReceiptFormat[];
-}
-
-export interface RecipientResolutionResponse extends Record<string, unknown> {
-  customerFound: boolean;
-  matchId?: string;
-  recipients?: Recipient[];
-  expiresAt?: string;
-  buyerCountryCode?: string;
-  recipientEntityType?: RecipientEntityType;
-}
-
-export interface NotificationDisplayCode {
-  type: BarcodeType;
-  data: string;
-}
-
-export interface EncryptedReceiptRequestDto extends Record<string, unknown> {
+// Custom SDK type for encrypted receipt decryption (extends generated EncryptedReceiptRequest)
+export interface EncryptedReceipt {
   recipientId?: string;
   receiptId?: string;
-  receiverType?: ReceiverType;
+  receiverType?: string;
   encryptedReceipt?: string;
   encryptedSymmetricKey?: string;
   finalHash?: string;
   publicKey?: string;
   supplierPartyId?: string;
-  receiptFormats?: ReceiptFormat[];
-  notificationDisplayCode?: NotificationDisplayCode;
-}
-
-export interface EncryptedReceipt extends EncryptedReceiptRequestDto {
+  receiptFormats?: string[];
+  notificationDisplayCode?: { type: string; data: string };
   encryptedCustomerDetails?: string;
   encryptedCustomerAesKey?: string;
-  encrypted_receipt?: string;
-  encrypted_symmetric_key?: string;
-  encrypted_customer_details?: string;
-  encrypted_customer_aes_key?: string;
-}
-
-export interface EncryptedCreditNote extends Record<string, unknown> {
-  recipientId?: string;
-  receiverType?: ReceiverType;
-  publicKey?: string;
-  encryptedCreditNote?: string;
-  encryptedSymmetricKey?: string;
-  receiptFormats?: ReceiptFormat[];
-}
-
-export interface EncryptedCreditNoteInitiationRequest extends Record<string, unknown> {
-  cheqiReceiptId?: string;
-  publicKey?: string;
-  encryptedCreditNoteInitiationRequest?: string;
-  encryptedSymmetricKey?: string;
-  encryptedCreditNote?: string;
-  encrypted_credit_note_initiation_request?: string;
-  encrypted_symmetric_key?: string;
-  encrypted_credit_note?: string;
-}
-
-export interface ReceiptTemplateRequest extends Record<string, unknown> {
-  childCompanyId?: string;
-  documentNumber?: string;
-  issueDate?: string | Date;
-  currency?: string;
-  receiptSubtotal?: number | string;
-  totalBeforeTax?: number | string;
-  totalTaxAmount?: number | string;
-  totalAmount?: number | string;
-  products?: unknown[];
-  discounts?: unknown[];
-  charges?: unknown[];
-  taxes?: unknown[];
-  transactionDate?: string | Date;
-  purchaseDate?: string | Date;
-  period?: unknown;
-  barcodes?: unknown[];
-  note?: string;
-  buyerCountryCode?: string;
-  recipientEntityType?: RecipientEntityType;
-  taxesApplied?: boolean;
-}
-
-export interface ReceiptTemplateResponse extends Record<string, unknown> {
-  ubl?: string;
-  cheqi?: Record<string, unknown>;
-  vatMetadata?: Record<string, unknown>;
-}
-
-export interface CreditNoteTemplateRequest extends Record<string, unknown> {}
-
-export interface CreditNoteTemplateGenerationRequest {
-  creditNoteTemplateRequest: CreditNoteTemplateRequest;
-  receiptFormats?: ReceiptFormat[];
-}
-
-export interface CreditNoteTemplateResponse extends Record<string, unknown> {
-  ubl?: string;
-  cheqi?: Record<string, unknown>;
-  vatMetadata?: Record<string, unknown>;
-}
-
-export interface CompanyAddress extends Record<string, unknown> {
-  streetName?: string;
-  additionalStreetName?: string;
-  addressLine?: string;
-  region?: string;
-  cityName?: string;
-  postalZone?: string;
-  countryIsoCode?: string;
-  street_name?: string;
-  city_name?: string;
-  postal_zone?: string;
-  country_iso_code?: string;
-}
-
-export interface Company extends Record<string, unknown> {
-  companyName?: string;
-  companyLegalName?: string;
-  chamberOfCommerceNumber?: string;
-  taxNumber?: string;
-  companyEmail?: string;
-  phoneNumber?: string;
-  website?: string;
-  returnDays?: number;
-  companyReceiptText?: string;
-  companyLogoUrl?: string;
-  address?: CompanyAddress;
-  company_name?: string;
-  company_email?: string;
-}
-
-export interface CreateStoreRequest extends Record<string, unknown> {
-  storeName?: string;
-  storeCode?: string;
-  address?: CompanyAddress;
-  phoneNumber?: string;
-  email?: string;
-  openingHours?: string;
-  store_name?: string;
 }
 
 export interface CheqiSDKOptions {
@@ -196,6 +72,7 @@ export interface CheqiSDKOptions {
   privateKey?: Nullable<string>;
   timeoutSeconds?: number;
   maxRetries?: number;
+  logger?: import("./logger.js").Logger;
 }
 
 export interface RequestOptions {
@@ -209,28 +86,27 @@ export type FetchLike = typeof fetch;
 
 export interface CheqiApiClient {
   generateReceiptTemplate(
-    request: ReceiptTemplateRequest,
-    receiptFormats?: ReceiptFormat[],
+    request: import("./models/generated/index.js").ReceiptTemplateGenerationRequest,
     accessToken?: string | null
-  ): Promise<ReceiptTemplateResponse>;
+  ): Promise<import("./models/generated/index.js").ReceiptTemplateResponse>;
   generateCreditNoteTemplate(
-    request: CreditNoteTemplateGenerationRequest,
+    request: import("./models/generated/index.js").CreditNoteTemplateGenerationRequest,
     accessToken?: string | null
-  ): Promise<CreditNoteTemplateResponse>;
+  ): Promise<import("./models/generated/index.js").CreditNoteTemplateResponse>;
   matchCustomer(
-    request: IdentificationDetails,
+    request: import("./models/generated/index.js").IdentificationDetails,
     accessToken?: string | null
-  ): Promise<RecipientResolutionResponse>;
+  ): Promise<import("./models/generated/index.js").RecipientResolutionResponse>;
   sendEncryptedReceipts(
     matchId: string,
-    encryptedReceipts: EncryptedReceiptRequestDto[],
+    encryptedReceipts: import("./models/generated/index.js").EncryptedReceiptRequest[],
     templateHash: string,
     accessToken?: string | null
   ): Promise<Record<string, unknown>>;
   sendEncryptedCreditNotes(
     matchId: string,
     parentCheqiReceiptId: string,
-    encryptedCreditNotes: EncryptedCreditNote[],
+    encryptedCreditNotes: import("./models/generated/index.js").EncryptedCreditNote[],
     templateHash: string,
     accessToken?: string | null
   ): Promise<Record<string, unknown>>;
@@ -239,11 +115,11 @@ export interface CheqiApiClient {
     receipt: Record<string, unknown> | string,
     accessToken?: string | null
   ): Promise<void>;
-  provisionCompany(request: { company: Company; adminEmail: string }): Promise<Record<string, unknown>>;
-  createStore(companyId: string, request: CreateStoreRequest, accessToken?: string | null): Promise<Record<string, unknown>>;
+  provisionCompany(request: import("./models/generated/index.js").ProvisionCompanyRequest): Promise<Record<string, unknown>>;
+  createStore(companyId: string, request: import("./models/generated/index.js").CreateStoreRequest, accessToken?: string | null): Promise<Record<string, unknown>>;
   getStores(companyId: string, activeOnly?: boolean, accessToken?: string | null): Promise<Record<string, unknown>>;
   getStore(companyId: string, storeId: string, accessToken?: string | null): Promise<Record<string, unknown>>;
-  updateStore(companyId: string, storeId: string, request: CreateStoreRequest, accessToken?: string | null): Promise<Record<string, unknown>>;
+  updateStore(companyId: string, storeId: string, request: import("./models/generated/index.js").CreateStoreRequest, accessToken?: string | null): Promise<Record<string, unknown>>;
   deleteStore(companyId: string, storeId: string, accessToken?: string | null): Promise<void>;
   activateStore(companyId: string, storeId: string, accessToken?: string | null): Promise<void>;
   deactivateStore(companyId: string, storeId: string, accessToken?: string | null): Promise<void>;

@@ -1,10 +1,13 @@
 export { CheqiSDK, CheqiSDKBuilder } from "./cheqi-sdk.js";
 export { Environment, CheqiSDKConfig } from "./config.js";
 export * from "./errors.js";
+export type { Logger } from "./logger.js";
+export { ConsoleLogger, NoopLogger } from "./logger.js";
 export * from "./models/index.js";
 export { DefaultCheqiApiClient } from "./http/client.js";
 export { Endpoints } from "./http/endpoints.js";
 export { RetryHandler } from "./http/retry.js";
+export type { RetryOptions } from "./http/retry.js";
 export { EncryptionService } from "./services/encryption.js";
 export { DecryptionService } from "./services/decryption.js";
 export { MatchingService } from "./services/matching.js";

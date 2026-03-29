@@ -1,24 +1,26 @@
-import type { Company, CompanyAddress, CreateStoreRequest } from "./types.js";
-import { isNonEmptyString } from "./utils.js";
+import type { AddressDTO, CompanyDTO } from "./types.js";
+import type { CreateStoreRequest } from "./models/generated/index.js";
+import { Company } from "./models/domain.js";
+import { isNonEmptyString, isValidEmail } from "./utils.js";
 
-export function getAddressValidationErrors(address?: CompanyAddress): string[] {
+export function getAddressValidationErrors(address?: Partial<AddressDTO> | { streetName?: string; cityName?: string; postalZone?: string; countryIsoCode?: string }): string[] {
   const errors: string[] = [];
   if (!address) {
     errors.push("address is required");
     return errors;
   }
 
-  if (!isNonEmptyString(address.streetName ?? address.street_name)) {
+  if (!isNonEmptyString(address.streetName)) {
     errors.push("streetName is required");
   }
-  if (!isNonEmptyString(address.cityName ?? address.city_name)) {
+  if (!isNonEmptyString(address.cityName)) {
     errors.push("cityName is required");
   }
-  if (!isNonEmptyString(address.postalZone ?? address.postal_zone)) {
+  if (!isNonEmptyString(address.postalZone)) {
     errors.push("postalZone is required");
   }
 
-  const countryIsoCode = address.countryIsoCode ?? address.country_iso_code;
+  const countryIsoCode = address.countryIsoCode;
   if (!isNonEmptyString(countryIsoCode)) {
     errors.push("countryIsoCode is required");
   } else if (countryIsoCode.trim().length !== 2) {
@@ -28,35 +30,37 @@ export function getAddressValidationErrors(address?: CompanyAddress): string[] {
   return errors;
 }
 
-export function getCompanyValidationErrors(company?: Company): string[] {
+export function getCompanyValidationErrors(company?: Company | CompanyDTO | Record<string, any>): string[] {
   const errors: string[] = [];
 
-  if (!isNonEmptyString(company?.companyName ?? company?.company_name)) {
+  if (!isNonEmptyString(company?.companyName)) {
     errors.push("companyName is required");
   }
 
-  const companyEmail = company?.companyEmail ?? company?.company_email;
+  const companyEmail = company?.companyEmail;
   if (!isNonEmptyString(companyEmail)) {
     errors.push("companyEmail is required");
-  } else if (!companyEmail.includes("@")) {
+  } else if (!isValidEmail(companyEmail)) {
     errors.push("companyEmail must be a valid email address");
   }
 
-  for (const error of getAddressValidationErrors(company?.address)) {
+  const address = company instanceof Company ? company.address : (company as any)?.addressDto;
+  for (const error of getAddressValidationErrors(address)) {
     errors.push(`address.${error}`);
   }
 
   return errors;
 }
 
-export function getCreateStoreRequestValidationErrors(request?: CreateStoreRequest): string[] {
+export function getCreateStoreRequestValidationErrors(request?: CreateStoreRequest | Record<string, any>): string[] {
   const errors: string[] = [];
 
-  if (!isNonEmptyString(request?.storeName ?? request?.store_name)) {
+  if (!isNonEmptyString(request?.storeName)) {
     errors.push("storeName is required");
   }
 
-  for (const error of getAddressValidationErrors(request?.address)) {
+  const address = (request as any)?.addressDto ?? (request as any)?.address;
+  for (const error of getAddressValidationErrors(address)) {
     errors.push(`address.${error}`);
   }
 

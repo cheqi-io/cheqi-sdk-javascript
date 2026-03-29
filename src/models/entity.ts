@@ -333,7 +333,7 @@ export class PurchaseReceipt {
   taxTotals?: TaxTotal[];
   legalMonetaryTotal: MonetaryTotal;
   purchaseReceiptLines: PurchaseReceiptLine[];
-  verificationNonce?: string;
+  receiptUuid?: string;
 
   constructor(
     id: Identifier,
@@ -392,7 +392,7 @@ export class PurchaseReceiptBuilder extends EntityBuilderBase<PurchaseReceipt> {
   accountingCustomerParty(value: Party): this { this.values.accountingCustomerParty = value; return this; }
   paymentMeans(value: PaymentMeans[]): this { this.values.paymentMeans = value; return this; }
   taxTotals(value: TaxTotal[]): this { this.values.taxTotals = value; return this; }
-  verificationNonce(value: string): this { this.values.verificationNonce = value; return this; }
+  receiptUuid(value: string): this { this.values.receiptUuid = value; return this; }
 
   build(): PurchaseReceipt {
     return new PurchaseReceipt(

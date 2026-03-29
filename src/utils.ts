@@ -17,6 +17,11 @@ export function coalesceString(...values: unknown[]): string | undefined {
   return undefined;
 }
 
+/** Basic email format check: local@domain with at least one dot in domain. */
+export function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
 export function sha256Hex(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
