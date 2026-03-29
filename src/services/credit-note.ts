@@ -90,7 +90,7 @@ export class CreditNoteService {
       const encryptedCreditNotes = this.buildEncryptedCreditNotes(matchResponse, templateResponse);
       const templateContent = templateResponse.cheqi
         ? serializeJson(templateResponse.cheqi)
-        : (templateResponse.ublPurchaseReceipt ?? "");
+        : (templateResponse.ubl ?? "");
       const templateHash = sha256Hex(templateContent);
       const createdResponse = await this.sendEncryptedCreditNotes(
         originalReceiptId,
