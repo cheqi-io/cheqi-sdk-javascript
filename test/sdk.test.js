@@ -492,7 +492,7 @@ test("verification: XML hash ignores formatting", () => {
     </Invoice>
   `;
   assert.equal(service.canonicalizeAndHashXml(compactXml), service.canonicalizeAndHashXml(formattedXml));
-  assert.equal(service.canonicalizeUblXml(formattedXml), compactXml);
+  assert.equal(service.canonicalizeUbl(formattedXml), compactXml);
 });
 
 test("verification: verifyJsonHash returns true for matching hash", () => {
@@ -624,8 +624,8 @@ test("model builders: Company.toCompanyDTO()", () => {
 
   const dto = company.toCompanyDTO();
   assert.equal(dto.companyName, "Test");
-  assert.equal(dto.addressDto.streetName, "S");
-  assert.equal(dto.addressDto.countryIsoCode, "NL");
+  assert.equal(dto.address.streetName, "S");
+  assert.equal(dto.address.countryIsoCode, "NL");
 });
 
 // ──────────────────── Entity Builders ─────────────────────────────
@@ -645,7 +645,7 @@ test("entity builders: PurchaseReceipt", () => {
     .build();
   const receipt = PurchaseReceipt.builder(
     id, "2026-03-16", supplier, "EUR", monetaryTotal, [line]
-  ).paymentMeans([paymentMeans]).verificationNonce("nonce-1").build();
+  ).paymentMeans([paymentMeans]).receiptUuid("nonce-1").build();
 
   assert.equal(receipt.id.getValue(), "INV-001");
   assert.equal(receipt.documentCurrencyCode, "EUR");
