@@ -20,13 +20,6 @@ import {
     ReceiverTypeToJSON,
     ReceiverTypeToJSONTyped,
 } from './ReceiverType.js';
-import type { ReceiptFormat } from './ReceiptFormat.js';
-import {
-    ReceiptFormatFromJSON,
-    ReceiptFormatFromJSONTyped,
-    ReceiptFormatToJSON,
-    ReceiptFormatToJSONTyped,
-} from './ReceiptFormat.js';
 
 /**
  * 
@@ -34,12 +27,6 @@ import {
  * @interface EncryptedCreditNoteDto
  */
 export interface EncryptedCreditNoteDto {
-    /**
-     * 
-     * @type {Set<ReceiptFormat>}
-     * @memberof EncryptedCreditNoteDto
-     */
-    receiptFormats?: Set<ReceiptFormat>;
     /**
      * The recipient ID of the credit note
      * @type {string}
@@ -134,7 +121,6 @@ export function EncryptedCreditNoteDtoFromJSONTyped(json: any, ignoreDiscriminat
     }
     return {
         
-        'receiptFormats': json['receiptFormats'] == null ? undefined : (new Set((json['receiptFormats'] as Array<any>).map(ReceiptFormatFromJSON))),
         'recipientId': json['recipientId'],
         'creditNoteId': json['creditNoteId'] == null ? undefined : json['creditNoteId'],
         'originalReceiptId': json['originalReceiptId'] == null ? undefined : json['originalReceiptId'],
@@ -160,7 +146,6 @@ export function EncryptedCreditNoteDtoToJSONTyped(value?: EncryptedCreditNoteDto
 
     return {
         
-        'receiptFormats': value['receiptFormats'] == null ? undefined : (Array.from(value['receiptFormats'] as Set<any>).map(ReceiptFormatToJSON)),
         'recipientId': value['recipientId'],
         'creditNoteId': value['creditNoteId'],
         'originalReceiptId': value['originalReceiptId'],

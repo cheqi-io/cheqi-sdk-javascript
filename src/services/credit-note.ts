@@ -132,8 +132,7 @@ export class CreditNoteService {
       });
     }
     return {
-      ...this.encryptionService.encryptCreditNoteForRecipient(creditNoteEnvelope, recipient),
-      receiptFormats: recipient.acceptedFormats
+      ...this.encryptionService.encryptCreditNoteForRecipient(creditNoteEnvelope, recipient)
     } as EncryptedCreditNote;
   }
 

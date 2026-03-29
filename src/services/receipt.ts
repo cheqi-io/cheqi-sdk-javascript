@@ -132,7 +132,6 @@ export class ReceiptService {
 
     return {
       ...this.encryptionService.encryptReceiptForRecipient(purchaseReceipt, recipient),
-      receiptFormats: recipient.acceptedFormats,
       notificationDisplayCode: notificationDisplayCode ?? undefined
     };
   }

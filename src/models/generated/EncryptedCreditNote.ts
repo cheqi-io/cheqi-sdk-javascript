@@ -20,13 +20,6 @@ import {
     ReceiverTypeToJSON,
     ReceiverTypeToJSONTyped,
 } from './ReceiverType.js';
-import type { ReceiptFormat } from './ReceiptFormat.js';
-import {
-    ReceiptFormatFromJSON,
-    ReceiptFormatFromJSONTyped,
-    ReceiptFormatToJSON,
-    ReceiptFormatToJSONTyped,
-} from './ReceiptFormat.js';
 
 /**
  * A set of encrypted credit notes
@@ -34,12 +27,6 @@ import {
  * @interface EncryptedCreditNote
  */
 export interface EncryptedCreditNote {
-    /**
-     * 
-     * @type {Array<ReceiptFormat>}
-     * @memberof EncryptedCreditNote
-     */
-    receiptFormats?: Array<ReceiptFormat>;
     /**
      * The recipient ID of the credit note
      * @type {string}
@@ -133,7 +120,6 @@ export function EncryptedCreditNoteFromJSONTyped(json: any, ignoreDiscriminator:
     }
     return {
         
-        'receiptFormats': json['receiptFormats'] == null ? undefined : ((json['receiptFormats'] as Array<any>).map(ReceiptFormatFromJSON)),
         'recipientId': json['recipientId'] == null ? undefined : json['recipientId'],
         'creditNoteId': json['creditNoteId'] == null ? undefined : json['creditNoteId'],
         'originalReceiptId': json['originalReceiptId'] == null ? undefined : json['originalReceiptId'],
@@ -159,7 +145,6 @@ export function EncryptedCreditNoteToJSONTyped(value?: EncryptedCreditNote | nul
 
     return {
         
-        'receiptFormats': value['receiptFormats'] == null ? undefined : ((value['receiptFormats'] as Array<any>).map(ReceiptFormatToJSON)),
         'recipientId': value['recipientId'],
         'creditNoteId': value['creditNoteId'],
         'originalReceiptId': value['originalReceiptId'],

@@ -20,13 +20,6 @@ import {
     NotificationDisplayCodeToJSON,
     NotificationDisplayCodeToJSONTyped,
 } from './NotificationDisplayCode.js';
-import type { ReceiptFormat } from './ReceiptFormat.js';
-import {
-    ReceiptFormatFromJSON,
-    ReceiptFormatFromJSONTyped,
-    ReceiptFormatToJSON,
-    ReceiptFormatToJSONTyped,
-} from './ReceiptFormat.js';
 
 /**
  * The encrypted receipts
@@ -40,12 +33,6 @@ export interface EncryptedReceiptRequest {
      * @memberof EncryptedReceiptRequest
      */
     recipientId?: string;
-    /**
-     * List of receipt formats to generate for this recipient
-     * @type {Array<ReceiptFormat>}
-     * @memberof EncryptedReceiptRequest
-     */
-    receiptFormats?: Array<ReceiptFormat>;
     /**
      * Encrypted receipt
      * @type {string}
@@ -102,7 +89,6 @@ export function EncryptedReceiptRequestFromJSONTyped(json: any, ignoreDiscrimina
     return {
         
         'recipientId': json['recipientId'] == null ? undefined : json['recipientId'],
-        'receiptFormats': json['receiptFormats'] == null ? undefined : ((json['receiptFormats'] as Array<any>).map(ReceiptFormatFromJSON)),
         'encryptedReceipt': json['encryptedReceipt'] == null ? undefined : json['encryptedReceipt'],
         'encryptedSymmetricKey': json['encryptedSymmetricKey'] == null ? undefined : json['encryptedSymmetricKey'],
         'finalHash': json['finalHash'] == null ? undefined : json['finalHash'],
@@ -124,7 +110,6 @@ export function EncryptedReceiptRequestToJSONTyped(value?: EncryptedReceiptReque
     return {
         
         'recipientId': value['recipientId'],
-        'receiptFormats': value['receiptFormats'] == null ? undefined : ((value['receiptFormats'] as Array<any>).map(ReceiptFormatToJSON)),
         'encryptedReceipt': value['encryptedReceipt'],
         'encryptedSymmetricKey': value['encryptedSymmetricKey'],
         'finalHash': value['finalHash'],

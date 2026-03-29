@@ -59,7 +59,6 @@ export interface EncryptedReceipt {
   finalHash?: string;
   publicKey?: string;
   supplierPartyId?: string;
-  receiptFormats?: string[];
   notificationDisplayCode?: { type: string; data: string };
   encryptedCustomerDetails?: string;
   encryptedCustomerAesKey?: string;

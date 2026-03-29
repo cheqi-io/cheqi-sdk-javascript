@@ -115,18 +115,18 @@ paths:
             '*/*':
               schema:
                 type: object
-        "400":
-          description: Invalid request data
-          content:
-            '*/*':
-              schema:
-                type: object
         "200":
           description: Store updated successfully
           content:
             '*/*':
               schema:
                 $ref: "#/components/schemas/StoreDTO"
+        "400":
+          description: Invalid request data
+          content:
+            '*/*':
+              schema:
+                type: object
       security:
       - bearerAuth: []
     delete:
@@ -233,12 +233,6 @@ paths:
               $ref: "#/components/schemas/WebhookRequestBody"
         required: true
       responses:
-        "200":
-          description: Webhook subscription created successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/WebhookResponse"
         "400":
           description: Invalid webhook request data
           content:
@@ -255,6 +249,12 @@ paths:
           description: Insufficient permissions - requires read_receipts scope
           content:
             '*/*':
+              schema:
+                $ref: "#/components/schemas/WebhookResponse"
+        "200":
+          description: Webhook subscription created successfully
+          content:
+            application/json:
               schema:
                 $ref: "#/components/schemas/WebhookResponse"
       security:
@@ -374,14 +374,14 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/ReceiptCreatedResponse"
-        "400":
-          description: Invalid encrypted receipt data
+        "201":
+          description: Receipt created successfully
           content:
             '*/*':
               schema:
                 $ref: "#/components/schemas/ReceiptCreatedResponse"
-        "201":
-          description: Receipt created successfully
+        "400":
+          description: Invalid encrypted receipt data
           content:
             '*/*':
               schema:
@@ -511,14 +511,14 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/CreditNoteCreatedResponse"
-        "201":
-          description: Encrypted credit note queued successfully
+        "403":
+          description: Insufficient permissions - requires write_receipts scope
           content:
             '*/*':
               schema:
                 $ref: "#/components/schemas/CreditNoteCreatedResponse"
-        "403":
-          description: Insufficient permissions - requires write_receipts scope
+        "201":
+          description: Encrypted credit note queued successfully
           content:
             '*/*':
               schema:
@@ -747,6 +747,12 @@ paths:
               $ref: "#/components/schemas/CreateStoreRequest"
         required: true
       responses:
+        "201":
+          description: Store created successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/StoreDTO"
         "403":
           description: Not authorized to create stores for this company
           content:
@@ -765,12 +771,6 @@ paths:
             '*/*':
               schema:
                 type: object
-        "201":
-          description: Store created successfully
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/StoreDTO"
       security:
       - bearerAuth: []
   /company/{companyId}/public-key:
@@ -962,14 +962,14 @@ paths:
           type: string
           format: uuid
       responses:
-        "200":
-          description: Secret rotated successfully
+        "403":
+          description: Not authorized to rotate webhook secret for this client application
           content:
             '*/*':
               schema:
                 $ref: "#/components/schemas/WebhookSecretRotationResponse"
-        "403":
-          description: Not authorized to rotate webhook secret for this client application
+        "200":
+          description: Secret rotated successfully
           content:
             '*/*':
               schema:
@@ -1075,14 +1075,14 @@ paths:
           type: string
           format: uuid
       responses:
-        "200":
-          description: Store deactivated successfully
+        "404":
+          description: Store or company not found
           content:
             '*/*':
               schema:
                 $ref: "#/components/schemas/StoreDTO"
-        "404":
-          description: Store or company not found
+        "200":
+          description: Store deactivated successfully
           content:
             '*/*':
               schema:
@@ -1118,14 +1118,14 @@ paths:
           type: string
           format: uuid
       responses:
-        "200":
-          description: Store activated successfully
+        "404":
+          description: Store or company not found
           content:
             '*/*':
               schema:
                 $ref: "#/components/schemas/StoreDTO"
-        "404":
-          description: Store or company not found
+        "200":
+          description: Store activated successfully
           content:
             '*/*':
               schema:
@@ -2305,11 +2305,6 @@ components:
         recipientId:
           type: string
           description: ID of the recipient
-        receiptFormats:
-          type: array
-          description: List of receipt formats to generate for this recipient
-          items:
-            $ref: "#/components/schemas/ReceiptFormat"
         encryptedReceipt:
           type: string
           description: Encrypted receipt
@@ -4432,10 +4427,6 @@ components:
       - supplierPartyId
       type: object
       properties:
-        receiptFormats:
-          type: array
-          items:
-            $ref: "#/components/schemas/ReceiptFormat"
         recipientId:
           type: string
           description: The recipient ID of the credit note
@@ -5027,11 +5018,6 @@ components:
       - supplierPartyId
       type: object
       properties:
-        receiptFormats:
-          uniqueItems: true
-          type: array
-          items:
-            $ref: "#/components/schemas/ReceiptFormat"
         recipientId:
           type: string
           description: The recipient ID of the credit note
