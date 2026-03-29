@@ -54,7 +54,9 @@ jobs:
       - name: Install dependencies
         run: |
           pip install pyyaml
-          npm install -g @openapitools/openapi-generator-cli
+          npm install -g @openapitools/openapi-generator-cli@2.19.0
+          openapi-generator-cli version-manager set 7.12.0
+          ln -sf $(which openapi-generator-cli) /usr/local/bin/openapi-generator
 
       - name: Generate models
         run: make generate
