@@ -539,7 +539,7 @@ export class CreateStoreRequest {
     return {
       storeName: this.storeName ?? "",
       storeCode: this.storeCode ?? "",
-      address: {
+      addressDto: {
         streetName: this.address?.streetName ?? "",
         cityName: this.address?.cityName ?? "",
         postalZone: this.address?.postalZone ?? "",
