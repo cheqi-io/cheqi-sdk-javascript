@@ -1,31 +1,33 @@
-SPEC_URL ?= https://test.api.cheqi.io/v3/api-docs.yaml
-LOCAL_SPEC_URL ?= http://localhost:8080/openapi/yaml
+ENV ?= test
+
+SPEC_LOCAL_URL := http://localhost:8080/v3/api-docs.yaml
+SPEC_TEST_URL := https://test.api.cheqi.io/v3/api-docs.yaml
+SPEC_SANDBOX_URL := https://sandbox.api.cheqi.io/v3/api-docs.yaml
+SPEC_PROD_URL := https://api.cheqi.io/v3/api-docs.yaml
+
+ifeq ($(ENV),local)
+SPEC_URL := $(SPEC_LOCAL_URL)
+else ifeq ($(ENV),test)
+SPEC_URL := $(SPEC_TEST_URL)
+else ifeq ($(ENV),sandbox)
+SPEC_URL := $(SPEC_SANDBOX_URL)
+else ifeq ($(ENV),prod)
+SPEC_URL := $(SPEC_PROD_URL)
+else
+$(error Unsupported ENV '$(ENV)'. Use one of: local, test, sandbox, prod)
+endif
 GENERATED_DIR := src/models/generated
 
-.PHONY: fetch-spec fetch-spec-local generate build test
+.PHONY: fetch-spec generate build test
 
 fetch-spec:
 	curl -fsSL $(SPEC_URL) -o openapi.yaml
 	@echo "Spec updated. Run 'make generate' to regenerate models."
 
-fetch-spec-local:
-	curl -fsSL $(LOCAL_SPEC_URL) -o openapi.yaml
-	@echo "Local spec updated from $(LOCAL_SPEC_URL). Run 'make generate' to regenerate models."
-
 generate:
 	rm -rf /tmp/cheqi-js-gen
-	python3 -c "\
-	import yaml; \
-	d=yaml.safe_load(open('openapi.yaml')); \
-	schemas=d.get('components',{}).get('schemas',{}); \
-	[s.update({'enum': list(dict.fromkeys(s['enum']))}) for s in \
-	 [schemas.get(n,{}) for n in schemas] + \
-	 [schemas.get(n,{}).get('properties',{}).get(p,{}) \
-	  for n in schemas for p in schemas.get(n,{}).get('properties',{})] \
-	 if 'enum' in s and len(s['enum']) != len(set(s['enum']))]; \
-	yaml.dump(d, open('/tmp/cheqi-openapi-deduped.yaml','w'), default_flow_style=False, sort_keys=False)"
 	openapi-generator generate \
-		-i /tmp/cheqi-openapi-deduped.yaml \
+		-i openapi.yaml \
 		-g typescript-fetch \
 		-o /tmp/cheqi-js-gen \
 		--global-property models,supportingFiles=runtime.ts \
@@ -38,7 +40,7 @@ generate:
 	find $(GENERATED_DIR) -name '*.ts' -exec perl -pi -e "s|from '../runtime'|from './runtime'|g" {} +
 	find $(GENERATED_DIR) -name '*.ts' -exec perl -pi -e "s|from '\./([^']+)'|from './\$$1.js'|g" {} +
 	cd $(GENERATED_DIR) && for f in *.ts; do [ "$$f" = "index.ts" ] || [ "$$f" = "runtime.ts" ] && continue; echo "export * from './$$( echo $$f | sed 's/\.ts$$//' ).js';"; done > index.ts
-	rm -rf /tmp/cheqi-js-gen /tmp/cheqi-openapi-deduped.yaml
+	rm -rf /tmp/cheqi-js-gen
 	@echo "Models generated in $(GENERATED_DIR)/"
 
 build:

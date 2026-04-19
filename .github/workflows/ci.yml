@@ -12,34 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Check token presence
-        env:
-          CI_SPEC_TOKEN: ${{ secrets.CI_SPEC_TOKEN }}
-        run: |
-          if [ -z "$CI_SPEC_TOKEN" ]; then
-            echo "::error::CI_SPEC_TOKEN is missing"
-            exit 1
-          fi
-
-      - name: Fetch latest OpenAPI spec
-        env:
-          CI_SPEC_TOKEN: ${{ secrets.CI_SPEC_TOKEN }}
-        run: |
-          curl -v -fsSL \
-            -H "X-CI-Token: ${CI_SPEC_TOKEN}" \
-            -A "GitHub-Actions-CI" \
-            https://test.api.cheqi.io/v3/api-docs.yaml \
-            -o openapi-latest.yaml
-
-      - name: Check for spec drift
-        run: |
-          if ! diff -q openapi.yaml openapi-latest.yaml > /dev/null 2>&1; then
-            echo "::warning::OpenAPI spec has changed. Run make fetch-spec and update models."
-            diff openapi.yaml openapi-latest.yaml || true
-            exit 1
-          fi
-          echo "OpenAPI spec is up to date."
+      - name: Check OpenAPI spec drift
+        run: make spec-check ENV=test
 
   generate-check:
     runs-on: ubuntu-latest

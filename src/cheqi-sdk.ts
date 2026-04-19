@@ -1,7 +1,7 @@
 import { CheqiSDKConfig } from "./config.js";
 import { DefaultCheqiApiClient } from "./http/client.js";
 import type { Logger } from "./logger.js";
-import type { CheqiSDKOptions, EncryptedReceipt } from "./types.js";
+import type { CheqiSDKOptions, DecryptedDeliveredCreditNote, EncryptedCreditNote, EncryptedReceipt } from "./types.js";
 import { CompanyService } from "./services/company.js";
 import { CreditNoteService } from "./services/credit-note.js";
 import { DecryptionService } from "./services/decryption.js";
@@ -139,6 +139,10 @@ export class CheqiSDK {
     customerDetails: string | null;
   } {
     return this.decryptionService.decryptReceipt(encryptedReceipt, privateKey);
+  }
+
+  processEncryptedCreditNote(encryptedCreditNote: EncryptedCreditNote, privateKey: string): DecryptedDeliveredCreditNote {
+    return this.creditNoteService.decryptDeliveredCreditNote(encryptedCreditNote, privateKey);
   }
 
   getConfig(): CheqiSDKConfig { return this.config; }

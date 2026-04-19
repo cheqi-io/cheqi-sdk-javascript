@@ -14,7 +14,7 @@
 
 import { mapValues } from './runtime.js';
 /**
- * 
+ * Optional additional contact details for the company
  * @export
  * @interface ContactDetailDto
  */

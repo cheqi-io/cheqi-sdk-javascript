@@ -1,7 +1,14 @@
 import { constants, createDecipheriv, createPrivateKey, privateDecrypt } from "node:crypto";
 import { AES_KEY_LENGTH, GCM_IV_LENGTH, GCM_TAG_LENGTH } from "../crypto.js";
 import { DecryptionError } from "../errors.js";
-import type { EncryptedCreditNoteInitiationRequest, EncryptedReceipt } from "../types.js";
+import { CreditNoteContextEnvelopeFromJSON } from "../models/generated/CreditNoteContextEnvelope.js";
+import type {
+  CreditNoteEnvelope,
+  DecryptedDeliveredCreditNote,
+  EncryptedCreditNote,
+  EncryptedCreditNoteInitiationRequest,
+  EncryptedReceipt
+} from "../types.js";
 import { parseBase64Der } from "../utils.js";
 
 function rsaDecrypt(encryptedKeyBase64: string, privateKeyBase64: string): Buffer {
@@ -122,6 +129,50 @@ export class DecryptionService {
         throw error;
       }
       throw new DecryptionError(`Failed to decrypt credit note: ${String((error as Error).message)}`, {
+        cause: error
+      });
+    }
+  }
+
+  /**
+   * Decrypt an encrypted delivered credit-note payload and optional credit-note context.
+   * @param encryptedCreditNote  The encrypted delivered credit-note payload from the backend.
+   * @param privateKeyBase64     Base64-encoded PKCS#8 DER private key.
+   * @returns The decrypted credit-note envelope and optional context envelope.
+   */
+  decryptDeliveredCreditNote(
+    encryptedCreditNote: EncryptedCreditNote,
+    privateKeyBase64: string
+  ): DecryptedDeliveredCreditNote {
+    if (!encryptedCreditNote) {
+      throw new DecryptionError("Encrypted credit note cannot be null");
+    }
+
+    try {
+      const payloadKey = rsaDecrypt(encryptedCreditNote.encryptedSymmetricKey ?? "", privateKeyBase64);
+      const rawJson = aesDecrypt(encryptedCreditNote.encryptedCreditNote ?? "", payloadKey);
+      const creditNoteEnvelope = JSON.parse(rawJson) as CreditNoteEnvelope;
+
+      let creditNoteContextEnvelope = null;
+      let rawCreditNoteContextJson: string | null = null;
+
+      if (encryptedCreditNote.encryptedCustomerDetails && encryptedCreditNote.encryptedCustomerAesKey) {
+        const contextKey = rsaDecrypt(encryptedCreditNote.encryptedCustomerAesKey, privateKeyBase64);
+        rawCreditNoteContextJson = aesDecrypt(encryptedCreditNote.encryptedCustomerDetails, contextKey);
+        creditNoteContextEnvelope = CreditNoteContextEnvelopeFromJSON(JSON.parse(rawCreditNoteContextJson));
+      }
+
+      return {
+        creditNoteEnvelope,
+        creditNoteContextEnvelope,
+        rawJson,
+        rawCreditNoteContextJson
+      };
+    } catch (error) {
+      if (error instanceof DecryptionError) {
+        throw error;
+      }
+      throw new DecryptionError(`Failed to decrypt delivered credit note: ${String((error as Error).message)}`, {
         cause: error
       });
     }

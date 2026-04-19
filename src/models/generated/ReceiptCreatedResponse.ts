@@ -20,19 +20,19 @@ import { mapValues } from './runtime.js';
  */
 export interface ReceiptCreatedResponse {
     /**
-     * 
+     * Stable Cheqi receipt identifier assigned to the submitted receipt.
      * @type {string}
      * @memberof ReceiptCreatedResponse
      */
     cheqiReceiptId?: string;
     /**
-     * 
+     * Timestamp when Cheqi accepted and queued the encrypted receipt submission.
      * @type {Date}
      * @memberof ReceiptCreatedResponse
      */
     createdAt?: Date;
     /**
-     * 
+     * Template hash associated with the locally built recipient envelopes. This should match the templateHash submitted in the request and can be stored for audit and verification.
      * @type {string}
      * @memberof ReceiptCreatedResponse
      */

@@ -2,9 +2,12 @@ import { CheqiSDKError, CreditNoteProcessingError, ErrorCodes } from "../errors.
 import { CreditNoteResult } from "../models.js";
 import type {
   CheqiApiClient,
+  CreditNoteContextEnvelope,
+  CreditNoteEnvelope,
   CreditNoteTemplateGenerationRequest,
   CreditNoteTemplateRequest,
   CreditNoteTemplateResponse,
+  DecryptedDeliveredCreditNote,
   EncryptedCreditNote,
   EncryptedCreditNoteInitiationRequest,
   IdentificationDetails,
@@ -16,6 +19,9 @@ import { serializeJson, sha256Hex } from "../utils.js";
 import { DecryptionService } from "./decryption.js";
 import { EncryptionService } from "./encryption.js";
 import { MatchingService } from "./matching.js";
+
+const CUSTOMER_PARTY_PLACEHOLDER = "<cac:AccountingCustomerParty/>";
+const CUSTOMER_PARTY_CLOSING_TAG = "</cac:AccountingCustomerParty>";
 
 function uniqueFormats(recipients: MatchedRecipient[] = []): ReceiptFormat[] {
   const seen = new Set<ReceiptFormat>();
@@ -90,7 +96,7 @@ export class CreditNoteService {
       const encryptedCreditNotes = this.buildEncryptedCreditNotes(matchResponse, templateResponse);
       const templateContent = templateResponse.cheqi
         ? serializeJson(templateResponse.cheqi)
-        : (templateResponse.ubl ?? "");
+        : (templateResponse.ublCreditNote ?? "");
       const templateHash = sha256Hex(templateContent);
       const createdResponse = await this.sendEncryptedCreditNotes(
         originalReceiptId,
@@ -183,6 +189,20 @@ export class CreditNoteService {
     return this.decryptionService.decryptCreditNote(encryptedCreditNote, privateKeyBase64);
   }
 
+  decryptDeliveredCreditNote(
+    encryptedCreditNote: EncryptedCreditNote,
+    privateKeyBase64: string
+  ): DecryptedDeliveredCreditNote {
+    if (!this.decryptionService) {
+      throw new CheqiSDKError("Decryption service is not configured", {
+        errorCode: ErrorCodes.DECRYPTION_ERROR
+      });
+    }
+
+    const decrypted = this.decryptionService.decryptDeliveredCreditNote(encryptedCreditNote, privateKeyBase64);
+    return this.mergeCreditNoteContext(decrypted);
+  }
+
   private buildEncryptedCreditNotes(
     matchResponse: RecipientResolutionResponse,
     templateResponse: CreditNoteTemplateResponse
@@ -196,13 +216,81 @@ export class CreditNoteService {
       if (acceptedFormats.includes("CHEQI" as any) && templateResponse.cheqi) {
         envelope.cheqiCreditNote = templateResponse.cheqi;
       }
-      if (acceptedFormats.includes("UBL_CREDIT_NOTE" as any) && templateResponse.ubl) {
-        envelope.ublPurchaseReceipt = templateResponse.ubl;
+      if (acceptedFormats.includes("UBL_CREDIT_NOTE" as any) && templateResponse.ublCreditNote) {
+        envelope.ublCreditNote = templateResponse.ublCreditNote;
       }
 
       encryptedCreditNotes.push(this.createEncryptedCreditNote(serializeJson(envelope), recipient));
     }
 
     return encryptedCreditNotes;
+  }
+
+  private mergeCreditNoteContext(decrypted: DecryptedDeliveredCreditNote): DecryptedDeliveredCreditNote {
+    const context = decrypted.creditNoteContextEnvelope;
+    if (!context) {
+      return decrypted;
+    }
+
+    const creditNoteEnvelope: CreditNoteEnvelope = {
+      cheqiCreditNote: decrypted.creditNoteEnvelope.cheqiCreditNote,
+      ublCreditNote: decrypted.creditNoteEnvelope.ublCreditNote
+    };
+
+    this.mergeXmlParty(creditNoteEnvelope, context);
+    this.mergeXmlPaymentMeans(creditNoteEnvelope, context);
+    this.mergeReceivingParty(creditNoteEnvelope, context);
+
+    return {
+      ...decrypted,
+      creditNoteEnvelope
+    };
+  }
+
+  private mergeXmlParty(creditNoteEnvelope: CreditNoteEnvelope, context: CreditNoteContextEnvelope): void {
+    const xmlReceivingParty = context.receivingParty?.xmlReceivingParty;
+    if (!xmlReceivingParty || !creditNoteEnvelope.ublCreditNote?.includes(CUSTOMER_PARTY_PLACEHOLDER)) {
+      return;
+    }
+
+    creditNoteEnvelope.ublCreditNote = creditNoteEnvelope.ublCreditNote.replace(
+      CUSTOMER_PARTY_PLACEHOLDER,
+      xmlReceivingParty
+    );
+  }
+
+  private mergeXmlPaymentMeans(creditNoteEnvelope: CreditNoteEnvelope, context: CreditNoteContextEnvelope): void {
+    const xmlPaymentMeans = context.paymentMeans?.xmlPaymentMeans;
+    const xml = creditNoteEnvelope.ublCreditNote;
+    if (!xmlPaymentMeans || !xml) {
+      return;
+    }
+
+    if (xml.includes(CUSTOMER_PARTY_CLOSING_TAG)) {
+      creditNoteEnvelope.ublCreditNote = xml.replace(
+        CUSTOMER_PARTY_CLOSING_TAG,
+        CUSTOMER_PARTY_CLOSING_TAG + xmlPaymentMeans
+      );
+      return;
+    }
+
+    if (xml.includes(CUSTOMER_PARTY_PLACEHOLDER)) {
+      creditNoteEnvelope.ublCreditNote = xml.replace(
+        CUSTOMER_PARTY_PLACEHOLDER,
+        CUSTOMER_PARTY_PLACEHOLDER + xmlPaymentMeans
+      );
+    }
+  }
+
+  private mergeReceivingParty(creditNoteEnvelope: CreditNoteEnvelope, context: CreditNoteContextEnvelope): void {
+    const receivingParty = context.receivingParty?.receivingParty;
+    if (!receivingParty || !creditNoteEnvelope.cheqiCreditNote) {
+      return;
+    }
+
+    creditNoteEnvelope.cheqiCreditNote = {
+      ...creditNoteEnvelope.cheqiCreditNote,
+      receivingParty
+    };
   }
 }

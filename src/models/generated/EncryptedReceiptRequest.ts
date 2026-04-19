@@ -22,37 +22,37 @@ import {
 } from './NotificationDisplayCode.js';
 
 /**
- * The encrypted receipts
+ * Recipient-specific encrypted receipt payloads. Each item contains ciphertext for one recipient envelope plus the wrapped symmetric key and verification metadata.
  * @export
  * @interface EncryptedReceiptRequest
  */
 export interface EncryptedReceiptRequest {
     /**
-     * ID of the recipient
+     * Temporary recipient identifier returned by recipient resolution for a single matched recipient. This is not the final device or client-application id.
      * @type {string}
      * @memberof EncryptedReceiptRequest
      */
     recipientId?: string;
     /**
-     * Encrypted receipt
+     * Base64 ciphertext of the receipt envelope.
      * @type {string}
      * @memberof EncryptedReceiptRequest
      */
     encryptedReceipt?: string;
     /**
-     * The symmetric key that is encrypted with the public key of the recipient
+     * Wrapped symmetric content-encryption key for this recipient. Encrypt the content key with the recipient public key and submit the wrapped value here.
      * @type {string}
      * @memberof EncryptedReceiptRequest
      */
     encryptedSymmetricKey?: string;
     /**
-     * The final hash of the canonnicalized CheqiReceipt
+     * Final hash of the canonicalized CHEQI JSON receipt contained in the plaintext envelope. Used for downstream verification and integrity checks.
      * @type {string}
      * @memberof EncryptedReceiptRequest
      */
     finalHash?: string;
     /**
-     * The public key that is used to encrypt the receipt
+     * Recipient public key that was used to encrypt the symmetric content key and ciphertext payload.
      * @type {string}
      * @memberof EncryptedReceiptRequest
      */

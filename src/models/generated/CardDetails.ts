@@ -14,35 +14,29 @@
 
 import { mapValues } from './runtime.js';
 /**
- * The card details
+ * Card payment details.
  * @export
  * @interface CardDetails
  */
 export interface CardDetails {
     /**
-     * 
+     * The card provider, this is one of the major networks like Mastercard, Visa, American Express etc.
      * @type {string}
      * @memberof CardDetails
      */
     cardProvider?: CardDetailsCardProviderEnum;
     /**
-     * 
+     * The Payment Account Reference (PAR), a stable identifier for the card or tokenized payment instrument.
      * @type {string}
      * @memberof CardDetails
      */
-    paymentAccountNumber?: string;
+    paymentAccountReference: string;
     /**
-     * 
+     * The last four digits of the card number, if available. Optional and used for display and receipt metadata only.
      * @type {string}
      * @memberof CardDetails
      */
-    paymentAccountReference?: string;
-    /**
-     * 
-     * @type {{ [key: string]: object; }}
-     * @memberof CardDetails
-     */
-    additionalProperties?: { [key: string]: object; };
+    lastFourDigits?: string;
 }
 
 
@@ -62,6 +56,7 @@ export type CardDetailsCardProviderEnum = typeof CardDetailsCardProviderEnum[key
  * Check if a given object implements the CardDetails interface.
  */
 export function instanceOfCardDetails(value: object): value is CardDetails {
+    if (!('paymentAccountReference' in value) || value['paymentAccountReference'] === undefined) return false;
     return true;
 }
 
@@ -76,9 +71,8 @@ export function CardDetailsFromJSONTyped(json: any, ignoreDiscriminator: boolean
     return {
         
         'cardProvider': json['cardProvider'] == null ? undefined : json['cardProvider'],
-        'paymentAccountNumber': json['paymentAccountNumber'] == null ? undefined : json['paymentAccountNumber'],
-        'paymentAccountReference': json['paymentAccountReference'] == null ? undefined : json['paymentAccountReference'],
-        'additionalProperties': json['additionalProperties'] == null ? undefined : json['additionalProperties'],
+        'paymentAccountReference': json['paymentAccountReference'],
+        'lastFourDigits': json['lastFourDigits'] == null ? undefined : json['lastFourDigits'],
     };
 }
 
@@ -94,9 +88,8 @@ export function CardDetailsToJSONTyped(value?: CardDetails | null, ignoreDiscrim
     return {
         
         'cardProvider': value['cardProvider'],
-        'paymentAccountNumber': value['paymentAccountNumber'],
         'paymentAccountReference': value['paymentAccountReference'],
-        'additionalProperties': value['additionalProperties'],
+        'lastFourDigits': value['lastFourDigits'],
     };
 }
 

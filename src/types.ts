@@ -12,6 +12,7 @@ export type {
   BarcodeType,
   BuyerType,
   CardDetails,
+  CreditNoteContextEnvelope,
   Charge,
   CheqiCreditNote,
   CheqiReceipt,
@@ -48,6 +49,18 @@ export type {
   Tax,
   VatMetadata,
 } from "./models/generated/index.js";
+
+export interface CreditNoteEnvelope {
+  cheqiCreditNote?: import("./models/generated/index.js").CheqiCreditNote;
+  ublCreditNote?: string;
+}
+
+export interface DecryptedDeliveredCreditNote {
+  creditNoteEnvelope: CreditNoteEnvelope;
+  creditNoteContextEnvelope: import("./models/generated/index.js").CreditNoteContextEnvelope | null;
+  rawJson: string;
+  rawCreditNoteContextJson: string | null;
+}
 
 // Custom SDK type for encrypted receipt decryption (extends generated EncryptedReceiptRequest)
 export interface EncryptedReceipt {

@@ -42,6 +42,24 @@ export interface ProvisionCompanyResponse {
      * @type {boolean}
      * @memberof ProvisionCompanyResponse
      */
+    partnerProvisioned?: boolean;
+    /**
+     * 
+     * @type {boolean}
+     * @memberof ProvisionCompanyResponse
+     */
+    merchantClaimed?: boolean;
+    /**
+     * 
+     * @type {string}
+     * @memberof ProvisionCompanyResponse
+     */
+    provisioningPartnerTier?: string;
+    /**
+     * 
+     * @type {boolean}
+     * @memberof ProvisionCompanyResponse
+     */
     invitationSent?: boolean;
     /**
      * 
@@ -95,6 +113,9 @@ export function ProvisionCompanyResponseFromJSONTyped(json: any, ignoreDiscrimin
         'companyId': json['companyId'] == null ? undefined : json['companyId'],
         'status': json['status'] == null ? undefined : json['status'],
         'message': json['message'] == null ? undefined : json['message'],
+        'partnerProvisioned': json['partnerProvisioned'] == null ? undefined : json['partnerProvisioned'],
+        'merchantClaimed': json['merchantClaimed'] == null ? undefined : json['merchantClaimed'],
+        'provisioningPartnerTier': json['provisioningPartnerTier'] == null ? undefined : json['provisioningPartnerTier'],
         'invitationSent': json['invitationSent'] == null ? undefined : json['invitationSent'],
         'requiresOAuth': json['requiresOAuth'] == null ? undefined : json['requiresOAuth'],
         'accessToken': json['accessToken'] == null ? undefined : json['accessToken'],
@@ -118,6 +139,9 @@ export function ProvisionCompanyResponseToJSONTyped(value?: ProvisionCompanyResp
         'companyId': value['companyId'],
         'status': value['status'],
         'message': value['message'],
+        'partnerProvisioned': value['partnerProvisioned'],
+        'merchantClaimed': value['merchantClaimed'],
+        'provisioningPartnerTier': value['provisioningPartnerTier'],
         'invitationSent': value['invitationSent'],
         'requiresOAuth': value['requiresOAuth'],
         'accessToken': value['accessToken'],

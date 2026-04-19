@@ -189,6 +189,7 @@ test("encryption: round trip for receipts", () => {
   assert.equal(decrypted.customerDetails, null);
 });
 
+
 test("encryption: round trip for credit notes", () => {
   const { privateKeyB64, publicKeyB64 } = rsaKeyPair();
   const encryption = new EncryptionService();

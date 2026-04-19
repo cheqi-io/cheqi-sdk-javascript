@@ -19,10 +19,7 @@
  */
 export const KeyAlgorithm = {
     RSA_2048: 'RSA_2048',
-    RSA_4096: 'RSA_4096',
-    ECDSA_P256: 'ECDSA_P256',
-    ECDSA_P384: 'ECDSA_P384',
-    ED25519: 'ED25519'
+    RSA_4096: 'RSA_4096'
 } as const;
 export type KeyAlgorithm = typeof KeyAlgorithm[keyof typeof KeyAlgorithm];
 

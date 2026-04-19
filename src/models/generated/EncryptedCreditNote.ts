@@ -22,7 +22,7 @@ import {
 } from './ReceiverType.js';
 
 /**
- * A set of encrypted credit notes
+ * Recipient-specific encrypted credit-note payloads. Each item contains ciphertext for one locally assembled recipient envelope plus the wrapped symmetric key and verification metadata.
  * @export
  * @interface EncryptedCreditNote
  */

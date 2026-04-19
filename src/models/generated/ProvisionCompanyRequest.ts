@@ -13,32 +13,32 @@
  */
 
 import { mapValues } from './runtime.js';
-import type { CompanyDTO } from './CompanyDTO.js';
+import type { CompanyCreationRequest } from './CompanyCreationRequest.js';
 import {
-    CompanyDTOFromJSON,
-    CompanyDTOFromJSONTyped,
-    CompanyDTOToJSON,
-    CompanyDTOToJSONTyped,
-} from './CompanyDTO.js';
+    CompanyCreationRequestFromJSON,
+    CompanyCreationRequestFromJSONTyped,
+    CompanyCreationRequestToJSON,
+    CompanyCreationRequestToJSONTyped,
+} from './CompanyCreationRequest.js';
 
 /**
- * 
+ * Request payload for trusted partner company provisioning.
  * @export
  * @interface ProvisionCompanyRequest
  */
 export interface ProvisionCompanyRequest {
     /**
      * 
-     * @type {CompanyDTO}
+     * @type {CompanyCreationRequest}
      * @memberof ProvisionCompanyRequest
      */
-    company: CompanyDTO;
+    company: CompanyCreationRequest;
     /**
-     * 
+     * Optional admin email that should receive a company-claim invitation
      * @type {string}
      * @memberof ProvisionCompanyRequest
      */
-    adminEmail?: string;
+    adminEmail?: string | null;
 }
 
 /**
@@ -59,7 +59,7 @@ export function ProvisionCompanyRequestFromJSONTyped(json: any, ignoreDiscrimina
     }
     return {
         
-        'company': CompanyDTOFromJSON(json['company']),
+        'company': CompanyCreationRequestFromJSON(json['company']),
         'adminEmail': json['adminEmail'] == null ? undefined : json['adminEmail'],
     };
 }
@@ -75,7 +75,7 @@ export function ProvisionCompanyRequestToJSONTyped(value?: ProvisionCompanyReque
 
     return {
         
-        'company': CompanyDTOToJSON(value['company']),
+        'company': CompanyCreationRequestToJSON(value['company']),
         'adminEmail': value['adminEmail'],
     };
 }

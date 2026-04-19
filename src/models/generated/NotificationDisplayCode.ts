@@ -22,7 +22,7 @@ import {
 } from './BarcodeType.js';
 
 /**
- * With this object the selling party can inject a barcode into the notification of the receipt (e.g. QR code)
+ * 
  * @export
  * @interface NotificationDisplayCode
  */

@@ -18,3 +18,4 @@ export { CompanyService } from "./services/company.js";
 export { StoreService } from "./services/store.js";
 export { canonicalizeJson } from "./rfc8785.js";
 export { canonicalizeXml } from "./xml.js";
+export * from "./types.js";

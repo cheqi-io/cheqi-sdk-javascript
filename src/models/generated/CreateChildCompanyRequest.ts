@@ -13,13 +13,13 @@
  */
 
 import { mapValues } from './runtime.js';
-import type { CompanyDTO } from './CompanyDTO.js';
+import type { CompanyCreationRequest } from './CompanyCreationRequest.js';
 import {
-    CompanyDTOFromJSON,
-    CompanyDTOFromJSONTyped,
-    CompanyDTOToJSON,
-    CompanyDTOToJSONTyped,
-} from './CompanyDTO.js';
+    CompanyCreationRequestFromJSON,
+    CompanyCreationRequestFromJSONTyped,
+    CompanyCreationRequestToJSON,
+    CompanyCreationRequestToJSONTyped,
+} from './CompanyCreationRequest.js';
 
 /**
  * Child company details
@@ -29,12 +29,12 @@ import {
 export interface CreateChildCompanyRequest {
     /**
      * 
-     * @type {CompanyDTO}
+     * @type {CompanyCreationRequest}
      * @memberof CreateChildCompanyRequest
      */
-    company?: CompanyDTO;
+    company?: CompanyCreationRequest;
     /**
-     * 
+     * Email address of the company admin to invite
      * @type {string}
      * @memberof CreateChildCompanyRequest
      */
@@ -58,7 +58,7 @@ export function CreateChildCompanyRequestFromJSONTyped(json: any, ignoreDiscrimi
     }
     return {
         
-        'company': json['company'] == null ? undefined : CompanyDTOFromJSON(json['company']),
+        'company': json['company'] == null ? undefined : CompanyCreationRequestFromJSON(json['company']),
         'adminEmail': json['adminEmail'] == null ? undefined : json['adminEmail'],
     };
 }
@@ -74,7 +74,7 @@ export function CreateChildCompanyRequestToJSONTyped(value?: CreateChildCompanyR
 
     return {
         
-        'company': CompanyDTOToJSON(value['company']),
+        'company': CompanyCreationRequestToJSON(value['company']),
         'adminEmail': value['adminEmail'],
     };
 }
