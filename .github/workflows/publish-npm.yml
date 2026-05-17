@@ -1,9 +1,20 @@
 name: Publish npm package
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish, for example 0.1.1'
+        required: true
+        type: string
+      dist-tag:
+        description: 'npm dist-tag'
+        required: true
+        default: latest
+        type: choice
+        options:
+          - latest
+          - next
 
 permissions:
   contents: read
@@ -28,6 +39,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Set package version
+        run: npm version "${{ inputs.version }}" --no-git-tag-version
+
       - name: Type check
         run: npm run typecheck
 
@@ -38,18 +52,14 @@ jobs:
         id: npm-version
         run: |
           PACKAGE_NAME="$(node -p "require('./package.json').name")"
-          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+          PACKAGE_VERSION="${{ inputs.version }}"
 
           if npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version > /dev/null 2>&1; then
-            echo "Package ${PACKAGE_NAME}@${PACKAGE_VERSION} is already published; skipping."
-            echo "should_publish=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "Package ${PACKAGE_NAME}@${PACKAGE_VERSION} is not published yet."
-            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            echo "::error::Package ${PACKAGE_NAME}@${PACKAGE_VERSION} is already published."
+            exit 1
           fi
 
       - name: Publish to npm
-        if: steps.npm-version.outputs.should_publish == 'true'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
@@ -58,4 +68,4 @@ jobs:
             exit 1
           fi
 
-          npm publish --access public --provenance
+          npm publish --access public --provenance --tag "${{ inputs.dist-tag }}"
