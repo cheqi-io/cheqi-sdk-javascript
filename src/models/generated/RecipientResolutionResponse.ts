@@ -41,11 +41,11 @@ export interface RecipientResolutionResponse {
      */
     recipients?: Array<MatchedRecipient>;
     /**
-     * Indicates if a customer was found for the given recipient
+     * Indicates if Cheqi found a delivery route for the receipt
      * @type {boolean}
      * @memberof RecipientResolutionResponse
      */
-    customerFound?: boolean;
+    routeFound?: boolean;
     /**
      * The unique identifier for the matching process
      * @type {string}
@@ -104,7 +104,7 @@ export function RecipientResolutionResponseFromJSONTyped(json: any, ignoreDiscri
     return {
         
         'recipients': json['recipients'] == null ? undefined : ((json['recipients'] as Array<any>).map(MatchedRecipientFromJSON)),
-        'customerFound': json['customerFound'] == null ? undefined : json['customerFound'],
+        'routeFound': json['routeFound'] == null ? undefined : json['routeFound'],
         'matchId': json['matchId'] == null ? undefined : json['matchId'],
         'matchedRecipients': json['matchedRecipients'] == null ? undefined : ((json['matchedRecipients'] as Array<any>).map(MatchedRecipientFromJSON)),
         'expiresAt': json['expiresAt'] == null ? undefined : (new Date(json['expiresAt'])),
@@ -126,7 +126,7 @@ export function RecipientResolutionResponseToJSONTyped(value?: RecipientResoluti
     return {
         
         'recipients': value['recipients'] == null ? undefined : ((value['recipients'] as Array<any>).map(MatchedRecipientToJSON)),
-        'customerFound': value['customerFound'],
+        'routeFound': value['routeFound'],
         'matchId': value['matchId'],
         'matchedRecipients': value['matchedRecipients'] == null ? undefined : ((value['matchedRecipients'] as Array<any>).map(MatchedRecipientToJSON)),
         'expiresAt': value['expiresAt'] == null ? undefined : ((value['expiresAt']).toISOString()),

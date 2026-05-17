@@ -130,7 +130,8 @@ export const WebhookEventDTOEventEnum = {
     RECEIPT_CREATED: 'RECEIPT_CREATED',
     RECEIPT_FINALIZED: 'RECEIPT_FINALIZED',
     RETURN_REQUESTED: 'RETURN_REQUESTED',
-    CREDIT_NOTE_CREATED: 'CREDIT_NOTE_CREATED'
+    CREDIT_NOTE_CREATED: 'CREDIT_NOTE_CREATED',
+    CREDIT_NOTE_FINALIZED: 'CREDIT_NOTE_FINALIZED'
 } as const;
 export type WebhookEventDTOEventEnum = typeof WebhookEventDTOEventEnum[keyof typeof WebhookEventDTOEventEnum];
 

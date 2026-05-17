@@ -39,6 +39,14 @@ function uniqueFormats(recipients: MatchedRecipient[] = []): ReceiptFormat[] {
   return formats;
 }
 
+function routeFound(matchResponse: RecipientResolutionResponse): boolean {
+  return Boolean(matchResponse.routeFound ?? (matchResponse as { customerFound?: boolean }).customerFound);
+}
+
+function matchedRecipients(matchResponse: RecipientResolutionResponse): MatchedRecipient[] {
+  return matchResponse.recipients ?? matchResponse.matchedRecipients ?? [];
+}
+
 export class CreditNoteService {
   constructor(
     private readonly apiClient: Pick<
@@ -78,20 +86,26 @@ export class CreditNoteService {
 
     try {
       const matchResponse = await this.matchingService.matchCustomer(identificationDetails, accessToken);
-      if (!matchResponse.customerFound) {
+      const recipientEmail = identificationDetails.recipientEmail;
+
+      if (!routeFound(matchResponse) && !recipientEmail) {
         return CreditNoteResult.customerNotFound();
       }
 
       const templateResponse = await this.generateCreditNoteTemplate(
         {
           creditNoteTemplateRequest,
-          formats: uniqueFormats(matchResponse.recipients),
+          formats: uniqueFormats(matchedRecipients(matchResponse)),
           buyerCountryCode: matchResponse.buyerCountryCode ?? "",
           buyerType: matchResponse.buyerType ?? ("CONSUMER" as any),
           taxesApplied: true
         },
         accessToken
       );
+
+      if (!routeFound(matchResponse)) {
+        return CreditNoteResult.customerNotFound();
+      }
 
       const encryptedCreditNotes = this.buildEncryptedCreditNotes(matchResponse, templateResponse);
       const templateContent = templateResponse.cheqi
@@ -132,7 +146,7 @@ export class CreditNoteService {
 
   createEncryptedCreditNote(creditNoteEnvelope: string, recipient: MatchedRecipient): EncryptedCreditNote {
     if (!creditNoteEnvelope.trim()) {
-      throw new CheqiSDKError("Purchase receipt cannot be null or empty", {
+      throw new CheqiSDKError("Credit note envelope cannot be null or empty", {
         errorCode: ErrorCodes.VALIDATION_ERROR,
         httpStatusCode: 400
       });
@@ -161,7 +175,7 @@ export class CreditNoteService {
         httpStatusCode: 400
       });
     }
-    if (!matchResponse.customerFound || !matchResponse.matchId) {
+    if (!routeFound(matchResponse) || !matchResponse.matchId) {
       throw new CheqiSDKError("Cannot send credit notes: customer was not found during matching", {
         errorCode: ErrorCodes.CUSTOMER_NOT_FOUND,
         httpStatusCode: 400
@@ -209,7 +223,7 @@ export class CreditNoteService {
   ): EncryptedCreditNote[] {
     const encryptedCreditNotes: EncryptedCreditNote[] = [];
 
-    for (const recipient of matchResponse.recipients ?? []) {
+    for (const recipient of matchedRecipients(matchResponse)) {
       const acceptedFormats = recipient.acceptedFormats ?? [];
       const envelope: Record<string, unknown> = {};
 

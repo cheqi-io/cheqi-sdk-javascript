@@ -51,6 +51,9 @@ export class EncryptionService {
     }
 
     try {
+      if (!recipient.id) {
+        throw new EncryptionError("Recipient ID is required for encryption");
+      }
       const publicKey = recipient.publicKey ?? "";
       const { encryptedData, encryptedKey } = hybridEncrypt(receiptJson, publicKey);
 
@@ -84,6 +87,9 @@ export class EncryptionService {
     }
 
     try {
+      if (!recipient.id) {
+        throw new EncryptionError("Recipient ID is required for encryption");
+      }
       const publicKey = recipient.publicKey ?? "";
       const { encryptedData, encryptedKey } = hybridEncrypt(creditNoteJson, publicKey);
 

@@ -143,18 +143,18 @@ paths:
               $ref: "#/components/schemas/UpdateStoreRequest"
         required: true
       responses:
-        "200":
-          description: Store updated successfully
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/StoreDTO"
         "404":
           description: Store or company not found
           content:
             '*/*':
               schema:
                 type: object
+        "200":
+          description: Store updated successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/StoreDTO"
         "403":
           description: Not authorized to update this store
           content:
@@ -371,12 +371,6 @@ paths:
               $ref: "#/components/schemas/EncryptedReceiptsRequest"
         required: true
       responses:
-        "201":
-          description: Receipt created successfully
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/ReceiptCreatedResponse"
         "403":
           description: Insufficient permissions - requires write_receipts scope
           content:
@@ -385,6 +379,12 @@ paths:
                 $ref: "#/components/schemas/ReceiptCreatedResponse"
         "400":
           description: Invalid encrypted receipt data
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ReceiptCreatedResponse"
+        "201":
+          description: Receipt created successfully
           content:
             '*/*':
               schema:
@@ -674,49 +674,6 @@ paths:
                 type: object
       security:
       - bearerAuth: []
-  /company/provision:
-    post:
-      tags:
-      - Company Management
-      summary: Provision company for trusted partner
-      description: |-
-        Creates a new company through a trusted partner integration and grants immediate partner access for bootstrap operations. This endpoint is restricted to trusted partner applications using a client-credentials bearer token and is intended for certified onboarding flows such as POS provisioning. The merchant should still claim the company afterwards.
-
-        **Accessible for:** Client Application
-      operationId: provisionCompany
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ProvisionCompanyRequest"
-        required: true
-      responses:
-        "403":
-          description: Client application is not a trusted partner
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/ProvisionCompanyResponse"
-        "201":
-          description: Company provisioned successfully for the trusted partner
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/ProvisionCompanyResponse"
-        "409":
-          description: Company already exists and should be connected through OAuth
-            instead
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/ProvisionCompanyResponse"
-        "401":
-          description: Invalid client application credentials
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/ProvisionCompanyResponse"
-      x-accessible-for: Client Application
   /client-application/{id}/webhook/rotate-secret:
     post:
       tags:
@@ -735,14 +692,14 @@ paths:
           type: string
           format: uuid
       responses:
-        "403":
-          description: Not authorized to rotate webhook secret for this client application
+        "200":
+          description: Secret rotated successfully
           content:
             '*/*':
               schema:
                 $ref: "#/components/schemas/WebhookSecretRotationResponse"
-        "200":
-          description: Secret rotated successfully
+        "403":
+          description: Not authorized to rotate webhook secret for this client application
           content:
             '*/*':
               schema:
@@ -773,14 +730,14 @@ paths:
           type: string
           format: uuid
       responses:
-        "200":
-          description: Public key retrieved successfully
+        "404":
+          description: Client application not found or public key not configured
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/PublicKeyResponse"
-        "404":
-          description: Client application not found or public key not configured
+        "200":
+          description: Public key retrieved successfully
           content:
             application/json:
               schema:
@@ -849,14 +806,14 @@ paths:
           type: string
           format: uuid
       responses:
-        "200":
-          description: Store deactivated successfully
+        "404":
+          description: Store or company not found
           content:
             '*/*':
               schema:
                 $ref: "#/components/schemas/StoreDTO"
-        "404":
-          description: Store or company not found
+        "200":
+          description: Store deactivated successfully
           content:
             '*/*':
               schema:
@@ -893,12 +850,6 @@ paths:
           type: string
           format: uuid
       responses:
-        "200":
-          description: Store activated successfully
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/StoreDTO"
         "404":
           description: Store or company not found
           content:
@@ -907,6 +858,12 @@ paths:
                 $ref: "#/components/schemas/StoreDTO"
         "403":
           description: Not authorized to activate this store
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/StoreDTO"
+        "200":
+          description: Store activated successfully
           content:
             '*/*':
               schema:
@@ -924,12 +881,6 @@ paths:
         **Accessible for:** Client Application, Company
       operationId: getQueuedReceipts
       responses:
-        "200":
-          description: Queued receipts returned successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ReceiptQueueDto"
         "403":
           description: Insufficient permissions - requires read_receipts scope
           content:
@@ -939,6 +890,12 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/ReceiptQueueDto"
+        "200":
+          description: Queued receipts returned successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReceiptQueueDto"
       security:
       - cheqi_oauth:
         - read_receipts
@@ -954,12 +911,6 @@ paths:
         **Accessible for:** Company, Client Application
       operationId: getAllCreditNotes
       responses:
-        "200":
-          description: Credit notes retrieved successfully
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/EncryptedCreditNoteDto"
         "403":
           description: Not authorized to access credit notes
           content:
@@ -968,6 +919,12 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/EncryptedCreditNoteDto"
+        "200":
+          description: Credit notes retrieved successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/EncryptedCreditNoteDto"
       x-accessible-for: "Company, Client Application"
   /company/{id}/receipt-delivery/devices:
     get:
@@ -994,6 +951,31 @@ paths:
               schema:
                 $ref: "#/components/schemas/CompanyReceiptDeliverySettingsResponse"
       x-accessible-for: User
+  /company/identifier-requirements:
+    get:
+      tags:
+      - Company Management
+      description: |2-
+
+
+        **Accessible for:** User
+      operationId: getIdentifierRequirements
+      parameters:
+      - name: countryCode
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CompanyIdentifierRequirement"
+      x-accessible-for: User
   /client-application/authorized-resources:
     get:
       tags:
@@ -1011,14 +993,14 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/AuthorizedResourcesResponse"
-        "403":
-          description: Not a client application token
+        "200":
+          description: Authorized resources retrieved successfully
           content:
             '*/*':
               schema:
                 $ref: "#/components/schemas/AuthorizedResourcesResponse"
-        "200":
-          description: Authorized resources retrieved successfully
+        "403":
+          description: Not a client application token
           content:
             '*/*':
               schema:
@@ -1158,6 +1140,7 @@ components:
             - RECEIPT_FINALIZED
             - RETURN_REQUESTED
             - CREDIT_NOTE_CREATED
+            - CREDIT_NOTE_FINALIZED
         notificationUrl:
           type: string
       description: Webhook subscription request with URL and event types
@@ -1219,8 +1202,6 @@ components:
             \ and used for display and receipt metadata only."
       description: Card payment details.
     IdentificationDetails:
-      required:
-      - paymentType
       type: object
       properties:
         paymentType:
@@ -1246,15 +1227,16 @@ components:
           description: "The Cheqi receipt ID, only needed for credit notes"
           example: CHQ-12345678-123456-123456
         pairingCode:
+          pattern: "\\d{8}"
           type: string
-          description: A temporary 6-digit pairing code generated by the receipt recipient.
-          example: "847392"
+          description: A temporary 8-digit pairing code generated by the receipt recipient.
+          example: "84739201"
       description: "Identification and payment details used to resolve the receipt\
-        \ recipient. For non-cash payments, you must provide either cardDetails or\
-        \ paymentAccountDetails. For card payments, cardDetails may also include optional\
-        \ lastFourDigits for richer receipt metadata. For cash payments, cardDetails\
-        \ and paymentAccountDetails are not required, but you must provide either\
-        \ recipientEmail or pairingCode."
+        \ recipient. paymentType is optional when pairingCode is supplied because\
+        \ the pairing code carries the customer-selected payment method. For card\
+        \ payments without pairingCode, provide cardDetails. For direct debit without\
+        \ pairingCode, provide paymentAccountDetails. For cash payments, provide recipientEmail\
+        \ or pairingCode."
     PaymentAccountDetails:
       required:
       - accountIdentifierType
@@ -1322,14 +1304,13 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/MatchedRecipient"
-        customerFound:
+        routeFound:
           type: boolean
-          description: Indicates if a customer was found for the given recipient
+          description: Indicates if Cheqi found a delivery route for the receipt
           example: true
         matchId:
           type: string
           description: The unique identifier for the matching process
-          example: 123e4567-e89b-12d3-a456-426614174000
         matchedRecipients:
           type: array
           description: The list of recipients found for the given recipient
@@ -1874,6 +1855,10 @@ components:
           type: string
           description: The actual identifier value
           example: "12345678"
+        label:
+          type: string
+          description: Human-readable display label for this identifier
+          example: KVK Number
         countryCode:
           type: string
           description: ISO 3166-1 alpha-2 country code
@@ -2043,6 +2028,11 @@ components:
         failureReason:
           type: string
     EncryptedReceiptRequest:
+      required:
+      - encryptedReceipt
+      - encryptedSymmetricKey
+      - publicKey
+      - recipientId
       type: object
       properties:
         recipientId:
@@ -2407,8 +2397,6 @@ components:
           type: string
           description: The original receipt ID
           example: UUID
-        receiverType:
-          $ref: "#/components/schemas/ReceiverType"
         encryptedCreditNote:
           type: string
           description: The encrypted credit note
@@ -2463,14 +2451,6 @@ components:
           description: Hash of the credit-note template basis used when building and
             encrypting the recipient envelopes.
       description: Encrypted credit note request with device-specific encryption
-    ReceiverType:
-      type: string
-      description: Type of receiver for this receipt
-      example: WEBHOOK/DEVICE
-      enum:
-      - DEVICE
-      - CLIENT_APPLICATION
-      - COMPANY
     CreditNoteCreatedResponse:
       type: object
       properties:
@@ -2497,7 +2477,6 @@ components:
       - companyEmail
       - companyLegalName
       - companyName
-      - taxNumber
       type: object
       properties:
         companyName:
@@ -2510,7 +2489,9 @@ components:
           example: Example Coffee Shop B.V.
         taxNumber:
           type: string
-          description: Tax identification number of the company
+          description: Legacy tax identification number of the company. Prefer identifiers
+            for new integrations.
+          nullable: true
           example: NL123456789B01
         address:
           $ref: "#/components/schemas/AddressDTO"
@@ -2555,6 +2536,11 @@ components:
         notificationCodeEnabled:
           type: boolean
           description: Whether notification-code based receipt retrieval is enabled
+          nullable: true
+        emailFallbackEnabled:
+          type: boolean
+          description: Whether receipts may fall back to PDF email delivery when recipient
+            matching does not find a Cheqi recipient
           nullable: true
       description: Request payload for creating or provisioning a company.
     ContactDetailDto:
@@ -2669,6 +2655,11 @@ components:
           type: boolean
           description: Whether notification-code based receipt retrieval is enabled
           nullable: true
+        emailFallbackEnabled:
+          type: boolean
+          description: Whether receipts may fall back to PDF email delivery when recipient
+            matching does not find a Cheqi recipient
+          nullable: true
       description: Company response body returned by company creation endpoints.
     CompanyRole:
       type: string
@@ -2706,47 +2697,6 @@ components:
         openingHours:
           maxLength: 500
           minLength: 0
-          type: string
-    ProvisionCompanyRequest:
-      required:
-      - company
-      type: object
-      properties:
-        company:
-          $ref: "#/components/schemas/CompanyCreationRequest"
-        adminEmail:
-          type: string
-          description: Optional admin email that should receive a company-claim invitation
-          nullable: true
-          example: owner@example.com
-      description: Request payload for trusted partner company provisioning.
-    ProvisionCompanyResponse:
-      type: object
-      properties:
-        companyId:
-          type: string
-        status:
-          type: string
-        message:
-          type: string
-        partnerProvisioned:
-          type: boolean
-        merchantClaimed:
-          type: boolean
-        provisioningPartnerTier:
-          type: string
-        invitationSent:
-          type: boolean
-        requiresOAuth:
-          type: boolean
-        accessToken:
-          type: string
-        refreshToken:
-          type: string
-        expiresIn:
-          type: integer
-          format: int64
-        tokenType:
           type: string
     WebhookSecretRotationResponse:
       type: object
@@ -2906,7 +2856,14 @@ components:
           description: The original receipt ID
           example: UUID
         receiverType:
-          $ref: "#/components/schemas/ReceiverType"
+          type: string
+          description: Type of receiver for this receipt
+          example: WEBHOOK/DEVICE
+          enum:
+          - DEVICE
+          - CLIENT_APPLICATION
+          - COMPANY
+          - EMAIL_FALLBACK
         encryptedCreditNote:
           type: string
           description: The encrypted credit note
@@ -2938,6 +2895,33 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/CompanyReceiptDeliveryDeviceDto"
+    CompanyIdentifierRequirement:
+      type: object
+      properties:
+        identifierType:
+          $ref: "#/components/schemas/CompanyIdentifierType"
+        registrationScheme:
+          type: string
+          description: Optional registry or local scheme
+          nullable: true
+          example: KVK
+        label:
+          type: string
+          description: User-facing label
+          example: KVK number
+        placeholder:
+          type: string
+          description: Input placeholder
+          example: e.g. 12345678
+        required:
+          type: boolean
+          description: Whether this identifier should be collected for this country
+        receiptRelevant:
+          type: boolean
+          description: Whether this identifier is typically printed on receipts or
+            invoices
+      description: Country-specific company identifier option for onboarding and company
+        creation.
     PublicKeyResponse:
       type: object
       properties:
@@ -3041,7 +3025,13 @@ components:
         receiptId:
           type: string
         receiverType:
-          $ref: "#/components/schemas/ReceiverType"
+          type: string
+          description: Type of receiver for this receipt
+          enum:
+          - DEVICE
+          - CLIENT_APPLICATION
+          - COMPANY
+          - EMAIL_FALLBACK
         encryptedReceipt:
           type: string
         encryptedSymmetricKey:
@@ -3079,6 +3069,7 @@ components:
           - RECEIPT_FINALIZED
           - RETURN_REQUESTED
           - CREDIT_NOTE_CREATED
+          - CREDIT_NOTE_FINALIZED
         created_at:
           type: string
           format: date-time
@@ -3197,7 +3188,7 @@ components:
       type: oauth2
       flows:
         implicit:
-          authorizationUrl: https://test.api.cheqi.io/oauth/authorize
+          authorizationUrl: https://test.api.cheqi.io/oauth2/authorize
           scopes:
             write_receipts: Write receipts
             read_receipts: Read receipts

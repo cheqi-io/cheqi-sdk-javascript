@@ -16,7 +16,6 @@ export type {
   Charge,
   CheqiCreditNote,
   CheqiReceipt,
-  CompanyDTO,
   CreateStoreRequest,
   CreditNoteTemplateGenerationRequest,
   CreditNoteTemplateRequest,
@@ -27,21 +26,18 @@ export type {
   EncryptedReceiptRequest,
   EncryptedReceiptsRequest,
   IdentificationDetails,
-  IdentificationDetailsPaymentTypeEnum,
   Identifier,
   MatchedRecipient,
   NotificationDisplayCode,
   PaymentAccountDetails,
   Period,
   Product,
-  ProvisionCompanyRequest,
-  ProvisionCompanyResponse,
   ReceiptCreatedResponse,
+  ReceiptEnvelope,
   ReceiptFormat,
   ReceiptTemplateGenerationRequest,
   ReceiptTemplateRequest,
   ReceiptTemplateResponse,
-  ReceiverType,
   RecipientResolutionResponse,
   SellingParty,
   ReceivingParty,
@@ -49,6 +45,12 @@ export type {
   Tax,
   VatMetadata,
 } from "./models/generated/index.js";
+
+export type CompanyDTO = import("./models/generated/index.js").CompanyCreationRequest;
+export type IdentificationDetailsPaymentTypeEnum = import("./models/generated/index.js").PaymentType;
+export type ProvisionCompanyRequest = import("./models/generated/index.js").CreateChildCompanyRequest;
+export type ProvisionCompanyResponse = import("./models/generated/index.js").CompanyResponseBody;
+export type ReceiverType = import("./models/generated/index.js").EncryptedReceiptDtoReceiverTypeEnum;
 
 export interface CreditNoteEnvelope {
   cheqiCreditNote?: import("./models/generated/index.js").CheqiCreditNote;
@@ -127,7 +129,7 @@ export interface CheqiApiClient {
     receipt: Record<string, unknown> | string,
     accessToken?: string | null
   ): Promise<void>;
-  provisionCompany(request: import("./models/generated/index.js").ProvisionCompanyRequest): Promise<Record<string, unknown>>;
+  provisionCompany(request: ProvisionCompanyRequest): Promise<Record<string, unknown>>;
   createStore(companyId: string, request: import("./models/generated/index.js").CreateStoreRequest, accessToken?: string | null): Promise<Record<string, unknown>>;
   getStores(companyId: string, activeOnly?: boolean, accessToken?: string | null): Promise<Record<string, unknown>>;
   getStore(companyId: string, storeId: string, accessToken?: string | null): Promise<Record<string, unknown>>;

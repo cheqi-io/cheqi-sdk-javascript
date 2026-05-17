@@ -13,13 +13,6 @@
  */
 
 import { mapValues } from './runtime.js';
-import type { ReceiverType } from './ReceiverType.js';
-import {
-    ReceiverTypeFromJSON,
-    ReceiverTypeFromJSONTyped,
-    ReceiverTypeToJSON,
-    ReceiverTypeToJSONTyped,
-} from './ReceiverType.js';
 import type { NotificationDisplayCode } from './NotificationDisplayCode.js';
 import {
     NotificationDisplayCodeFromJSON,
@@ -60,11 +53,11 @@ export interface EncryptedReceiptDto {
      */
     receiptId?: string;
     /**
-     * 
-     * @type {ReceiverType}
+     * Type of receiver for this receipt
+     * @type {string}
      * @memberof EncryptedReceiptDto
      */
-    receiverType?: ReceiverType;
+    receiverType?: EncryptedReceiptDtoReceiverTypeEnum;
     /**
      * 
      * @type {string}
@@ -122,6 +115,17 @@ export interface EncryptedReceiptDto {
 }
 
 
+/**
+ * @export
+ */
+export const EncryptedReceiptDtoReceiverTypeEnum = {
+    DEVICE: 'DEVICE',
+    CLIENT_APPLICATION: 'CLIENT_APPLICATION',
+    COMPANY: 'COMPANY',
+    EMAIL_FALLBACK: 'EMAIL_FALLBACK'
+} as const;
+export type EncryptedReceiptDtoReceiverTypeEnum = typeof EncryptedReceiptDtoReceiverTypeEnum[keyof typeof EncryptedReceiptDtoReceiverTypeEnum];
+
 
 /**
  * Check if a given object implements the EncryptedReceiptDto interface.
@@ -143,7 +147,7 @@ export function EncryptedReceiptDtoFromJSONTyped(json: any, ignoreDiscriminator:
         'additionalProperties': json['additionalProperties'] == null ? undefined : json['additionalProperties'],
         'recipientId': json['recipientId'] == null ? undefined : json['recipientId'],
         'receiptId': json['receiptId'] == null ? undefined : json['receiptId'],
-        'receiverType': json['receiverType'] == null ? undefined : ReceiverTypeFromJSON(json['receiverType']),
+        'receiverType': json['receiverType'] == null ? undefined : json['receiverType'],
         'encryptedReceipt': json['encryptedReceipt'] == null ? undefined : json['encryptedReceipt'],
         'encryptedSymmetricKey': json['encryptedSymmetricKey'] == null ? undefined : json['encryptedSymmetricKey'],
         'encryptedCustomerDetails': json['encryptedCustomerDetails'] == null ? undefined : json['encryptedCustomerDetails'],
@@ -170,7 +174,7 @@ export function EncryptedReceiptDtoToJSONTyped(value?: EncryptedReceiptDto | nul
         'additionalProperties': value['additionalProperties'],
         'recipientId': value['recipientId'],
         'receiptId': value['receiptId'],
-        'receiverType': ReceiverTypeToJSON(value['receiverType']),
+        'receiverType': value['receiverType'],
         'encryptedReceipt': value['encryptedReceipt'],
         'encryptedSymmetricKey': value['encryptedSymmetricKey'],
         'encryptedCustomerDetails': value['encryptedCustomerDetails'],

@@ -11,11 +11,11 @@ import type {
   EncryptedReceiptRequest,
   FetchLike,
   IdentificationDetails,
-  ProvisionCompanyRequest,
   ReceiptTemplateGenerationRequest,
   ReceiptTemplateResponse,
   RecipientResolutionResponse,
-  RequestOptions
+  RequestOptions,
+  ProvisionCompanyRequest
 } from "../types.js";
 import { normalizeValue, serializeJson } from "../utils.js";
 import { Endpoints } from "./endpoints.js";
@@ -105,7 +105,7 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
     return this.request("POST", Endpoints.ENCRYPTED_RECEIPT_ENDPOINT, {
       body: {
         matchId,
-        encryptedReceipts: encryptedReceipts.map((receipt) => normalizeValue(receipt)),
+        encryptedReceiptRequests: encryptedReceipts.map((receipt) => normalizeValue(receipt)),
         templateHash
       },
       accessToken,

@@ -169,6 +169,12 @@ export interface CompanyResponseBody {
      * @memberof CompanyResponseBody
      */
     notificationCodeEnabled?: boolean | null;
+    /**
+     * Whether receipts may fall back to PDF email delivery when recipient matching does not find a Cheqi recipient
+     * @type {boolean}
+     * @memberof CompanyResponseBody
+     */
+    emailFallbackEnabled?: boolean | null;
 }
 
 
@@ -209,6 +215,7 @@ export function CompanyResponseBodyFromJSONTyped(json: any, ignoreDiscriminator:
         'accountPaused': json['accountPaused'] == null ? undefined : json['accountPaused'],
         'accountPausedReason': json['accountPausedReason'] == null ? undefined : json['accountPausedReason'],
         'notificationCodeEnabled': json['notificationCodeEnabled'] == null ? undefined : json['notificationCodeEnabled'],
+        'emailFallbackEnabled': json['emailFallbackEnabled'] == null ? undefined : json['emailFallbackEnabled'],
     };
 }
 
@@ -236,12 +243,13 @@ export function CompanyResponseBodyToJSONTyped(value?: CompanyResponseBody | nul
         'returnDays': value['returnDays'],
         'companyReceiptText': value['companyReceiptText'],
         'companyLogoUrl': value['companyLogoUrl'],
-        'companyLogoUrlExpiresAt': value['companyLogoUrlExpiresAt'] === null ? null : ((value['companyLogoUrlExpiresAt'] as any)?.toISOString()),
+        'companyLogoUrlExpiresAt': value['companyLogoUrlExpiresAt'] == null ? undefined : ((value['companyLogoUrlExpiresAt'] as any).toISOString()),
         'returnProcessingMode': ReturnProcessingModeToJSON(value['returnProcessingMode']),
         'userRole': CompanyRoleToJSON(value['userRole']),
         'accountPaused': value['accountPaused'],
         'accountPausedReason': value['accountPausedReason'],
         'notificationCodeEnabled': value['notificationCodeEnabled'],
+        'emailFallbackEnabled': value['emailFallbackEnabled'],
     };
 }
 

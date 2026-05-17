@@ -6,6 +6,7 @@ import type {
   IdentificationDetails,
   MatchedRecipient,
   NotificationDisplayCode,
+  ReceiptEnvelope,
   ReceiptFormat,
   ReceiptTemplateGenerationRequest,
   ReceiptTemplateRequest,
@@ -15,6 +16,12 @@ import type {
 import { isValidEmail, serializeJson, sha256Hex } from "../utils.js";
 import { EncryptionService } from "./encryption.js";
 import { MatchingService } from "./matching.js";
+
+type ReceiptTemplateRequestWithVatContext = ReceiptTemplateRequest & {
+  buyerCountryCode?: string;
+  buyerType?: ReceiptTemplateGenerationRequest["buyerType"];
+  taxesApplied?: boolean;
+};
 
 function uniqueFormats(recipients: MatchedRecipient[] = []): ReceiptFormat[] {
   const seen = new Set<ReceiptFormat>();
@@ -30,6 +37,14 @@ function uniqueFormats(recipients: MatchedRecipient[] = []): ReceiptFormat[] {
   }
 
   return formats;
+}
+
+function routeFound(matchResponse: RecipientResolutionResponse): boolean {
+  return Boolean(matchResponse.routeFound ?? (matchResponse as { customerFound?: boolean }).customerFound);
+}
+
+function matchedRecipients(matchResponse: RecipientResolutionResponse): MatchedRecipient[] {
+  return matchResponse.recipients ?? matchResponse.matchedRecipients ?? [];
 }
 
 export class ReceiptService {
@@ -54,22 +69,21 @@ export class ReceiptService {
       const matchResponse = await this.matchingService.matchCustomer(identificationDetails, accessToken);
       const recipientEmail = identificationDetails.recipientEmail;
 
-      if (!matchResponse.customerFound && !recipientEmail) {
+      if (!routeFound(matchResponse) && !recipientEmail) {
         return ReceiptResult.customerNotFound();
       }
 
-      const templateResponse = await this.generateReceiptTemplate(
-        {
-          receiptTemplateRequest: receiptRequest,
-          formats: uniqueFormats(matchResponse.recipients),
-          buyerCountryCode: matchResponse.buyerCountryCode ?? "",
-          buyerType: matchResponse.buyerType ?? ("CONSUMER" as any),
-          taxesApplied: true
-        },
-        accessToken
-      );
+      const templateGenerationRequest = {
+        receiptTemplateRequest: enrichWithVatContext(receiptRequest, matchResponse),
+        formats: uniqueFormats(matchedRecipients(matchResponse)),
+        buyerCountryCode: getRequestBuyerCountryCode(receiptRequest) ?? matchResponse.buyerCountryCode,
+        buyerType: getRequestBuyerType(receiptRequest) ?? matchResponse.buyerType,
+        taxesApplied: resolveTaxesApplied(receiptRequest)
+      } as unknown as ReceiptTemplateGenerationRequest;
 
-      if (matchResponse.customerFound) {
+      const templateResponse = await this.generateReceiptTemplate(templateGenerationRequest, accessToken);
+
+      if (routeFound(matchResponse)) {
         const encryptedReceipts = this.buildEncryptedReceipts(
           matchResponse,
           templateResponse,
@@ -154,7 +168,7 @@ export class ReceiptService {
         httpStatusCode: 400
       });
     }
-    if (!matchResponse.customerFound || !matchResponse.matchId) {
+    if (!routeFound(matchResponse) || !matchResponse.matchId) {
       throw new CheqiSDKError("Cannot send receipts: customer was not found during matching", {
         errorCode: ErrorCodes.CUSTOMER_NOT_FOUND,
         httpStatusCode: 400
@@ -191,18 +205,21 @@ export class ReceiptService {
   ): EncryptedReceiptRequest[] {
     const encryptedReceipts: EncryptedReceiptRequest[] = [];
 
-    for (const recipient of matchResponse.recipients ?? []) {
+    for (const recipient of matchedRecipients(matchResponse)) {
       const acceptedFormats = recipient.acceptedFormats ?? [];
-      const envelope: Record<string, unknown> = {};
+      const envelope: ReceiptEnvelope = {};
 
       if (acceptedFormats.includes("CHEQI" as any) && templateResponse.cheqi) {
-        envelope.cheqiReceipt = templateResponse.cheqi;
+        envelope.cheqi = templateResponse.cheqi;
       }
       if (acceptedFormats.includes("UBL_PURCHASE_RECEIPT" as any) && templateResponse.ublPurchaseReceipt) {
         envelope.ublPurchaseReceipt = templateResponse.ublPurchaseReceipt;
       }
+      if (acceptedFormats.includes("UBL_INVOICE" as any) && templateResponse.ublInvoice) {
+        envelope.ublInvoice = templateResponse.ublInvoice;
+      }
       if (templateResponse.vatMetadata) {
-        envelope.vatMetadata = templateResponse.vatMetadata;
+        envelope.vatMetaData = templateResponse.vatMetadata;
       }
 
       encryptedReceipts.push(
@@ -230,4 +247,35 @@ export class ReceiptService {
       });
     }
   }
+}
+
+function enrichWithVatContext(
+  request: ReceiptTemplateRequest,
+  matchResponse: RecipientResolutionResponse
+): ReceiptTemplateRequestWithVatContext {
+  return {
+    ...request,
+    buyerCountryCode: getRequestBuyerCountryCode(request) ?? matchResponse.buyerCountryCode,
+    buyerType: getRequestBuyerType(request) ?? matchResponse.buyerType,
+    taxesApplied: resolveTaxesApplied(request)
+  };
+}
+
+function resolveTaxesApplied(request: ReceiptTemplateRequest): boolean {
+  const enriched = request as ReceiptTemplateRequestWithVatContext;
+  if (enriched.taxesApplied !== undefined && enriched.taxesApplied !== null) {
+    return enriched.taxesApplied;
+  }
+  if (typeof request.totalTaxAmount === "number" && request.totalTaxAmount > 0) {
+    return true;
+  }
+  return Array.isArray(request.taxes) && request.taxes.length > 0;
+}
+
+function getRequestBuyerCountryCode(request: ReceiptTemplateRequest): string | undefined {
+  return (request as ReceiptTemplateRequestWithVatContext).buyerCountryCode;
+}
+
+function getRequestBuyerType(request: ReceiptTemplateRequest): ReceiptTemplateGenerationRequest["buyerType"] | undefined {
+  return (request as ReceiptTemplateRequestWithVatContext).buyerType;
 }

@@ -52,6 +52,12 @@ export interface CompanyIdentifierDTO {
      */
     value?: string;
     /**
+     * Human-readable display label for this identifier
+     * @type {string}
+     * @memberof CompanyIdentifierDTO
+     */
+    label?: string;
+    /**
      * ISO 3166-1 alpha-2 country code
      * @type {string}
      * @memberof CompanyIdentifierDTO
@@ -112,6 +118,7 @@ export function CompanyIdentifierDTOFromJSONTyped(json: any, ignoreDiscriminator
         'identifierType': json['identifierType'] == null ? undefined : CompanyIdentifierTypeFromJSON(json['identifierType']),
         'registrationScheme': json['registrationScheme'] == null ? undefined : json['registrationScheme'],
         'value': json['value'] == null ? undefined : json['value'],
+        'label': json['label'] == null ? undefined : json['label'],
         'countryCode': json['countryCode'] == null ? undefined : json['countryCode'],
         'isVerified': json['isVerified'] == null ? undefined : json['isVerified'],
         'verifiedAt': json['verifiedAt'] == null ? undefined : (new Date(json['verifiedAt'])),
@@ -133,6 +140,7 @@ export function CompanyIdentifierDTOToJSONTyped(value?: CompanyIdentifierDTO | n
         'identifierType': CompanyIdentifierTypeToJSON(value['identifierType']),
         'registrationScheme': value['registrationScheme'],
         'value': value['value'],
+        'label': value['label'],
         'countryCode': value['countryCode'],
         'isVerified': value['isVerified'],
         'verifiedAt': value['verifiedAt'] == null ? undefined : ((value['verifiedAt']).toISOString()),

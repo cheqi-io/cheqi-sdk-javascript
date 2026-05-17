@@ -61,11 +61,11 @@ export interface CompanyCreationRequest {
      */
     companyLegalName: string;
     /**
-     * Tax identification number of the company
+     * Legacy tax identification number of the company. Prefer identifiers for new integrations.
      * @type {string}
      * @memberof CompanyCreationRequest
      */
-    taxNumber: string;
+    taxNumber?: string | null;
     /**
      * 
      * @type {AddressDTO}
@@ -126,6 +126,12 @@ export interface CompanyCreationRequest {
      * @memberof CompanyCreationRequest
      */
     notificationCodeEnabled?: boolean | null;
+    /**
+     * Whether receipts may fall back to PDF email delivery when recipient matching does not find a Cheqi recipient
+     * @type {boolean}
+     * @memberof CompanyCreationRequest
+     */
+    emailFallbackEnabled?: boolean | null;
 }
 
 
@@ -136,7 +142,6 @@ export interface CompanyCreationRequest {
 export function instanceOfCompanyCreationRequest(value: object): value is CompanyCreationRequest {
     if (!('companyName' in value) || value['companyName'] === undefined) return false;
     if (!('companyLegalName' in value) || value['companyLegalName'] === undefined) return false;
-    if (!('taxNumber' in value) || value['taxNumber'] === undefined) return false;
     if (!('address' in value) || value['address'] === undefined) return false;
     if (!('companyEmail' in value) || value['companyEmail'] === undefined) return false;
     return true;
@@ -154,7 +159,7 @@ export function CompanyCreationRequestFromJSONTyped(json: any, ignoreDiscriminat
         
         'companyName': json['companyName'],
         'companyLegalName': json['companyLegalName'],
-        'taxNumber': json['taxNumber'],
+        'taxNumber': json['taxNumber'] == null ? undefined : json['taxNumber'],
         'address': AddressDTOFromJSON(json['address']),
         'companyEmail': json['companyEmail'],
         'phoneNumber': json['phoneNumber'] == null ? undefined : json['phoneNumber'],
@@ -165,6 +170,7 @@ export function CompanyCreationRequestFromJSONTyped(json: any, ignoreDiscriminat
         'companyReceiptText': json['companyReceiptText'] == null ? undefined : json['companyReceiptText'],
         'returnProcessingMode': json['returnProcessingMode'] == null ? undefined : ReturnProcessingModeFromJSON(json['returnProcessingMode']),
         'notificationCodeEnabled': json['notificationCodeEnabled'] == null ? undefined : json['notificationCodeEnabled'],
+        'emailFallbackEnabled': json['emailFallbackEnabled'] == null ? undefined : json['emailFallbackEnabled'],
     };
 }
 
@@ -192,6 +198,7 @@ export function CompanyCreationRequestToJSONTyped(value?: CompanyCreationRequest
         'companyReceiptText': value['companyReceiptText'],
         'returnProcessingMode': ReturnProcessingModeToJSON(value['returnProcessingMode']),
         'notificationCodeEnabled': value['notificationCodeEnabled'],
+        'emailFallbackEnabled': value['emailFallbackEnabled'],
     };
 }
 

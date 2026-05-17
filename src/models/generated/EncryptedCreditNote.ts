@@ -13,14 +13,6 @@
  */
 
 import { mapValues } from './runtime.js';
-import type { ReceiverType } from './ReceiverType.js';
-import {
-    ReceiverTypeFromJSON,
-    ReceiverTypeFromJSONTyped,
-    ReceiverTypeToJSON,
-    ReceiverTypeToJSONTyped,
-} from './ReceiverType.js';
-
 /**
  * Recipient-specific encrypted credit-note payloads. Each item contains ciphertext for one locally assembled recipient envelope plus the wrapped symmetric key and verification metadata.
  * @export
@@ -45,12 +37,6 @@ export interface EncryptedCreditNote {
      * @memberof EncryptedCreditNote
      */
     originalReceiptId?: string;
-    /**
-     * 
-     * @type {ReceiverType}
-     * @memberof EncryptedCreditNote
-     */
-    receiverType?: ReceiverType;
     /**
      * The encrypted credit note
      * @type {string}
@@ -95,8 +81,6 @@ export interface EncryptedCreditNote {
     supplierPartyId: string;
 }
 
-
-
 /**
  * Check if a given object implements the EncryptedCreditNote interface.
  */
@@ -123,7 +107,6 @@ export function EncryptedCreditNoteFromJSONTyped(json: any, ignoreDiscriminator:
         'recipientId': json['recipientId'] == null ? undefined : json['recipientId'],
         'creditNoteId': json['creditNoteId'] == null ? undefined : json['creditNoteId'],
         'originalReceiptId': json['originalReceiptId'] == null ? undefined : json['originalReceiptId'],
-        'receiverType': json['receiverType'] == null ? undefined : ReceiverTypeFromJSON(json['receiverType']),
         'encryptedCreditNote': json['encryptedCreditNote'],
         'encryptedSymmetricKey': json['encryptedSymmetricKey'],
         'encryptedCustomerDetails': json['encryptedCustomerDetails'],
@@ -148,7 +131,6 @@ export function EncryptedCreditNoteToJSONTyped(value?: EncryptedCreditNote | nul
         'recipientId': value['recipientId'],
         'creditNoteId': value['creditNoteId'],
         'originalReceiptId': value['originalReceiptId'],
-        'receiverType': ReceiverTypeToJSON(value['receiverType']),
         'encryptedCreditNote': value['encryptedCreditNote'],
         'encryptedSymmetricKey': value['encryptedSymmetricKey'],
         'encryptedCustomerDetails': value['encryptedCustomerDetails'],
