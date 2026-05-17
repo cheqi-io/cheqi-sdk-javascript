@@ -1,0 +1,61 @@
+name: Publish npm package
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publish-npm
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Check published version
+        id: npm-version
+        run: |
+          PACKAGE_NAME="$(node -p "require('./package.json').name")"
+          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+
+          if npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version > /dev/null 2>&1; then
+            echo "Package ${PACKAGE_NAME}@${PACKAGE_VERSION} is already published; skipping."
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Package ${PACKAGE_NAME}@${PACKAGE_VERSION} is not published yet."
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish to npm
+        if: steps.npm-version.outputs.should_publish == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::error::NPM_TOKEN secret is required to publish to npm."
+            exit 1
+          fi
+
+          npm publish --access public --provenance
