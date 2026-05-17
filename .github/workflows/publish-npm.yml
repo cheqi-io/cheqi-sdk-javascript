@@ -40,7 +40,15 @@ jobs:
         run: npm ci
 
       - name: Set package version
-        run: npm version "${{ inputs.version }}" --no-git-tag-version
+        run: |
+          CURRENT_VERSION="$(node -p "require('./package.json').version")"
+          REQUESTED_VERSION="${{ inputs.version }}"
+
+          if [ "$CURRENT_VERSION" = "$REQUESTED_VERSION" ]; then
+            echo "package.json is already at ${REQUESTED_VERSION}"
+          else
+            npm version "$REQUESTED_VERSION" --no-git-tag-version
+          fi
 
       - name: Type check
         run: npm run typecheck
