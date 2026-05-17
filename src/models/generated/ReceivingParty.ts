@@ -29,7 +29,7 @@ import {
 } from './PartyAddress.js';
 
 /**
- * The receiving party of the receipt (the buyer/customer).
+ * Cheqi JSON receiving-party object for the matched customer or customer company. Include this when the recipient accepts the CHEQI JSON receipt format.
  * @export
  * @interface ReceivingParty
  */

@@ -22,41 +22,41 @@ import {
 } from './NotificationDisplayCode.js';
 
 /**
- * The encrypted receipts
+ * Recipient-specific encrypted receipt payloads. Each item contains ciphertext for one recipient envelope plus the wrapped symmetric key and verification metadata.
  * @export
  * @interface EncryptedReceiptRequest
  */
 export interface EncryptedReceiptRequest {
     /**
-     * ID of the recipient
+     * Temporary recipient identifier returned by recipient resolution for a single matched recipient. This is not the final device or client-application id.
      * @type {string}
      * @memberof EncryptedReceiptRequest
      */
-    recipientId?: string;
+    recipientId: string;
     /**
-     * Encrypted receipt
+     * Base64 ciphertext of the receipt envelope.
      * @type {string}
      * @memberof EncryptedReceiptRequest
      */
-    encryptedReceipt?: string;
+    encryptedReceipt: string;
     /**
-     * The symmetric key that is encrypted with the public key of the recipient
+     * Wrapped symmetric content-encryption key for this recipient. Encrypt the content key with the recipient public key and submit the wrapped value here.
      * @type {string}
      * @memberof EncryptedReceiptRequest
      */
-    encryptedSymmetricKey?: string;
+    encryptedSymmetricKey: string;
     /**
-     * The final hash of the canonnicalized CheqiReceipt
+     * Final hash of the canonicalized CHEQI JSON receipt contained in the plaintext envelope. Used for downstream verification and integrity checks.
      * @type {string}
      * @memberof EncryptedReceiptRequest
      */
     finalHash?: string;
     /**
-     * The public key that is used to encrypt the receipt
+     * Recipient public key that was used to encrypt the symmetric content key and ciphertext payload.
      * @type {string}
      * @memberof EncryptedReceiptRequest
      */
-    publicKey?: string;
+    publicKey: string;
     /**
      * The id of the selling party
      * @type {string}
@@ -75,6 +75,10 @@ export interface EncryptedReceiptRequest {
  * Check if a given object implements the EncryptedReceiptRequest interface.
  */
 export function instanceOfEncryptedReceiptRequest(value: object): value is EncryptedReceiptRequest {
+    if (!('recipientId' in value) || value['recipientId'] === undefined) return false;
+    if (!('encryptedReceipt' in value) || value['encryptedReceipt'] === undefined) return false;
+    if (!('encryptedSymmetricKey' in value) || value['encryptedSymmetricKey'] === undefined) return false;
+    if (!('publicKey' in value) || value['publicKey'] === undefined) return false;
     return true;
 }
 
@@ -88,11 +92,11 @@ export function EncryptedReceiptRequestFromJSONTyped(json: any, ignoreDiscrimina
     }
     return {
         
-        'recipientId': json['recipientId'] == null ? undefined : json['recipientId'],
-        'encryptedReceipt': json['encryptedReceipt'] == null ? undefined : json['encryptedReceipt'],
-        'encryptedSymmetricKey': json['encryptedSymmetricKey'] == null ? undefined : json['encryptedSymmetricKey'],
+        'recipientId': json['recipientId'],
+        'encryptedReceipt': json['encryptedReceipt'],
+        'encryptedSymmetricKey': json['encryptedSymmetricKey'],
         'finalHash': json['finalHash'] == null ? undefined : json['finalHash'],
-        'publicKey': json['publicKey'] == null ? undefined : json['publicKey'],
+        'publicKey': json['publicKey'],
         'supplierPartyId': json['supplierPartyId'] == null ? undefined : json['supplierPartyId'],
         'notificationDisplayCode': json['notificationDisplayCode'] == null ? undefined : NotificationDisplayCodeFromJSON(json['notificationDisplayCode']),
     };

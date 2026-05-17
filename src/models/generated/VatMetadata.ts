@@ -29,7 +29,7 @@ import {
 } from './VatRegime.js';
 
 /**
- * VAT metadata for cross-border tax handling. Contains supplier/buyer countries, VAT regime classification, and whether VAT was charged on the receipt.
+ * VAT metadata that accompanies the receipt formats and supports verification and tax handling.
  * @export
  * @interface VatMetadata
  */

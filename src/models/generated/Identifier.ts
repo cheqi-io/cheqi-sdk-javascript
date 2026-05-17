@@ -14,7 +14,7 @@
 
 import { mapValues } from './runtime.js';
 /**
- * 
+ * The identifiers for the purchase, given by the seller, for example order reference, transaction number
  * @export
  * @interface Identifier
  */
@@ -24,49 +24,13 @@ export interface Identifier {
      * @type {string}
      * @memberof Identifier
      */
+    name?: string;
+    /**
+     * 
+     * @type {string}
+     * @memberof Identifier
+     */
     value?: string;
-    /**
-     * 
-     * @type {string}
-     * @memberof Identifier
-     */
-    schemeAgencyID?: string;
-    /**
-     * 
-     * @type {string}
-     * @memberof Identifier
-     */
-    schemeAgencyName?: string;
-    /**
-     * 
-     * @type {string}
-     * @memberof Identifier
-     */
-    schemeDataURI?: string;
-    /**
-     * 
-     * @type {string}
-     * @memberof Identifier
-     */
-    schemeID?: string;
-    /**
-     * 
-     * @type {string}
-     * @memberof Identifier
-     */
-    schemeName?: string;
-    /**
-     * 
-     * @type {string}
-     * @memberof Identifier
-     */
-    schemeURI?: string;
-    /**
-     * 
-     * @type {string}
-     * @memberof Identifier
-     */
-    schemeVersionID?: string;
 }
 
 /**
@@ -86,14 +50,8 @@ export function IdentifierFromJSONTyped(json: any, ignoreDiscriminator: boolean)
     }
     return {
         
+        'name': json['name'] == null ? undefined : json['name'],
         'value': json['value'] == null ? undefined : json['value'],
-        'schemeAgencyID': json['schemeAgencyID'] == null ? undefined : json['schemeAgencyID'],
-        'schemeAgencyName': json['schemeAgencyName'] == null ? undefined : json['schemeAgencyName'],
-        'schemeDataURI': json['schemeDataURI'] == null ? undefined : json['schemeDataURI'],
-        'schemeID': json['schemeID'] == null ? undefined : json['schemeID'],
-        'schemeName': json['schemeName'] == null ? undefined : json['schemeName'],
-        'schemeURI': json['schemeURI'] == null ? undefined : json['schemeURI'],
-        'schemeVersionID': json['schemeVersionID'] == null ? undefined : json['schemeVersionID'],
     };
 }
 
@@ -108,14 +66,8 @@ export function IdentifierToJSONTyped(value?: Identifier | null, ignoreDiscrimin
 
     return {
         
+        'name': value['name'],
         'value': value['value'],
-        'schemeAgencyID': value['schemeAgencyID'],
-        'schemeAgencyName': value['schemeAgencyName'],
-        'schemeDataURI': value['schemeDataURI'],
-        'schemeID': value['schemeID'],
-        'schemeName': value['schemeName'],
-        'schemeURI': value['schemeURI'],
-        'schemeVersionID': value['schemeVersionID'],
     };
 }
 

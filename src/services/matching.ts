@@ -33,7 +33,7 @@ export class MatchingService {
 
     return Boolean(
       coalesceString(
-        identificationDetails.cardDetails?.paymentAccountNumber,
+        (identificationDetails.cardDetails as { paymentAccountNumber?: string } | undefined)?.paymentAccountNumber,
         identificationDetails.cardDetails?.paymentAccountReference,
         identificationDetails.paymentAccountDetails?.identifier,
         identificationDetails.recipientEmail,

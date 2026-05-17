@@ -13,65 +13,26 @@
  */
 
 import { mapValues } from './runtime.js';
-import type { Measure } from './Measure.js';
-import {
-    MeasureFromJSON,
-    MeasureFromJSONTyped,
-    MeasureToJSON,
-    MeasureToJSONTyped,
-} from './Measure.js';
-import type { Code } from './Code.js';
-import {
-    CodeFromJSON,
-    CodeFromJSONTyped,
-    CodeToJSON,
-    CodeToJSONTyped,
-} from './Code.js';
-
 /**
- * 
+ * The billing or service period covered by this receipt. Use this when the purchase covers a specific time range rather than a single point in time.
  * @export
  * @interface Period
  */
 export interface Period {
     /**
-     * 
-     * @type {string}
+     * The start date of the period
+     * @type {Date}
      * @memberof Period
      */
-    startDate?: string;
+    startDate: Date;
     /**
-     * 
-     * @type {string}
+     * The end date of the period
+     * @type {Date}
      * @memberof Period
      */
-    startTime?: string;
+    endDate: Date;
     /**
-     * 
-     * @type {string}
-     * @memberof Period
-     */
-    endDate?: string;
-    /**
-     * 
-     * @type {string}
-     * @memberof Period
-     */
-    endTime?: string;
-    /**
-     * 
-     * @type {Measure}
-     * @memberof Period
-     */
-    durationMeasure?: Measure;
-    /**
-     * 
-     * @type {Code}
-     * @memberof Period
-     */
-    descriptionCode?: Code;
-    /**
-     * 
+     * Human-readable description of the period
      * @type {string}
      * @memberof Period
      */
@@ -82,6 +43,8 @@ export interface Period {
  * Check if a given object implements the Period interface.
  */
 export function instanceOfPeriod(value: object): value is Period {
+    if (!('startDate' in value) || value['startDate'] === undefined) return false;
+    if (!('endDate' in value) || value['endDate'] === undefined) return false;
     return true;
 }
 
@@ -95,12 +58,8 @@ export function PeriodFromJSONTyped(json: any, ignoreDiscriminator: boolean): Pe
     }
     return {
         
-        'startDate': json['startDate'] == null ? undefined : json['startDate'],
-        'startTime': json['startTime'] == null ? undefined : json['startTime'],
-        'endDate': json['endDate'] == null ? undefined : json['endDate'],
-        'endTime': json['endTime'] == null ? undefined : json['endTime'],
-        'durationMeasure': json['durationMeasure'] == null ? undefined : MeasureFromJSON(json['durationMeasure']),
-        'descriptionCode': json['descriptionCode'] == null ? undefined : CodeFromJSON(json['descriptionCode']),
+        'startDate': (new Date(json['startDate'])),
+        'endDate': (new Date(json['endDate'])),
         'description': json['description'] == null ? undefined : json['description'],
     };
 }
@@ -116,12 +75,8 @@ export function PeriodToJSONTyped(value?: Period | null, ignoreDiscriminator: bo
 
     return {
         
-        'startDate': value['startDate'],
-        'startTime': value['startTime'],
-        'endDate': value['endDate'],
-        'endTime': value['endTime'],
-        'durationMeasure': MeasureToJSON(value['durationMeasure']),
-        'descriptionCode': CodeToJSON(value['descriptionCode']),
+        'startDate': ((value['startDate']).toISOString()),
+        'endDate': ((value['endDate']).toISOString()),
         'description': value['description'],
     };
 }

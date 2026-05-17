@@ -13,8 +13,16 @@
  */
 
 import { mapValues } from './runtime.js';
+import type { AccountIdentifierType } from './AccountIdentifierType.js';
+import {
+    AccountIdentifierTypeFromJSON,
+    AccountIdentifierTypeFromJSONTyped,
+    AccountIdentifierTypeToJSON,
+    AccountIdentifierTypeToJSONTyped,
+} from './AccountIdentifierType.js';
+
 /**
- * The payment account details, for now only IBAN/WERO is supported
+ * Payment-account details. For now only IBAN/WERO-style identifiers are supported.
  * @export
  * @interface PaymentAccountDetails
  */
@@ -24,13 +32,13 @@ export interface PaymentAccountDetails {
      * @type {string}
      * @memberof PaymentAccountDetails
      */
-    identifier?: string;
+    identifier: string;
     /**
      * 
-     * @type {string}
+     * @type {AccountIdentifierType}
      * @memberof PaymentAccountDetails
      */
-    accountIdentifierType?: PaymentAccountDetailsAccountIdentifierTypeEnum;
+    accountIdentifierType: AccountIdentifierType;
     /**
      * 
      * @type {string}
@@ -49,33 +57,16 @@ export interface PaymentAccountDetails {
      * @memberof PaymentAccountDetails
      */
     accountHolderName?: string;
-    /**
-     * 
-     * @type {string}
-     * @memberof PaymentAccountDetails
-     */
-    institutionName?: string;
 }
 
-
-/**
- * @export
- */
-export const PaymentAccountDetailsAccountIdentifierTypeEnum = {
-    IBAN: 'IBAN',
-    ROUTING_ACCOUNT: 'ROUTING_ACCOUNT',
-    SORT_CODE_ACCOUNT: 'SORT_CODE_ACCOUNT',
-    TOKEN: 'TOKEN',
-    WALLET: 'WALLET',
-    OTHER: 'OTHER'
-} as const;
-export type PaymentAccountDetailsAccountIdentifierTypeEnum = typeof PaymentAccountDetailsAccountIdentifierTypeEnum[keyof typeof PaymentAccountDetailsAccountIdentifierTypeEnum];
 
 
 /**
  * Check if a given object implements the PaymentAccountDetails interface.
  */
 export function instanceOfPaymentAccountDetails(value: object): value is PaymentAccountDetails {
+    if (!('identifier' in value) || value['identifier'] === undefined) return false;
+    if (!('accountIdentifierType' in value) || value['accountIdentifierType'] === undefined) return false;
     return true;
 }
 
@@ -89,12 +80,11 @@ export function PaymentAccountDetailsFromJSONTyped(json: any, ignoreDiscriminato
     }
     return {
         
-        'identifier': json['identifier'] == null ? undefined : json['identifier'],
-        'accountIdentifierType': json['accountIdentifierType'] == null ? undefined : json['accountIdentifierType'],
+        'identifier': json['identifier'],
+        'accountIdentifierType': AccountIdentifierTypeFromJSON(json['accountIdentifierType']),
         'bic': json['bic'] == null ? undefined : json['bic'],
         'bankName': json['bankName'] == null ? undefined : json['bankName'],
         'accountHolderName': json['accountHolderName'] == null ? undefined : json['accountHolderName'],
-        'institutionName': json['institutionName'] == null ? undefined : json['institutionName'],
     };
 }
 
@@ -110,11 +100,10 @@ export function PaymentAccountDetailsToJSONTyped(value?: PaymentAccountDetails |
     return {
         
         'identifier': value['identifier'],
-        'accountIdentifierType': value['accountIdentifierType'],
+        'accountIdentifierType': AccountIdentifierTypeToJSON(value['accountIdentifierType']),
         'bic': value['bic'],
         'bankName': value['bankName'],
         'accountHolderName': value['accountHolderName'],
-        'institutionName': value['institutionName'],
     };
 }
 

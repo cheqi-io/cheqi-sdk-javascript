@@ -40,13 +40,13 @@ export interface EncryptedCreditNotesRequest {
      */
     parentCheqiReceiptId: string;
     /**
-     * A set of encrypted credit notes
+     * Recipient-specific encrypted credit-note payloads. Each item contains ciphertext for one locally assembled recipient envelope plus the wrapped symmetric key and verification metadata.
      * @type {Set<EncryptedCreditNote>}
      * @memberof EncryptedCreditNotesRequest
      */
     encryptedCreditNotes: Set<EncryptedCreditNote>;
     /**
-     * The hash of the credit note template
+     * Hash of the credit-note template basis used when building and encrypting the recipient envelopes.
      * @type {string}
      * @memberof EncryptedCreditNotesRequest
      */

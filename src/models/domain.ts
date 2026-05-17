@@ -504,7 +504,6 @@ export class Company {
       website: this.website,
       returnDays: this.returnDays,
       companyReceiptText: this.companyReceiptText,
-      companyLogoUrl: this.companyLogoUrl,
     };
   }
 }

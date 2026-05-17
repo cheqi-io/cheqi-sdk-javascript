@@ -32,7 +32,7 @@ export interface CreditNoteTemplateResponse {
      * @type {string}
      * @memberof CreditNoteTemplateResponse
      */
-    ubl?: string;
+    ublCreditNote?: string;
     /**
      * 
      * @type {CheqiCreditNote}
@@ -58,7 +58,7 @@ export function CreditNoteTemplateResponseFromJSONTyped(json: any, ignoreDiscrim
     }
     return {
         
-        'ubl': json['ubl'] == null ? undefined : json['ubl'],
+        'ublCreditNote': json['ublCreditNote'] == null ? undefined : json['ublCreditNote'],
         'cheqi': json['cheqi'] == null ? undefined : CheqiCreditNoteFromJSON(json['cheqi']),
     };
 }
@@ -74,7 +74,7 @@ export function CreditNoteTemplateResponseToJSONTyped(value?: CreditNoteTemplate
 
     return {
         
-        'ubl': value['ubl'],
+        'ublCreditNote': value['ublCreditNote'],
         'cheqi': CheqiCreditNoteToJSON(value['cheqi']),
     };
 }

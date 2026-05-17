@@ -10,6 +10,7 @@ import {
   Company,
   CompanyAddress,
   CreditNoteService,
+  DefaultCheqiApiClient,
   DecryptionService,
   EncryptionService,
   Environment,
@@ -189,6 +190,7 @@ test("encryption: round trip for receipts", () => {
   assert.equal(decrypted.customerDetails, null);
 });
 
+
 test("encryption: round trip for credit notes", () => {
   const { privateKeyB64, publicKeyB64 } = rsaKeyPair();
   const encryption = new EncryptionService();
@@ -293,6 +295,120 @@ test("receipt: match → template → encrypt → send", async () => {
   assert.equal(result.isSuccess(), true);
   assert.equal(result.deliveryMethod, "APP");
   assert.deepEqual(calls, ["match", "template", "send"]);
+});
+
+test("receipt: encrypted submission uses backend field name", async () => {
+  const bodies = [];
+  const fetchImpl = async (_url, init) => {
+    bodies.push(JSON.parse(init.body));
+    return new Response(JSON.stringify({ cheqiReceiptId: "receipt-1", templateHash: "hash-1" }), {
+      status: 200,
+      headers: { "content-type": "application/json" }
+    });
+  };
+  const client = new DefaultCheqiApiClient(
+    new CheqiSDKConfig({
+      environment: "https://api.example.test",
+      apiKey: "sk_test_123",
+      logger: new NoopLogger()
+    }),
+    fetchImpl
+  );
+
+  await client.sendEncryptedReceipts(
+    "match-1",
+    [{ recipientId: "r1", encryptedReceipt: "ciphertext", encryptedSymmetricKey: "wrapped-key", publicKey: "public-key" }],
+    "template-hash"
+  );
+
+  assert.equal(bodies.length, 1);
+  assert.equal(bodies[0].matchId, "match-1");
+  assert.equal(bodies[0].templateHash, "template-hash");
+  assert.equal(bodies[0].encryptedReceipts, undefined);
+  assert.deepEqual(bodies[0].encryptedReceiptRequests, [
+    { recipientId: "r1", encryptedReceipt: "ciphertext", encryptedSymmetricKey: "wrapped-key", publicKey: "public-key" }
+  ]);
+});
+
+test("receipt: encrypted envelopes match Java SDK schema", async () => {
+  const encryptedEnvelopes = [];
+  let generationRequest;
+  const apiClient = {
+    async matchCustomer() {
+      return {
+        customerFound: true,
+        matchId: "match-1",
+        recipients: [
+          { id: "ubl", publicKey: "public-key-ubl", acceptedFormats: ["UBL_PURCHASE_RECEIPT"] },
+          { id: "invoice", publicKey: "public-key-invoice", acceptedFormats: ["UBL_INVOICE"] }
+        ],
+        buyerCountryCode: "NL",
+        buyerType: "BUSINESS"
+      };
+    },
+    async generateReceiptTemplate(request) {
+      generationRequest = request;
+      return {
+        cheqi: { documentNumber: "INV-001" },
+        ublPurchaseReceipt: "<Receipt>ok</Receipt>",
+        ublInvoice: "<Invoice>ok</Invoice>",
+        vatMetadata: { buyerType: "BUSINESS", taxesApplied: true }
+      };
+    },
+    async sendEncryptedReceipts(_matchId, encryptedReceipts) {
+      assert.equal(encryptedReceipts.length, 2);
+      return { receiptCount: 2 };
+    }
+  };
+  const encryptionService = {
+    encryptReceiptForRecipient(receiptJson, recipient) {
+      encryptedEnvelopes.push(JSON.parse(receiptJson));
+      return {
+        recipientId: recipient.id,
+        publicKey: recipient.publicKey,
+        encryptedReceipt: `ciphertext-${recipient.id}`,
+        encryptedSymmetricKey: `wrapped-key-${recipient.id}`
+      };
+    }
+  };
+  const service = new ReceiptService(apiClient, encryptionService, new MatchingService(apiClient));
+
+  await service.processCompleteReceipt(
+    {
+      paymentType: "CARD_PAYMENT",
+      cardDetails: { paymentAccountReference: "par-123" }
+    },
+    {
+      documentNumber: "INV-001",
+      issueDate: new Date("2024-01-15T10:30:00Z"),
+      currency: "EUR",
+      receiptSubtotal: 100,
+      totalBeforeTax: 100,
+      totalTaxAmount: 21,
+      totalAmount: 121,
+      products: [],
+      taxes: []
+    }
+  );
+
+  assert.equal(generationRequest.buyerCountryCode, "NL");
+  assert.equal(generationRequest.buyerType, "BUSINESS");
+  assert.equal(generationRequest.taxesApplied, true);
+  assert.equal(generationRequest.receiptTemplateRequest.buyerCountryCode, "NL");
+  assert.equal(generationRequest.receiptTemplateRequest.buyerType, "BUSINESS");
+  assert.equal(generationRequest.receiptTemplateRequest.taxesApplied, true);
+  assert.deepEqual(encryptedEnvelopes, [
+    {
+      ublPurchaseReceipt: "<Receipt>ok</Receipt>",
+      vatMetaData: { buyerType: "BUSINESS", taxesApplied: true }
+    },
+    {
+      ublInvoice: "<Invoice>ok</Invoice>",
+      vatMetaData: { buyerType: "BUSINESS", taxesApplied: true }
+    }
+  ]);
+  assert.equal(encryptedEnvelopes.some((envelope) => "cheqiReceipt" in envelope), false);
+  assert.equal(encryptedEnvelopes.some((envelope) => "vatMetadata" in envelope), false);
 });
 
 test("receipt: falls back to email", async () => {
