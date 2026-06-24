@@ -74,12 +74,6 @@ export interface CompanyResponseBody {
      */
     companyLegalName?: string;
     /**
-     * Tax identification number of the company
-     * @type {string}
-     * @memberof CompanyResponseBody
-     */
-    taxNumber?: string;
-    /**
      * 
      * @type {AddressDTO}
      * @memberof CompanyResponseBody
@@ -199,7 +193,6 @@ export function CompanyResponseBodyFromJSONTyped(json: any, ignoreDiscriminator:
         'id': json['id'] == null ? undefined : json['id'],
         'companyName': json['companyName'] == null ? undefined : json['companyName'],
         'companyLegalName': json['companyLegalName'] == null ? undefined : json['companyLegalName'],
-        'taxNumber': json['taxNumber'] == null ? undefined : json['taxNumber'],
         'address': json['address'] == null ? undefined : AddressDTOFromJSON(json['address']),
         'companyEmail': json['companyEmail'] == null ? undefined : json['companyEmail'],
         'phoneNumber': json['phoneNumber'] == null ? undefined : json['phoneNumber'],
@@ -233,7 +226,6 @@ export function CompanyResponseBodyToJSONTyped(value?: CompanyResponseBody | nul
         'id': value['id'],
         'companyName': value['companyName'],
         'companyLegalName': value['companyLegalName'],
-        'taxNumber': value['taxNumber'],
         'address': AddressDTOToJSON(value['address']),
         'companyEmail': value['companyEmail'],
         'phoneNumber': value['phoneNumber'],

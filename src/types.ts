@@ -13,6 +13,7 @@ export type {
   BuyerType,
   CardDetails,
   CreditNoteContextEnvelope,
+  ReceiptContextEnvelope,
   Charge,
   CheqiCreditNote,
   CheqiReceipt,
@@ -50,11 +51,53 @@ export type CompanyDTO = import("./models/generated/index.js").CompanyCreationRe
 export type IdentificationDetailsPaymentTypeEnum = import("./models/generated/index.js").PaymentType;
 export type ProvisionCompanyRequest = import("./models/generated/index.js").CreateChildCompanyRequest;
 export type ProvisionCompanyResponse = import("./models/generated/index.js").CompanyResponseBody;
-export type ReceiverType = import("./models/generated/index.js").EncryptedReceiptDtoReceiverTypeEnum;
+export type ReceiverType = import("./models/generated/index.js").ReceiverType;
 
 export interface CreditNoteEnvelope {
   cheqiCreditNote?: import("./models/generated/index.js").CheqiCreditNote;
   ublCreditNote?: string;
+}
+
+/** Condition of a returned line item. Mirrors the Java SDK `ReturnCondition`. */
+export type ReturnCondition =
+  | "DEFECTIVE"
+  | "DAMAGED"
+  | "WRONG_ITEM"
+  | "NOT_AS_DESCRIBED"
+  | "UNWANTED"
+  | "EXPIRED"
+  | "INCOMPLETE";
+
+/** Refund preference for a customer-initiated return. Mirrors the Java SDK `RefundPreference`. */
+export type RefundPreference = "ORIGINAL_PAYMENT_METHOD" | "BANK_TRANSFER" | "STORE_CREDIT";
+
+/** Bank account details for a bank-transfer refund. Mirrors the Java SDK `RefundBankAccount`. */
+export interface RefundBankAccount {
+  iban?: string;
+  bic?: string;
+  accountHolder?: string;
+}
+
+/** A single returned line item. Mirrors the Java SDK `ReturnLineItem`. */
+export interface ReturnLineItem {
+  lineItemId?: string;
+  quantityReturned?: number;
+  condition?: ReturnCondition;
+  conditionNotes?: string;
+}
+
+/**
+ * A decrypted customer-initiated credit-note (return) request.
+ * Mirrors the Java SDK `CreditNoteInitiationRequest`.
+ */
+export interface CreditNoteInitiationRequest {
+  cheqiReceiptId?: string;
+  receiptId?: string;
+  returnReason?: string;
+  returnReasonDescription?: string;
+  lineItems?: ReturnLineItem[];
+  refundPreference?: RefundPreference;
+  refundBankAccount?: RefundBankAccount;
 }
 
 export interface DecryptedDeliveredCreditNote {
@@ -62,6 +105,17 @@ export interface DecryptedDeliveredCreditNote {
   creditNoteContextEnvelope: import("./models/generated/index.js").CreditNoteContextEnvelope | null;
   rawJson: string;
   rawCreditNoteContextJson: string | null;
+}
+
+/**
+ * A decrypted receipt with its context merged into both receipt formats.
+ * Mirrors the Java SDK `DecryptedReceipt` returned by `ReceiptProcessor`.
+ */
+export interface DecryptedReceipt {
+  receiptEnvelope: import("./models/generated/index.js").ReceiptEnvelope;
+  receiptContextEnvelope: import("./models/generated/index.js").ReceiptContextEnvelope | null;
+  rawReceiptJson: string;
+  rawReceiptContextJson: string | null;
 }
 
 // Custom SDK type for encrypted receipt decryption (extends generated EncryptedReceiptRequest)

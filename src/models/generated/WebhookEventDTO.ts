@@ -27,13 +27,13 @@ import {
     EncryptedCreditNoteDtoToJSON,
     EncryptedCreditNoteDtoToJSONTyped,
 } from './EncryptedCreditNoteDto.js';
-import type { EncryptedReceiptDto } from './EncryptedReceiptDto.js';
+import type { EncryptedReceipt } from './EncryptedReceipt.js';
 import {
-    EncryptedReceiptDtoFromJSON,
-    EncryptedReceiptDtoFromJSONTyped,
-    EncryptedReceiptDtoToJSON,
-    EncryptedReceiptDtoToJSONTyped,
-} from './EncryptedReceiptDto.js';
+    EncryptedReceiptFromJSON,
+    EncryptedReceiptFromJSONTyped,
+    EncryptedReceiptToJSON,
+    EncryptedReceiptToJSONTyped,
+} from './EncryptedReceipt.js';
 import type { RoutingIdentifier } from './RoutingIdentifier.js';
 import {
     RoutingIdentifierFromJSON,
@@ -86,10 +86,10 @@ export interface WebhookEventDTO {
     routingIdentifier?: RoutingIdentifier;
     /**
      * 
-     * @type {EncryptedReceiptDto}
+     * @type {EncryptedReceipt}
      * @memberof WebhookEventDTO
      */
-    encryptedReceipt?: EncryptedReceiptDto;
+    encryptedReceipt?: EncryptedReceipt;
     /**
      * 
      * @type {EncryptedCreditNoteInitiationRequest}
@@ -159,7 +159,7 @@ export function WebhookEventDTOFromJSONTyped(json: any, ignoreDiscriminator: boo
         'created_at': json['created_at'] == null ? undefined : (new Date(json['created_at'])),
         'cheqiReceiptId': json['cheqiReceiptId'] == null ? undefined : json['cheqiReceiptId'],
         'routingIdentifier': json['routingIdentifier'] == null ? undefined : RoutingIdentifierFromJSON(json['routingIdentifier']),
-        'encryptedReceipt': json['encryptedReceipt'] == null ? undefined : EncryptedReceiptDtoFromJSON(json['encryptedReceipt']),
+        'encryptedReceipt': json['encryptedReceipt'] == null ? undefined : EncryptedReceiptFromJSON(json['encryptedReceipt']),
         'encryptedCreditNoteInitiationRequest': json['encryptedCreditNoteInitiationRequest'] == null ? undefined : EncryptedCreditNoteInitiationRequestFromJSON(json['encryptedCreditNoteInitiationRequest']),
         'encryptedCreditNoteDto': json['encryptedCreditNoteDto'] == null ? undefined : EncryptedCreditNoteDtoFromJSON(json['encryptedCreditNoteDto']),
         'finalHash': json['finalHash'] == null ? undefined : json['finalHash'],
@@ -185,7 +185,7 @@ export function WebhookEventDTOToJSONTyped(value?: WebhookEventDTO | null, ignor
         'created_at': value['created_at'] == null ? undefined : ((value['created_at']).toISOString()),
         'cheqiReceiptId': value['cheqiReceiptId'],
         'routingIdentifier': RoutingIdentifierToJSON(value['routingIdentifier']),
-        'encryptedReceipt': EncryptedReceiptDtoToJSON(value['encryptedReceipt']),
+        'encryptedReceipt': EncryptedReceiptToJSON(value['encryptedReceipt']),
         'encryptedCreditNoteInitiationRequest': EncryptedCreditNoteInitiationRequestToJSON(value['encryptedCreditNoteInitiationRequest']),
         'encryptedCreditNoteDto': EncryptedCreditNoteDtoToJSON(value['encryptedCreditNoteDto']),
         'finalHash': value['finalHash'],

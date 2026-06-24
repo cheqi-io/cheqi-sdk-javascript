@@ -1,12 +1,13 @@
 import { CheqiSDKConfig } from "./config.js";
 import { DefaultCheqiApiClient } from "./http/client.js";
 import type { Logger } from "./logger.js";
-import type { CheqiSDKOptions, DecryptedDeliveredCreditNote, EncryptedCreditNote, EncryptedReceipt } from "./types.js";
+import type { CheqiSDKOptions, DecryptedDeliveredCreditNote, DecryptedReceipt, EncryptedCreditNote, EncryptedReceipt } from "./types.js";
 import { CompanyService } from "./services/company.js";
 import { CreditNoteService } from "./services/credit-note.js";
 import { DecryptionService } from "./services/decryption.js";
 import { EncryptionService } from "./services/encryption.js";
 import { MatchingService } from "./services/matching.js";
+import { ReceiptProcessor } from "./services/receipt-processor.js";
 import { ReceiptService } from "./services/receipt.js";
 import { StoreService } from "./services/store.js";
 import { VerificationService } from "./services/verification.js";
@@ -99,6 +100,7 @@ export class CheqiSDK {
   readonly verificationService: VerificationService;
   readonly decryptionService: DecryptionService;
   readonly encryptionService: EncryptionService;
+  readonly receiptProcessor: ReceiptProcessor;
   readonly apiClient: DefaultCheqiApiClient;
   readonly matchingService: MatchingService;
   readonly receiptService: ReceiptService;
@@ -116,6 +118,7 @@ export class CheqiSDK {
     this.verificationService = new VerificationService();
     this.decryptionService = new DecryptionService();
     this.encryptionService = new EncryptionService();
+    this.receiptProcessor = new ReceiptProcessor(this.decryptionService);
     this.apiClient = apiClient ?? new DefaultCheqiApiClient(this.config);
     this.matchingService = new MatchingService(this.apiClient);
     this.receiptService = new ReceiptService(this.apiClient, this.encryptionService, this.matchingService);
@@ -130,15 +133,13 @@ export class CheqiSDK {
   }
 
   /**
-   * Decrypt an encrypted receipt using the seller's private key.
+   * Decrypt an encrypted receipt using the seller's private key and merge the
+   * receipt context (receiving party / payment means) into both receipt formats.
    * @param encryptedReceipt  The encrypted receipt payload.
    * @param privateKey        Base64-encoded PKCS#8 DER private key.
    */
-  processEncryptedReceipt(encryptedReceipt: EncryptedReceipt, privateKey: string): {
-    receiptContent: string;
-    customerDetails: string | null;
-  } {
-    return this.decryptionService.decryptReceipt(encryptedReceipt, privateKey);
+  processEncryptedReceipt(encryptedReceipt: EncryptedReceipt, privateKey: string): DecryptedReceipt {
+    return this.receiptProcessor.processEncryptedReceipt(encryptedReceipt, privateKey);
   }
 
   processEncryptedCreditNote(encryptedCreditNote: EncryptedCreditNote, privateKey: string): DecryptedDeliveredCreditNote {
@@ -149,6 +150,7 @@ export class CheqiSDK {
   getApiClient(): DefaultCheqiApiClient { return this.apiClient; }
   getEncryptionService(): EncryptionService { return this.encryptionService; }
   getDecryptionService(): DecryptionService { return this.decryptionService; }
+  getReceiptProcessor(): ReceiptProcessor { return this.receiptProcessor; }
   getMatchingService(): MatchingService { return this.matchingService; }
   getReceiptService(): ReceiptService { return this.receiptService; }
   getCreditNoteService(): CreditNoteService { return this.creditNoteService; }

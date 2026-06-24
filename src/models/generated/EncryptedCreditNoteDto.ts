@@ -13,6 +13,14 @@
  */
 
 import { mapValues } from './runtime.js';
+import type { ReceiverType } from './ReceiverType.js';
+import {
+    ReceiverTypeFromJSON,
+    ReceiverTypeFromJSONTyped,
+    ReceiverTypeToJSON,
+    ReceiverTypeToJSONTyped,
+} from './ReceiverType.js';
+
 /**
  * 
  * @export
@@ -38,11 +46,11 @@ export interface EncryptedCreditNoteDto {
      */
     originalReceiptId?: string;
     /**
-     * Type of receiver for this receipt
-     * @type {string}
+     * 
+     * @type {ReceiverType}
      * @memberof EncryptedCreditNoteDto
      */
-    receiverType?: EncryptedCreditNoteDtoReceiverTypeEnum;
+    receiverType?: ReceiverType;
     /**
      * The encrypted credit note
      * @type {string}
@@ -88,17 +96,6 @@ export interface EncryptedCreditNoteDto {
 }
 
 
-/**
- * @export
- */
-export const EncryptedCreditNoteDtoReceiverTypeEnum = {
-    DEVICE: 'DEVICE',
-    CLIENT_APPLICATION: 'CLIENT_APPLICATION',
-    COMPANY: 'COMPANY',
-    EMAIL_FALLBACK: 'EMAIL_FALLBACK'
-} as const;
-export type EncryptedCreditNoteDtoReceiverTypeEnum = typeof EncryptedCreditNoteDtoReceiverTypeEnum[keyof typeof EncryptedCreditNoteDtoReceiverTypeEnum];
-
 
 /**
  * Check if a given object implements the EncryptedCreditNoteDto interface.
@@ -127,7 +124,7 @@ export function EncryptedCreditNoteDtoFromJSONTyped(json: any, ignoreDiscriminat
         'recipientId': json['recipientId'],
         'creditNoteId': json['creditNoteId'] == null ? undefined : json['creditNoteId'],
         'originalReceiptId': json['originalReceiptId'] == null ? undefined : json['originalReceiptId'],
-        'receiverType': json['receiverType'] == null ? undefined : json['receiverType'],
+        'receiverType': json['receiverType'] == null ? undefined : ReceiverTypeFromJSON(json['receiverType']),
         'encryptedCreditNote': json['encryptedCreditNote'],
         'encryptedSymmetricKey': json['encryptedSymmetricKey'],
         'encryptedCustomerDetails': json['encryptedCustomerDetails'],
@@ -152,7 +149,7 @@ export function EncryptedCreditNoteDtoToJSONTyped(value?: EncryptedCreditNoteDto
         'recipientId': value['recipientId'],
         'creditNoteId': value['creditNoteId'],
         'originalReceiptId': value['originalReceiptId'],
-        'receiverType': value['receiverType'],
+        'receiverType': ReceiverTypeToJSON(value['receiverType']),
         'encryptedCreditNote': value['encryptedCreditNote'],
         'encryptedSymmetricKey': value['encryptedSymmetricKey'],
         'encryptedCustomerDetails': value['encryptedCustomerDetails'],

@@ -4,6 +4,7 @@ import { generateKeyPairSync } from "node:crypto";
 
 import {
   canonicalizeJson,
+  canonicalizeXml,
   CardDetails,
   CheqiSDK,
   CheqiSDKConfig,
@@ -18,6 +19,8 @@ import {
   MatchingService,
   NoopLogger,
   Product,
+  ReceiptProcessor,
+  ReceiptResult,
   ReceiptService,
   ReceiptTemplateRequest,
   RetryHandler,
@@ -834,6 +837,149 @@ test("store validation: requires companyId", () => {
 });
 
 // ──────────────────── Email Validation ────────────────────────────
+
+// ──────────────────── Java parity: number canonicalization ────────────────
+
+test("canonicalization: preserves decimal scale from JSON string", () => {
+  // Matches Java BigDecimal.toPlainString(): trailing zeros and scale preserved.
+  assert.equal(canonicalizeJson('{"a":12.10}'), '{"a":12.10}');
+  assert.equal(canonicalizeJson('{"a":121.00,"b":1}'), '{"a":121.00,"b":1}');
+});
+
+test("canonicalization: expands scientific notation to plain string", () => {
+  assert.equal(canonicalizeJson('{"a":1.5E-3}'), '{"a":0.0015}');
+  assert.equal(canonicalizeJson('{"a":1.230E1}'), '{"a":12.30}');
+});
+
+test("canonicalization: normalizes negative zero and sorts nested keys", () => {
+  assert.equal(canonicalizeJson('{"a":-0}'), '{"a":0}');
+  assert.equal(canonicalizeJson('{"z":1,"a":{"y":2.50,"x":3}}'), '{"a":{"x":3,"y":2.50},"z":1}');
+});
+
+// ──────────────────── Java parity: XML Exclusive C14N ──────────────────────
+
+test("c14n: exclusive namespace placement and attribute sorting", () => {
+  const input = `<?xml version="1.0"?>
+    <cac:Invoice xmlns:cac="urn:cac" xmlns:cbc="urn:cbc">
+      <cbc:ID>1</cbc:ID>
+      <cac:Party b="2" a="1"/>
+    </cac:Invoice>`;
+  // cbc is only used by the child, so exclusive C14N renders it on cbc:ID (not the root);
+  // attributes are sorted (a before b) and empty elements expand to start+end tags.
+  assert.equal(
+    canonicalizeXml(input),
+    '<cac:Invoice xmlns:cac="urn:cac"><cbc:ID xmlns:cbc="urn:cbc">1</cbc:ID><cac:Party a="1" b="2"></cac:Party></cac:Invoice>'
+  );
+});
+
+// ──────────────────── Java parity: key formats ─────────────────────────────
+
+test("encryption: accepts raw PKCS#1 (iOS) public keys", () => {
+  const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const pkcs1Pub = publicKey.export({ type: "pkcs1", format: "der" }).toString("base64");
+  const pkcs8Priv = privateKey.export({ type: "pkcs8", format: "der" }).toString("base64");
+  const encrypted = new EncryptionService().encryptReceiptForRecipient('{"x":1}', { id: "r1", publicKey: pkcs1Pub });
+  const decrypted = new DecryptionService().decryptReceipt(encrypted, pkcs8Priv);
+  assert.equal(decrypted.receiptContent, '{"x":1}');
+});
+
+test("decryption: accepts PEM-wrapped private keys", () => {
+  const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const pemPriv = privateKey.export({ type: "pkcs8", format: "pem" });
+  const spkiPub = publicKey.export({ type: "spki", format: "der" }).toString("base64");
+  const encrypted = new EncryptionService().encryptReceiptForRecipient('{"y":2}', { id: "r2", publicKey: spkiPub });
+  const decrypted = new DecryptionService().decryptReceipt(encrypted, pemPriv);
+  assert.equal(decrypted.receiptContent, '{"y":2}');
+});
+
+// ──────────────────── Java parity: receipt processor merge ─────────────────
+
+test("receipt processor: merges receiving party and payment means", () => {
+  const { privateKeyB64, publicKeyB64 } = rsaKeyPair();
+  const enc = new EncryptionService();
+  const dec = new DecryptionService();
+  const envelope = {
+    cheqi: { documentNumber: "INV-1" },
+    ublPurchaseReceipt: "<Receipt><cac:AccountingCustomerParty/></Receipt>"
+  };
+  const context = {
+    receivingParty: {
+      xmlReceivingParty: "<cac:AccountingCustomerParty>MERGED</cac:AccountingCustomerParty>",
+      receivingParty: { consumerName: "Bob" }
+    },
+    paymentMeans: { xmlPaymentMeans: "<cac:PaymentMeans>PM</cac:PaymentMeans>" }
+  };
+  const encrypted = enc.encryptReceiptForRecipient(JSON.stringify(envelope), { id: "r3", publicKey: publicKeyB64 });
+  const encryptedContext = enc.encryptReceiptForRecipient(JSON.stringify(context), { id: "r3", publicKey: publicKeyB64 });
+  encrypted.encryptedCustomerDetails = encryptedContext.encryptedReceipt;
+  encrypted.encryptedCustomerAesKey = encryptedContext.encryptedSymmetricKey;
+
+  const merged = new ReceiptProcessor(dec).processEncryptedReceipt(encrypted, privateKeyB64);
+  assert.equal(
+    merged.receiptEnvelope.ublPurchaseReceipt,
+    "<Receipt><cac:AccountingCustomerParty>MERGED</cac:AccountingCustomerParty><cac:PaymentMeans>PM</cac:PaymentMeans></Receipt>"
+  );
+  assert.equal(merged.receiptEnvelope.cheqi.receivingParty.consumerName, "Bob");
+});
+
+// ──────────────────── Java parity: credit note request parsing ─────────────
+
+test("credit note: decryptCreditNoteRequest returns a parsed object", () => {
+  const { privateKeyB64, publicKeyB64 } = rsaKeyPair();
+  const enc = new EncryptionService();
+  const dec = new DecryptionService();
+  const request = {
+    cheqiReceiptId: "receipt-9",
+    returnReason: "DEFECTIVE",
+    lineItems: [{ lineItemId: "L1", quantityReturned: 2, condition: "DAMAGED" }],
+    refundPreference: "BANK_TRANSFER",
+    refundBankAccount: { iban: "NL00BANK", accountHolder: "Bob" }
+  };
+  const encrypted = enc.encryptCreditNoteForRecipient(JSON.stringify(request), { id: "r1", publicKey: publicKeyB64 });
+  const service = new CreditNoteService({}, enc, new MatchingService({}), dec);
+  const parsed = service.decryptCreditNoteRequest(
+    { encryptedCreditNoteInitiationRequest: encrypted.encryptedCreditNote, encryptedSymmetricKey: encrypted.encryptedSymmetricKey },
+    privateKeyB64
+  );
+  assert.equal(parsed.cheqiReceiptId, "receipt-9");
+  assert.equal(parsed.refundPreference, "BANK_TRANSFER");
+  assert.equal(parsed.lineItems[0].condition, "DAMAGED");
+  assert.equal(parsed.refundBankAccount.iban, "NL00BANK");
+});
+
+// ──────────────────── Java parity: delivery status ─────────────────────────
+
+test("ReceiptResult: email delivery is not reported as customer-not-found", () => {
+  const emailed = ReceiptResult.deliveredViaEmail("a@b.com");
+  assert.equal(emailed.isSuccess(), true);
+  assert.equal(emailed.isCustomerNotFound(), false);
+  assert.equal(emailed.getDeliveryStatus(), "DELIVERED_EMAIL");
+
+  const notFound = ReceiptResult.customerNotFound();
+  assert.equal(notFound.isCustomerNotFound(), true);
+  assert.equal(notFound.getDeliveryStatus(), "CUSTOMER_NOT_FOUND");
+
+  const failed = ReceiptResult.failed("boom");
+  assert.equal(failed.isSuccess(), false);
+  assert.equal(failed.getDeliveryStatus(), "FAILED");
+});
+
+// ──────────────────── HTTP parity: PATCH verbs ─────────────────────────────
+
+test("client: activate/deactivate store use PATCH", async () => {
+  const methods = [];
+  const fetchImpl = async (_url, init) => {
+    methods.push(init.method);
+    return new Response(null, { status: 204 });
+  };
+  const client = new DefaultCheqiApiClient(
+    new CheqiSDKConfig({ environment: "https://api.example.test", apiKey: "sk_test_1", logger: new NoopLogger() }),
+    fetchImpl
+  );
+  await client.activateStore("c1", "s1", "token");
+  await client.deactivateStore("c1", "s1", "token");
+  assert.deepEqual(methods, ["PATCH", "PATCH"]);
+});
 
 test("email validation: rejects bare @", () => {
   const sdk = new CheqiSDK({ environment: "https://sandbox.api.cheqi.io", ...NOOP }, {

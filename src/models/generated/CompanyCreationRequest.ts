@@ -61,12 +61,6 @@ export interface CompanyCreationRequest {
      */
     companyLegalName: string;
     /**
-     * Legacy tax identification number of the company. Prefer identifiers for new integrations.
-     * @type {string}
-     * @memberof CompanyCreationRequest
-     */
-    taxNumber?: string | null;
-    /**
      * 
      * @type {AddressDTO}
      * @memberof CompanyCreationRequest
@@ -159,7 +153,6 @@ export function CompanyCreationRequestFromJSONTyped(json: any, ignoreDiscriminat
         
         'companyName': json['companyName'],
         'companyLegalName': json['companyLegalName'],
-        'taxNumber': json['taxNumber'] == null ? undefined : json['taxNumber'],
         'address': AddressDTOFromJSON(json['address']),
         'companyEmail': json['companyEmail'],
         'phoneNumber': json['phoneNumber'] == null ? undefined : json['phoneNumber'],
@@ -187,7 +180,6 @@ export function CompanyCreationRequestToJSONTyped(value?: CompanyCreationRequest
         
         'companyName': value['companyName'],
         'companyLegalName': value['companyLegalName'],
-        'taxNumber': value['taxNumber'],
         'address': AddressDTOToJSON(value['address']),
         'companyEmail': value['companyEmail'],
         'phoneNumber': value['phoneNumber'],

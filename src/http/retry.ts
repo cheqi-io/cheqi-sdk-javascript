@@ -3,8 +3,13 @@ import type { Logger } from "../logger.js";
 import { NoopLogger } from "../logger.js";
 import { sleep } from "../utils.js";
 
-/** Default status codes that trigger a retry. */
-const DEFAULT_RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
+/**
+ * Whether a response status code should trigger a retry.
+ * Matches the Java SDK: request timeout (408), rate limit (429) and any 5xx.
+ */
+function isRetryableStatus(status: number): boolean {
+  return status === 408 || status === 429 || (status >= 500 && status < 600);
+}
 
 /** Options for configuring the retry handler. */
 export interface RetryOptions {
@@ -54,7 +59,7 @@ export class RetryHandler {
       try {
         const response = await operation();
 
-        if (DEFAULT_RETRYABLE_STATUS_CODES.has(response.status) && attempt < this.maxRetries) {
+        if (isRetryableStatus(response.status) && attempt < this.maxRetries) {
           const delay = this.calculateBackoff(attempt, response.status, response.headers.get("Retry-After"));
           this.logger.warn(
             `${operationName} returned ${response.status}, retrying in ${delay}ms (attempt ${attempt + 1}/${this.maxRetries})`
@@ -92,8 +97,10 @@ export class RetryHandler {
   private calculateBackoff(attempt: number, statusCode: number, retryAfter: string | null): number {
     if (retryAfter) {
       const parsed = Number(retryAfter);
-      if (Number.isFinite(parsed) && parsed > 0) {
-        return Math.min(parsed * 1000, this.maxBackoffMs);
+      // Honour the server's Retry-After verbatim (matches the Java SDK, which does
+      // not cap it by maxBackoff). Allow 0 to mean "retry immediately".
+      if (Number.isFinite(parsed) && parsed >= 0) {
+        return parsed * 1000;
       }
     }
 

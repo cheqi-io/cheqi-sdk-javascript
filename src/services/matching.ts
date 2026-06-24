@@ -1,4 +1,4 @@
-import { CheqiApiError, ErrorCodes } from "../errors.js";
+import { CheqiApiError, CheqiSDKError, ErrorCodes } from "../errors.js";
 import type { CheqiApiClient, IdentificationDetails, RecipientResolutionResponse } from "../types.js";
 import { coalesceString } from "../utils.js";
 
@@ -10,7 +10,10 @@ export class MatchingService {
     accessToken?: string | null
   ): Promise<RecipientResolutionResponse> {
     if (!this.hasValidIdentifiers(identificationDetails)) {
-      throw new Error("Identification details must contain at least one identifier (card details, payment account details, or email)");
+      throw new CheqiSDKError(
+        "Identification details must contain at least one identifier (card details, payment account details, or email)",
+        { errorCode: ErrorCodes.VALIDATION_ERROR, httpStatusCode: 400 }
+      );
     }
 
     try {
