@@ -1,9 +1,10 @@
-import { CheqiSDKError, CreditNoteProcessingError, ErrorCodes } from "../errors.js";
+import { CheqiSDKError, CreditNoteProcessingError, DecryptionError, ErrorCodes } from "../errors.js";
 import { CreditNoteResult } from "../models.js";
 import type {
   CheqiApiClient,
   CreditNoteContextEnvelope,
   CreditNoteEnvelope,
+  CreditNoteInitiationRequest,
   CreditNoteTemplateGenerationRequest,
   CreditNoteTemplateRequest,
   CreditNoteTemplateResponse,
@@ -191,16 +192,26 @@ export class CreditNoteService {
     );
   }
 
+  /**
+   * Decrypt and parse a customer-initiated credit-note (return) request.
+   * Mirrors the Java SDK, which deserializes the decrypted JSON into a
+   * structured {@link CreditNoteInitiationRequest}.
+   */
   decryptCreditNoteRequest(
     encryptedCreditNote: EncryptedCreditNoteInitiationRequest,
     privateKeyBase64: string
-  ): { content: string } {
+  ): CreditNoteInitiationRequest {
     if (!this.decryptionService) {
       throw new CheqiSDKError("Decryption service is not configured", {
         errorCode: ErrorCodes.DECRYPTION_ERROR
       });
     }
-    return this.decryptionService.decryptCreditNote(encryptedCreditNote, privateKeyBase64);
+    const { content } = this.decryptionService.decryptCreditNote(encryptedCreditNote, privateKeyBase64);
+    try {
+      return JSON.parse(content) as CreditNoteInitiationRequest;
+    } catch (error) {
+      throw new DecryptionError("Failed to deserialize decrypted credit note request", { cause: error });
+    }
   }
 
   decryptDeliveredCreditNote(

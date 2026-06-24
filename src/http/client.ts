@@ -32,12 +32,42 @@ const SDK_VERSION: string = (() => {
 })();
 
 function mapErrorCode(status: number) {
+  if (status === 400) return ErrorCodes.INVALID_REQUEST;
   if (status === 401) return ErrorCodes.AUTHENTICATION_FAILED;
   if (status === 403) return ErrorCodes.AUTHORIZATION_FAILED;
-  if (status === 404) return ErrorCodes.RECEIPT_NOT_FOUND;
-  if (status === 429) return ErrorCodes.RATE_LIMITED;
+  if (status === 408) return ErrorCodes.TIMEOUT_ERROR;
+  if (status === 429) return ErrorCodes.RATE_LIMIT_EXCEEDED;
   if (status >= 500) return ErrorCodes.SERVER_ERROR;
   return ErrorCodes.UNKNOWN_ERROR;
+}
+
+/**
+ * Builds a clean error message from an HTTP error response, parsing the backend
+ * JSON body for a `message` / `error` / `error_description` field and applying
+ * friendly messages for auth failures. Mirrors the Java SDK `ResponseHandler`.
+ */
+function buildErrorMessage(operation: string, status: number, responseText: string): string {
+  if (status === 401) {
+    return `${operation} failed: authentication failed — check your API key or access token`;
+  }
+  if (status === 403) {
+    return `${operation} failed: access forbidden — insufficient permissions`;
+  }
+
+  let detail = responseText;
+  if (responseText) {
+    try {
+      const parsed = JSON.parse(responseText) as Record<string, unknown>;
+      const message = parsed.message ?? parsed.error ?? parsed.error_description;
+      if (typeof message === "string" && message.trim() !== "") {
+        detail = message;
+      }
+    } catch {
+      // Body is not JSON — fall back to the raw text.
+    }
+  }
+
+  return `${operation} failed with status ${status}: ${detail}`;
 }
 
 /**
@@ -190,11 +220,11 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
   }
 
   async activateStore(companyId: string, storeId: string, accessToken?: string | null): Promise<void> {
-    await this.request("POST", Endpoints.COMPANY_STORE_ACTIVATE_ENDPOINT(companyId, storeId), { body: {}, accessToken, operation: "activateStore" });
+    await this.request("PATCH", Endpoints.COMPANY_STORE_ACTIVATE_ENDPOINT(companyId, storeId), { accessToken, operation: "activateStore" });
   }
 
   async deactivateStore(companyId: string, storeId: string, accessToken?: string | null): Promise<void> {
-    await this.request("POST", Endpoints.COMPANY_STORE_DEACTIVATE_ENDPOINT(companyId, storeId), { body: {}, accessToken, operation: "deactivateStore" });
+    await this.request("PATCH", Endpoints.COMPANY_STORE_DEACTIVATE_ENDPOINT(companyId, storeId), { accessToken, operation: "deactivateStore" });
   }
 
   // ---------- internals ----------
@@ -247,7 +277,7 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
       this.logger.error(
         `${operation} failed: status=${response.status}, correlationId=${correlationId ?? "none"}, body=${responseText.slice(0, 500)}`
       );
-      throw new CheqiApiError(`${operation} failed with status ${response.status}: ${responseText}`, {
+      throw new CheqiApiError(buildErrorMessage(operation, response.status, responseText), {
         errorCode: mapErrorCode(response.status),
         httpStatusCode: response.status,
         correlationId
@@ -264,6 +294,14 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
     if (!text) {
       return undefined;
     }
-    return JSON.parse(text);
+    try {
+      return JSON.parse(text);
+    } catch (error) {
+      throw new CheqiApiError(`${operation} returned an invalid (non-JSON) response`, {
+        errorCode: ErrorCodes.INVALID_RESPONSE,
+        httpStatusCode: response.status,
+        cause: error
+      });
+    }
   }
 }

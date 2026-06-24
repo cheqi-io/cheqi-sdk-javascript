@@ -1,8 +1,23 @@
-import { constants, createCipheriv, createPublicKey, publicEncrypt, randomBytes } from "node:crypto";
+import { constants, createCipheriv, createPublicKey, publicEncrypt, randomBytes, type KeyObject } from "node:crypto";
 import { AES_KEY_LENGTH, GCM_IV_LENGTH } from "../crypto.js";
 import { EncryptionError } from "../errors.js";
 import type { EncryptedReceiptRequest, MatchedRecipient } from "../types.js";
-import { parseBase64Der } from "../utils.js";
+import { decodeKey } from "../utils.js";
+
+/**
+ * Parse an RSA public key, supporting both X.509 SubjectPublicKeyInfo (SPKI) and
+ * raw PKCS#1 RSAPublicKey DER (the format produced by iOS
+ * `SecKeyCopyExternalRepresentation`). Mirrors the Java SDK `RSAPublicKeyParser`.
+ */
+function parsePublicKey(publicKeyBase64: string): KeyObject {
+  const der = decodeKey(publicKeyBase64);
+  try {
+    return createPublicKey({ key: der, format: "der", type: "spki" });
+  } catch {
+    // Fall back to raw PKCS#1 RSA public key (iOS SecKeyCopyExternalRepresentation).
+    return createPublicKey({ key: der, format: "der", type: "pkcs1" });
+  }
+}
 
 function hybridEncrypt(plaintext: string, publicKeyBase64: string): { encryptedData: string; encryptedKey: string } {
   if (!publicKeyBase64) {
@@ -16,11 +31,7 @@ function hybridEncrypt(plaintext: string, publicKeyBase64: string): { encryptedD
   const tag = cipher.getAuthTag();
   const encryptedData = Buffer.concat([iv, ciphertext, tag]).toString("base64");
 
-  const publicKey = createPublicKey({
-    key: parseBase64Der(publicKeyBase64),
-    format: "der",
-    type: "spki"
-  });
+  const publicKey = parsePublicKey(publicKeyBase64);
 
   const encryptedKey = publicEncrypt(
     {

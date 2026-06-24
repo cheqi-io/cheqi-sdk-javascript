@@ -54,12 +54,6 @@ export interface AuthorizedCompanyDTO {
     companyLegalName?: string;
     /**
      * 
-     * @type {string}
-     * @memberof AuthorizedCompanyDTO
-     */
-    taxNumber?: string;
-    /**
-     * 
      * @type {Array<CompanyIdentifierDTO>}
      * @memberof AuthorizedCompanyDTO
      */
@@ -92,7 +86,6 @@ export function AuthorizedCompanyDTOFromJSONTyped(json: any, ignoreDiscriminator
         'id': json['id'] == null ? undefined : json['id'],
         'companyName': json['companyName'] == null ? undefined : json['companyName'],
         'companyLegalName': json['companyLegalName'] == null ? undefined : json['companyLegalName'],
-        'taxNumber': json['taxNumber'] == null ? undefined : json['taxNumber'],
         'identifiers': json['identifiers'] == null ? undefined : ((json['identifiers'] as Array<any>).map(CompanyIdentifierDTOFromJSON)),
         'paymentAccounts': json['paymentAccounts'] == null ? undefined : ((json['paymentAccounts'] as Array<any>).map(AuthorizedPaymentAccountDTOFromJSON)),
     };
@@ -112,7 +105,6 @@ export function AuthorizedCompanyDTOToJSONTyped(value?: AuthorizedCompanyDTO | n
         'id': value['id'],
         'companyName': value['companyName'],
         'companyLegalName': value['companyLegalName'],
-        'taxNumber': value['taxNumber'],
         'identifiers': value['identifiers'] == null ? undefined : ((value['identifiers'] as Array<any>).map(CompanyIdentifierDTOToJSON)),
         'paymentAccounts': value['paymentAccounts'] == null ? undefined : ((value['paymentAccounts'] as Array<any>).map(AuthorizedPaymentAccountDTOToJSON)),
     };

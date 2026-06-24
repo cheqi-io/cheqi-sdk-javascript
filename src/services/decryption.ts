@@ -9,7 +9,7 @@ import type {
   EncryptedCreditNoteInitiationRequest,
   EncryptedReceipt
 } from "../types.js";
-import { parseBase64Der } from "../utils.js";
+import { decodeKey } from "../utils.js";
 
 function rsaDecrypt(encryptedKeyBase64: string, privateKeyBase64: string): Buffer {
   if (!encryptedKeyBase64) {
@@ -20,7 +20,7 @@ function rsaDecrypt(encryptedKeyBase64: string, privateKeyBase64: string): Buffe
   }
 
   const privateKey = createPrivateKey({
-    key: parseBase64Der(privateKeyBase64),
+    key: decodeKey(privateKeyBase64),
     format: "der",
     type: "pkcs8"
   });

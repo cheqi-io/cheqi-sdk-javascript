@@ -12,6 +12,7 @@ export { EncryptionService } from "./services/encryption.js";
 export { DecryptionService } from "./services/decryption.js";
 export { MatchingService } from "./services/matching.js";
 export { ReceiptService } from "./services/receipt.js";
+export { ReceiptProcessor } from "./services/receipt-processor.js";
 export { CreditNoteService } from "./services/credit-note.js";
 export { VerificationService } from "./services/verification.js";
 export { CompanyService } from "./services/company.js";
@@ -22,12 +23,18 @@ export type {
   CheqiApiClient,
   CheqiSDKOptions,
   CreditNoteEnvelope,
+  CreditNoteInitiationRequest,
   DecryptedDeliveredCreditNote,
+  DecryptedReceipt,
   EncryptedReceipt,
   FetchLike,
   JsonObject,
   JsonPrimitive,
   JsonValue,
   Nullable,
+  RefundBankAccount,
+  RefundPreference,
+  ReturnCondition,
+  ReturnLineItem,
   RequestOptions
 } from "./types.js";

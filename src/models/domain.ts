@@ -486,10 +486,19 @@ export class Company {
   static builder(): CompanyBuilder { return new CompanyBuilder(); }
 
   toCompanyDTO(): CompanyDTO {
+    // The provisioning API models tax/registration numbers as company identifiers.
+    const identifiers: NonNullable<CompanyDTO["identifiers"]> = new Set();
+    if (this.taxNumber) {
+      identifiers.add({ identifierType: "TAX", value: this.taxNumber });
+    }
+    if (this.chamberOfCommerceNumber) {
+      identifiers.add({ identifierType: "COMPANY_REGISTRATION", value: this.chamberOfCommerceNumber });
+    }
+
     return {
       companyName: this.companyName ?? "",
       companyLegalName: this.companyLegalName ?? "",
-      taxNumber: this.taxNumber ?? "",
+      identifiers: identifiers.size > 0 ? identifiers : undefined,
       companyEmail: this.companyEmail ?? "",
       address: {
         streetName: this.address?.streetName ?? "",

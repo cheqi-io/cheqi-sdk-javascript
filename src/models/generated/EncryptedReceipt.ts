@@ -13,6 +13,13 @@
  */
 
 import { mapValues } from './runtime.js';
+import type { ReceiverType } from './ReceiverType.js';
+import {
+    ReceiverTypeFromJSON,
+    ReceiverTypeFromJSONTyped,
+    ReceiverTypeToJSON,
+    ReceiverTypeToJSONTyped,
+} from './ReceiverType.js';
 import type { NotificationDisplayCode } from './NotificationDisplayCode.js';
 import {
     NotificationDisplayCodeFromJSON,
@@ -31,114 +38,103 @@ import {
 /**
  * 
  * @export
- * @interface EncryptedReceiptDto
+ * @interface EncryptedReceipt
  */
-export interface EncryptedReceiptDto {
+export interface EncryptedReceipt {
     /**
      * 
      * @type {{ [key: string]: object; }}
-     * @memberof EncryptedReceiptDto
+     * @memberof EncryptedReceipt
      */
     additionalProperties?: { [key: string]: object; };
     /**
      * 
      * @type {string}
-     * @memberof EncryptedReceiptDto
+     * @memberof EncryptedReceipt
      */
     recipientId?: string;
     /**
      * 
      * @type {string}
-     * @memberof EncryptedReceiptDto
+     * @memberof EncryptedReceipt
      */
     receiptId?: string;
     /**
-     * Type of receiver for this receipt
-     * @type {string}
-     * @memberof EncryptedReceiptDto
+     * 
+     * @type {ReceiverType}
+     * @memberof EncryptedReceipt
      */
-    receiverType?: EncryptedReceiptDtoReceiverTypeEnum;
+    receiverType?: ReceiverType;
     /**
      * 
      * @type {string}
-     * @memberof EncryptedReceiptDto
+     * @memberof EncryptedReceipt
      */
     encryptedReceipt?: string;
     /**
      * 
      * @type {string}
-     * @memberof EncryptedReceiptDto
+     * @memberof EncryptedReceipt
      */
     encryptedSymmetricKey?: string;
     /**
      * 
      * @type {string}
-     * @memberof EncryptedReceiptDto
+     * @memberof EncryptedReceipt
      */
     encryptedCustomerDetails?: string;
     /**
      * 
      * @type {string}
-     * @memberof EncryptedReceiptDto
+     * @memberof EncryptedReceipt
      */
     encryptedCustomerAesKey?: string;
     /**
      * 
      * @type {string}
-     * @memberof EncryptedReceiptDto
+     * @memberof EncryptedReceipt
      */
     finalHash?: string;
     /**
      * 
      * @type {string}
-     * @memberof EncryptedReceiptDto
+     * @memberof EncryptedReceipt
      */
     publicKey?: string;
     /**
      * 
      * @type {string}
-     * @memberof EncryptedReceiptDto
+     * @memberof EncryptedReceipt
      */
     supplierPartyId?: string;
     /**
      * 
      * @type {Array<ReceiptFormat>}
-     * @memberof EncryptedReceiptDto
+     * @memberof EncryptedReceipt
      */
     receiptFormats?: Array<ReceiptFormat>;
     /**
      * 
      * @type {NotificationDisplayCode}
-     * @memberof EncryptedReceiptDto
+     * @memberof EncryptedReceipt
      */
     notificationDisplayCode?: NotificationDisplayCode;
 }
 
 
-/**
- * @export
- */
-export const EncryptedReceiptDtoReceiverTypeEnum = {
-    DEVICE: 'DEVICE',
-    CLIENT_APPLICATION: 'CLIENT_APPLICATION',
-    COMPANY: 'COMPANY',
-    EMAIL_FALLBACK: 'EMAIL_FALLBACK'
-} as const;
-export type EncryptedReceiptDtoReceiverTypeEnum = typeof EncryptedReceiptDtoReceiverTypeEnum[keyof typeof EncryptedReceiptDtoReceiverTypeEnum];
-
 
 /**
- * Check if a given object implements the EncryptedReceiptDto interface.
+ * Check if a given object implements the EncryptedReceipt interface.
  */
-export function instanceOfEncryptedReceiptDto(value: object): value is EncryptedReceiptDto {
+export function instanceOfEncryptedReceipt(value: object): value is EncryptedReceipt {
     return true;
 }
 
-export function EncryptedReceiptDtoFromJSON(json: any): EncryptedReceiptDto {
-    return EncryptedReceiptDtoFromJSONTyped(json, false);
+export function EncryptedReceiptFromJSON(json: any): EncryptedReceipt {
+    return EncryptedReceiptFromJSONTyped(json, false);
 }
 
-export function EncryptedReceiptDtoFromJSONTyped(json: any, ignoreDiscriminator: boolean): EncryptedReceiptDto {
+export function EncryptedReceiptFromJSONTyped(json: any, ignoreDiscriminator: boolean): EncryptedReceipt {
     if (json == null) {
         return json;
     }
@@ -147,7 +143,7 @@ export function EncryptedReceiptDtoFromJSONTyped(json: any, ignoreDiscriminator:
         'additionalProperties': json['additionalProperties'] == null ? undefined : json['additionalProperties'],
         'recipientId': json['recipientId'] == null ? undefined : json['recipientId'],
         'receiptId': json['receiptId'] == null ? undefined : json['receiptId'],
-        'receiverType': json['receiverType'] == null ? undefined : json['receiverType'],
+        'receiverType': json['receiverType'] == null ? undefined : ReceiverTypeFromJSON(json['receiverType']),
         'encryptedReceipt': json['encryptedReceipt'] == null ? undefined : json['encryptedReceipt'],
         'encryptedSymmetricKey': json['encryptedSymmetricKey'] == null ? undefined : json['encryptedSymmetricKey'],
         'encryptedCustomerDetails': json['encryptedCustomerDetails'] == null ? undefined : json['encryptedCustomerDetails'],
@@ -160,11 +156,11 @@ export function EncryptedReceiptDtoFromJSONTyped(json: any, ignoreDiscriminator:
     };
 }
 
-export function EncryptedReceiptDtoToJSON(json: any): EncryptedReceiptDto {
-    return EncryptedReceiptDtoToJSONTyped(json, false);
+export function EncryptedReceiptToJSON(json: any): EncryptedReceipt {
+    return EncryptedReceiptToJSONTyped(json, false);
 }
 
-export function EncryptedReceiptDtoToJSONTyped(value?: EncryptedReceiptDto | null, ignoreDiscriminator: boolean = false): any {
+export function EncryptedReceiptToJSONTyped(value?: EncryptedReceipt | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }
@@ -174,7 +170,7 @@ export function EncryptedReceiptDtoToJSONTyped(value?: EncryptedReceiptDto | nul
         'additionalProperties': value['additionalProperties'],
         'recipientId': value['recipientId'],
         'receiptId': value['receiptId'],
-        'receiverType': value['receiverType'],
+        'receiverType': ReceiverTypeToJSON(value['receiverType']),
         'encryptedReceipt': value['encryptedReceipt'],
         'encryptedSymmetricKey': value['encryptedSymmetricKey'],
         'encryptedCustomerDetails': value['encryptedCustomerDetails'],

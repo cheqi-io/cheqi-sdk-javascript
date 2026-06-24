@@ -55,8 +55,40 @@ export function serializeJson<T>(value: T): string {
   return JSON.stringify(normalizeValue(value));
 }
 
+/**
+ * Decode a key string into raw DER bytes.
+ *
+ * Accepts:
+ *  - raw base64-encoded DER (the common case),
+ *  - PEM-wrapped keys (`-----BEGIN ... KEY-----`), and
+ *  - base64-encoded PEM (a PEM document that was itself base64-encoded).
+ *
+ * Mirrors the Java SDK `PemUtils.decodeKey` so both PEM-wrapped and raw base64
+ * keys are accepted interchangeably.
+ */
+export function decodeKey(keyString: string): Buffer {
+  // If the input doesn't contain PEM headers, it may be base64-encoded PEM.
+  if (!keyString.includes("-----BEGIN")) {
+    try {
+      const decoded = Buffer.from(keyString.replace(/\s+/g, ""), "base64").toString("latin1");
+      if (decoded.includes("-----BEGIN")) {
+        return decodeKey(decoded);
+      }
+    } catch {
+      // Not base64-encoded PEM — fall through to plain base64 handling.
+    }
+  }
+
+  const cleanKey = keyString
+    .replace(/-+BEGIN [A-Z ]+KEY-+/g, "")
+    .replace(/-+END [A-Z ]+KEY-+/g, "")
+    .replace(/\s+/g, "");
+  return Buffer.from(cleanKey, "base64");
+}
+
+/** @deprecated Use {@link decodeKey}, which also handles PEM-wrapped keys. */
 export function parseBase64Der(base64: string): Buffer {
-  return Buffer.from(base64, "base64");
+  return decodeKey(base64);
 }
 
 export function sleep(ms: number): Promise<void> {
