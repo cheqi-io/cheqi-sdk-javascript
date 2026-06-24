@@ -1,6 +1,6 @@
 {
   "name": "@cheqi/sdk",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "Cheqi TypeScript SDK for encrypted receipt and credit note processing",
   "license": "MIT",
   "author": "Cheqi",
