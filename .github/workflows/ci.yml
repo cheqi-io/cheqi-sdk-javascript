@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check OpenAPI spec drift
-        run: make spec-check ENV=test
+        run: make spec-check ENV=prod
 
   generate-check:
     runs-on: ubuntu-latest

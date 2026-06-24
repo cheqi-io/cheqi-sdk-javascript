@@ -1,4 +1,4 @@
-ENV ?= test
+ENV ?= prod
 
 SPEC_LOCAL_URL := http://localhost:8080/v3/api-docs.yaml
 SPEC_TEST_URL := https://test.api.cheqi.io/v3/api-docs.yaml
