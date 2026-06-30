@@ -54,11 +54,11 @@ export interface ReceiptTemplateGenerationRequest {
      */
     formats: Array<ReceiptFormat>;
     /**
-     * ISO country code of the buyer, used for tax metadata enrichment
+     * ISO country code of the buyer, used for tax metadata enrichment. Optional: when omitted (e.g. an anonymous download fallback with no known buyer), the supplier's country is used, treating the transaction as domestic.
      * @type {string}
      * @memberof ReceiptTemplateGenerationRequest
      */
-    buyerCountryCode: string;
+    buyerCountryCode?: string;
     /**
      * 
      * @type {BuyerType}
@@ -81,7 +81,6 @@ export interface ReceiptTemplateGenerationRequest {
 export function instanceOfReceiptTemplateGenerationRequest(value: object): value is ReceiptTemplateGenerationRequest {
     if (!('receiptTemplateRequest' in value) || value['receiptTemplateRequest'] === undefined) return false;
     if (!('formats' in value) || value['formats'] === undefined) return false;
-    if (!('buyerCountryCode' in value) || value['buyerCountryCode'] === undefined) return false;
     if (!('buyerType' in value) || value['buyerType'] === undefined) return false;
     if (!('taxesApplied' in value) || value['taxesApplied'] === undefined) return false;
     return true;
@@ -99,7 +98,7 @@ export function ReceiptTemplateGenerationRequestFromJSONTyped(json: any, ignoreD
         
         'receiptTemplateRequest': ReceiptTemplateRequestFromJSON(json['receiptTemplateRequest']),
         'formats': ((json['formats'] as Array<any>).map(ReceiptFormatFromJSON)),
-        'buyerCountryCode': json['buyerCountryCode'],
+        'buyerCountryCode': json['buyerCountryCode'] == null ? undefined : json['buyerCountryCode'],
         'buyerType': BuyerTypeFromJSON(json['buyerType']),
         'taxesApplied': json['taxesApplied'],
     };

@@ -21,7 +21,8 @@ export const ReceiverType = {
     DEVICE: 'DEVICE',
     CLIENT_APPLICATION: 'CLIENT_APPLICATION',
     COMPANY: 'COMPANY',
-    EMAIL_FALLBACK: 'EMAIL_FALLBACK'
+    EMAIL_FALLBACK: 'EMAIL_FALLBACK',
+    DOWNLOAD_FALLBACK: 'DOWNLOAD_FALLBACK'
 } as const;
 export type ReceiverType = typeof ReceiverType[keyof typeof ReceiverType];
 

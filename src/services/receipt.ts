@@ -44,7 +44,7 @@ function routeFound(matchResponse: RecipientResolutionResponse): boolean {
 }
 
 function matchedRecipients(matchResponse: RecipientResolutionResponse): MatchedRecipient[] {
-  return matchResponse.recipients ?? matchResponse.matchedRecipients ?? [];
+  return matchResponse.recipients ?? [];
 }
 
 export class ReceiptService {
@@ -99,6 +99,9 @@ export class ReceiptService {
           matchResponse,
           accessToken
         );
+        if (createdResponse.downloadUrl != null) {
+          return ReceiptResult.deliveredViaDownload(createdResponse, templateContent);
+        }
         return ReceiptResult.deliveredToApp(createdResponse, templateContent);
       }
 

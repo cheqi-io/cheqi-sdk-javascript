@@ -45,7 +45,7 @@ function routeFound(matchResponse: RecipientResolutionResponse): boolean {
 }
 
 function matchedRecipients(matchResponse: RecipientResolutionResponse): MatchedRecipient[] {
-  return matchResponse.recipients ?? matchResponse.matchedRecipients ?? [];
+  return matchResponse.recipients ?? [];
 }
 
 export class CreditNoteService {
