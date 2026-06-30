@@ -964,6 +964,22 @@ test("ReceiptResult: email delivery is not reported as customer-not-found", () =
   assert.equal(failed.getDeliveryStatus(), "FAILED");
 });
 
+test("ReceiptResult: download fallback surfaces the public download URL", () => {
+  const downloaded = ReceiptResult.deliveredViaDownload(
+    { cheqiReceiptId: "rcpt_123", downloadUrl: "https://cheqi.io/d/abc" },
+    "{}"
+  );
+  assert.equal(downloaded.isSuccess(), true);
+  assert.equal(downloaded.isCustomerNotFound(), false);
+  assert.equal(downloaded.getDeliveryStatus(), "DELIVERED_DOWNLOAD");
+  assert.equal(downloaded.getDownloadUrl(), "https://cheqi.io/d/abc");
+
+  // The app-delivery path carries no download URL.
+  const app = ReceiptResult.deliveredToApp({ cheqiReceiptId: "rcpt_123" }, "{}");
+  assert.equal(app.getDeliveryStatus(), "DELIVERED_DIGITAL");
+  assert.equal(app.getDownloadUrl(), null);
+});
+
 // ──────────────────── HTTP parity: PATCH verbs ─────────────────────────────
 
 test("client: activate/deactivate store use PATCH", async () => {

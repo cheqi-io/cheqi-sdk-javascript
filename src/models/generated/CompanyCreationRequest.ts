@@ -126,6 +126,12 @@ export interface CompanyCreationRequest {
      * @memberof CompanyCreationRequest
      */
     emailFallbackEnabled?: boolean | null;
+    /**
+     * Whether receipts may fall back to QR-code download delivery when recipient matching does not find a Cheqi recipient
+     * @type {boolean}
+     * @memberof CompanyCreationRequest
+     */
+    downloadFallbackEnabled?: boolean | null;
 }
 
 
@@ -164,6 +170,7 @@ export function CompanyCreationRequestFromJSONTyped(json: any, ignoreDiscriminat
         'returnProcessingMode': json['returnProcessingMode'] == null ? undefined : ReturnProcessingModeFromJSON(json['returnProcessingMode']),
         'notificationCodeEnabled': json['notificationCodeEnabled'] == null ? undefined : json['notificationCodeEnabled'],
         'emailFallbackEnabled': json['emailFallbackEnabled'] == null ? undefined : json['emailFallbackEnabled'],
+        'downloadFallbackEnabled': json['downloadFallbackEnabled'] == null ? undefined : json['downloadFallbackEnabled'],
     };
 }
 
@@ -191,6 +198,7 @@ export function CompanyCreationRequestToJSONTyped(value?: CompanyCreationRequest
         'returnProcessingMode': ReturnProcessingModeToJSON(value['returnProcessingMode']),
         'notificationCodeEnabled': value['notificationCodeEnabled'],
         'emailFallbackEnabled': value['emailFallbackEnabled'],
+        'downloadFallbackEnabled': value['downloadFallbackEnabled'],
     };
 }
 

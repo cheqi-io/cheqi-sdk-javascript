@@ -37,6 +37,12 @@ export interface ReceiptCreatedResponse {
      * @memberof ReceiptCreatedResponse
      */
     templateHash?: string;
+    /**
+     * Public self-service download URL for the receipt. Only populated for the QR-code download fallback route (DOWNLOAD_FALLBACK); the merchant terminal renders this as a QR code for the customer to scan.
+     * @type {string}
+     * @memberof ReceiptCreatedResponse
+     */
+    downloadUrl?: string;
 }
 
 /**
@@ -59,6 +65,7 @@ export function ReceiptCreatedResponseFromJSONTyped(json: any, ignoreDiscriminat
         'cheqiReceiptId': json['cheqiReceiptId'] == null ? undefined : json['cheqiReceiptId'],
         'createdAt': json['createdAt'] == null ? undefined : (new Date(json['createdAt'])),
         'templateHash': json['templateHash'] == null ? undefined : json['templateHash'],
+        'downloadUrl': json['downloadUrl'] == null ? undefined : json['downloadUrl'],
     };
 }
 
@@ -76,6 +83,7 @@ export function ReceiptCreatedResponseToJSONTyped(value?: ReceiptCreatedResponse
         'cheqiReceiptId': value['cheqiReceiptId'],
         'createdAt': value['createdAt'] == null ? undefined : ((value['createdAt']).toISOString()),
         'templateHash': value['templateHash'],
+        'downloadUrl': value['downloadUrl'],
     };
 }
 

@@ -2,6 +2,7 @@
 export const DeliveryStatus = {
   DELIVERED_DIGITAL: "DELIVERED_DIGITAL",
   DELIVERED_EMAIL: "DELIVERED_EMAIL",
+  DELIVERED_DOWNLOAD: "DELIVERED_DOWNLOAD",
   CUSTOMER_NOT_FOUND: "CUSTOMER_NOT_FOUND",
   FAILED: "FAILED"
 } as const;
@@ -18,6 +19,7 @@ export interface ReceiptResultInit {
   templateContent?: string | null;
   message?: string | null;
   customerEmail?: string | null;
+  downloadUrl?: string | null;
 }
 
 export class ReceiptResult {
@@ -30,6 +32,7 @@ export class ReceiptResult {
   readonly templateContent: string | null;
   readonly message: string | null;
   readonly customerEmail: string | null;
+  readonly downloadUrl: string | null;
 
   constructor(init: ReceiptResultInit) {
     this.success = init.success;
@@ -41,6 +44,7 @@ export class ReceiptResult {
     this.templateContent = init.templateContent ?? null;
     this.message = init.message ?? null;
     this.customerEmail = init.customerEmail ?? null;
+    this.downloadUrl = init.downloadUrl ?? null;
   }
 
   static deliveredToApp(response: Record<string, unknown>, templateContent: string): ReceiptResult {
@@ -57,6 +61,28 @@ export class ReceiptResult {
       response,
       templateContent,
       message: "Receipt delivered to customer's Cheqi app"
+    });
+  }
+
+  /**
+   * QR-code self-service download fallback: the receipt was created and Cheqi returned a public
+   * download URL. The merchant terminal renders `downloadUrl` as a QR code for the customer.
+   */
+  static deliveredViaDownload(response: Record<string, unknown>, templateContent: string): ReceiptResult {
+    const receiptCount =
+      (Array.isArray(response.createdReceipts) ? response.createdReceipts.length : undefined) ??
+      (typeof response.receiptCount === "number" ? response.receiptCount : 0);
+
+    return new ReceiptResult({
+      success: true,
+      deliveryStatus: DeliveryStatus.DELIVERED_DOWNLOAD,
+      deliveryMethod: "DOWNLOAD",
+      customerFound: true,
+      receiptCount,
+      response,
+      templateContent,
+      downloadUrl: typeof response.downloadUrl === "string" ? response.downloadUrl : null,
+      message: "Receipt available for self-service download"
     });
   }
 
@@ -107,6 +133,10 @@ export class ReceiptResult {
 
   getEmailAddress(): string | null {
     return this.customerEmail;
+  }
+
+  getDownloadUrl(): string | null {
+    return this.downloadUrl;
   }
 
   getMessage(): string | null {

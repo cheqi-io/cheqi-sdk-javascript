@@ -169,6 +169,12 @@ export interface CompanyResponseBody {
      * @memberof CompanyResponseBody
      */
     emailFallbackEnabled?: boolean | null;
+    /**
+     * Whether receipts may fall back to QR-code download delivery when recipient matching does not find a Cheqi recipient
+     * @type {boolean}
+     * @memberof CompanyResponseBody
+     */
+    downloadFallbackEnabled?: boolean | null;
 }
 
 
@@ -209,6 +215,7 @@ export function CompanyResponseBodyFromJSONTyped(json: any, ignoreDiscriminator:
         'accountPausedReason': json['accountPausedReason'] == null ? undefined : json['accountPausedReason'],
         'notificationCodeEnabled': json['notificationCodeEnabled'] == null ? undefined : json['notificationCodeEnabled'],
         'emailFallbackEnabled': json['emailFallbackEnabled'] == null ? undefined : json['emailFallbackEnabled'],
+        'downloadFallbackEnabled': json['downloadFallbackEnabled'] == null ? undefined : json['downloadFallbackEnabled'],
     };
 }
 
@@ -242,6 +249,7 @@ export function CompanyResponseBodyToJSONTyped(value?: CompanyResponseBody | nul
         'accountPausedReason': value['accountPausedReason'],
         'notificationCodeEnabled': value['notificationCodeEnabled'],
         'emailFallbackEnabled': value['emailFallbackEnabled'],
+        'downloadFallbackEnabled': value['downloadFallbackEnabled'],
     };
 }
 

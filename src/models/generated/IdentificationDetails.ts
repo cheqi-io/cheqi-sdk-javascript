@@ -36,7 +36,7 @@ import {
 } from './CardDetails.js';
 
 /**
- * Identification and payment details used to resolve the receipt recipient. paymentType is optional when pairingCode is supplied because the pairing code carries the customer-selected payment method. For card payments without pairingCode, provide cardDetails. For direct debit without pairingCode, provide paymentAccountDetails. For cash payments, provide recipientEmail or pairingCode.
+ * Identification and payment details used to resolve the receipt recipient. paymentType is optional when pairingCode is supplied because the pairing code carries the customer-selected payment method. A customer locator (cardDetails, paymentAccountDetails, recipientEmail or pairingCode) is optional: when none is supplied the request is treated as an anonymous "no customer" receipt, which resolves to the QR-code download fallback route (when downloadFallbackEnabled). The mutual-exclusion rules below still apply so a locator is never paired with an incompatible payment type.
  * @export
  * @interface IdentificationDetails
  */
