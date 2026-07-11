@@ -97,9 +97,22 @@ test("config: customApiEndpoint overrides environment", () => {
 
 // ───────────────────────────── Matching ────────────────────────────
 
-test("matching: requires an identifier", async () => {
+test("matching: allows anonymous identification details", async () => {
+  let received;
+  const matching = new MatchingService({
+    async matchCustomer(req) {
+      received = req;
+      return { customerFound: false };
+    }
+  });
+  const result = await matching.matchCustomer({});
+  assert.deepEqual(received, {});
+  assert.equal(result.customerFound, false);
+});
+
+test("matching: rejects null identification details", async () => {
   const matching = new MatchingService({ matchCustomer() { throw new Error("unreachable"); } });
-  await assert.rejects(() => matching.matchCustomer({ paymentType: "CARD_PAYMENT" }), /at least one identifier/);
+  await assert.rejects(() => matching.matchCustomer(null), /Identification details cannot be null/);
 });
 
 test("matching: accepts card PAN", async () => {
@@ -298,6 +311,37 @@ test("receipt: match → template → encrypt → send", async () => {
   assert.equal(result.isSuccess(), true);
   assert.equal(result.deliveryMethod, "APP");
   assert.deepEqual(calls, ["match", "template", "send"]);
+});
+
+test("receipt: anonymous identification details can resolve to download fallback", async () => {
+  const { publicKeyB64 } = rsaKeyPair();
+  let matchedRequest;
+  const apiClient = {
+    async matchCustomer(req) {
+      matchedRequest = req;
+      return {
+        routeFound: true,
+        customerFound: true,
+        matchId: "match-download",
+        recipients: [{ id: "r1", publicKey: publicKeyB64, acceptedFormats: ["CHEQI"] }]
+      };
+    },
+    async generateReceiptTemplate() {
+      return { cheqi: { documentNumber: "INV-001", totalAmount: 121 } };
+    },
+    async sendEncryptedReceipts() {
+      return { cheqiReceiptId: "receipt-1", downloadUrl: "https://cheqi.example/download/receipt-1" };
+    }
+  };
+  const service = new ReceiptService(apiClient, new EncryptionService(), new MatchingService(apiClient));
+  const result = await service.processCompleteReceipt(
+    {},
+    { documentNumber: "INV-001", totalAmount: 121 }
+  );
+
+  assert.deepEqual(matchedRequest, {});
+  assert.equal(result.deliveryMethod, "DOWNLOAD");
+  assert.equal(result.getDownloadUrl(), "https://cheqi.example/download/receipt-1");
 });
 
 test("receipt: encrypted submission uses backend field name", async () => {

@@ -1,6 +1,5 @@
 import { CheqiApiError, CheqiSDKError, ErrorCodes } from "../errors.js";
 import type { CheqiApiClient, IdentificationDetails, RecipientResolutionResponse } from "../types.js";
-import { coalesceString } from "../utils.js";
 
 export class MatchingService {
   constructor(private readonly apiClient: Pick<CheqiApiClient, "matchCustomer">) {}
@@ -9,9 +8,9 @@ export class MatchingService {
     identificationDetails: IdentificationDetails,
     accessToken?: string | null
   ): Promise<RecipientResolutionResponse> {
-    if (!this.hasValidIdentifiers(identificationDetails)) {
+    if (!identificationDetails) {
       throw new CheqiSDKError(
-        "Identification details must contain at least one identifier (card details, payment account details, or email)",
+        "Identification details cannot be null",
         { errorCode: ErrorCodes.VALIDATION_ERROR, httpStatusCode: 400 }
       );
     }
@@ -27,22 +26,5 @@ export class MatchingService {
         cause: error
       });
     }
-  }
-
-  private hasValidIdentifiers(identificationDetails: IdentificationDetails | null | undefined): boolean {
-    if (!identificationDetails) {
-      return false;
-    }
-
-    return Boolean(
-      coalesceString(
-        (identificationDetails.cardDetails as { paymentAccountNumber?: string } | undefined)?.paymentAccountNumber,
-        identificationDetails.cardDetails?.paymentAccountReference,
-        identificationDetails.paymentAccountDetails?.identifier,
-        identificationDetails.recipientEmail,
-        identificationDetails.cheqiReceiptId,
-        identificationDetails.pairingCode
-      )
-    );
   }
 }
