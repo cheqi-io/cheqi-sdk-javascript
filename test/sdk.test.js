@@ -6,6 +6,7 @@ import {
   canonicalizeJson,
   canonicalizeXml,
   CardDetails,
+  CheqiApiError,
   CheqiSDK,
   CheqiSDKConfig,
   Company,
@@ -13,6 +14,7 @@ import {
   CreditNoteService,
   DefaultCheqiApiClient,
   DecryptionService,
+  DeliveryStatus,
   EncryptionService,
   Environment,
   IdentificationDetails,
@@ -93,6 +95,26 @@ test("config: customApiEndpoint overrides environment", () => {
     ...NOOP
   });
   assert.equal(config.apiEndpoint, "https://custom.example.com");
+});
+
+test("config: standard environments select fixed receipt origins", () => {
+  assert.equal(
+    new CheqiSDKConfig({ environment: Environment.PRODUCTION, ...NOOP }).receiptDownloadBaseUrl,
+    "https://receipt.cheqi.io"
+  );
+  assert.equal(
+    new CheqiSDKConfig({ environment: Environment.SANDBOX, ...NOOP }).receiptDownloadBaseUrl,
+    "https://sandbox.receipt.cheqi.io"
+  );
+});
+
+test("config: custom receipt origin supports localhost", () => {
+  const config = new CheqiSDKConfig({
+    customApiEndpoint: "http://localhost:8080",
+    receiptDownloadBaseUrl: "http://localhost:5190",
+    ...NOOP
+  });
+  assert.equal(config.receiptDownloadBaseUrl, "http://localhost:5190");
 });
 
 // ───────────────────────────── Matching ────────────────────────────
@@ -285,6 +307,8 @@ test("receipt: match → template → encrypt → send", async () => {
       calls.push("match");
       return {
         customerFound: true,
+        routeFound: true,
+        deliveryRouteType: "DIGITAL",
         matchId: "match-1",
         recipients: [{ id: "r1", publicKey: publicKeyB64, acceptedFormats: ["CHEQI"] }],
         buyerCountryCode: "NL",
@@ -314,26 +338,33 @@ test("receipt: match → template → encrypt → send", async () => {
 });
 
 test("receipt: anonymous identification details can resolve to download fallback", async () => {
-  const { publicKeyB64 } = rsaKeyPair();
   let matchedRequest;
+  let uploadedRequest;
   const apiClient = {
     async matchCustomer(req) {
       matchedRequest = req;
       return {
         routeFound: true,
         customerFound: true,
+        deliveryRouteType: "DOWNLOAD_FALLBACK",
         matchId: "match-download",
-        recipients: [{ id: "r1", publicKey: publicKeyB64, acceptedFormats: ["CHEQI"] }]
+        recipients: [{ id: "r1", publicKey: "unused", acceptedFormats: ["CHEQI"] }]
       };
     },
     async generateReceiptTemplate() {
       return { cheqi: { documentNumber: "INV-001", totalAmount: 121 } };
     },
-    async sendEncryptedReceipts() {
-      return { cheqiReceiptId: "receipt-1", downloadUrl: "https://cheqi.example/download/receipt-1" };
+    async uploadClientEncryptedReceipt(request) {
+      uploadedRequest = request;
+      return { cheqiReceiptId: "receipt-1" };
     }
   };
-  const service = new ReceiptService(apiClient, new EncryptionService(), new MatchingService(apiClient));
+  const service = new ReceiptService(
+    apiClient,
+    new EncryptionService(),
+    new MatchingService(apiClient),
+    "https://receipt.cheqi.io"
+  );
   const result = await service.processCompleteReceipt(
     {},
     { documentNumber: "INV-001", totalAmount: 121 }
@@ -341,7 +372,116 @@ test("receipt: anonymous identification details can resolve to download fallback
 
   assert.deepEqual(matchedRequest, {});
   assert.equal(result.deliveryMethod, "DOWNLOAD");
-  assert.equal(result.getDownloadUrl(), "https://cheqi.example/download/receipt-1");
+  assert.match(result.getDownloadUrl(), /^https:\/\/receipt\.cheqi\.io\/[A-Za-z0-9_-]{22}#[A-Za-z0-9_-]{43}$/);
+  assert.match(uploadedRequest.downloadId, /^[A-Za-z0-9_-]{22}$/);
+  assert.ok(uploadedRequest.ciphertext);
+  assert.ok(uploadedRequest.templateHash);
+});
+
+test("receipt: transient matching failure returns pending template URL", async () => {
+  const apiClient = {
+    async matchCustomer() {
+      throw new CheqiApiError("backend unavailable", { errorCode: "NETWORK_ERROR" });
+    }
+  };
+  const service = new ReceiptService(
+    apiClient,
+    new EncryptionService(),
+    new MatchingService(apiClient),
+    "http://localhost:5190"
+  );
+  const result = await service.processCompleteReceipt(
+    { paymentType: "CARD_PAYMENT", cardDetails: { paymentAccountReference: "PAR-1" } },
+    { documentNumber: "INV-PENDING" }
+  );
+
+  assert.equal(result.getDeliveryStatus(), DeliveryStatus.PENDING_DOWNLOAD_TEMPLATE);
+  assert.match(result.getDownloadUrl(), /^http:\/\/localhost:5190\//);
+  assert.equal(result.getDownloadCiphertext(), null);
+});
+
+test("receipt: transient template failure returns pending template URL", async () => {
+  const apiClient = {
+    async matchCustomer() {
+      return { routeFound: true, deliveryRouteType: "DIGITAL", matchId: "m1", recipients: [] };
+    },
+    async generateReceiptTemplate() {
+      throw new CheqiApiError("template unavailable", { httpStatusCode: 503, errorCode: "SERVER_ERROR" });
+    }
+  };
+  const service = new ReceiptService(
+    apiClient,
+    new EncryptionService(),
+    new MatchingService(apiClient),
+    "http://localhost:5190"
+  );
+  const result = await service.processCompleteReceipt({}, { documentNumber: "INV-PENDING" });
+  assert.equal(result.getDeliveryStatus(), DeliveryStatus.PENDING_DOWNLOAD_TEMPLATE);
+});
+
+test("receipt: ambiguous download upload returns exact ciphertext", async () => {
+  let attemptedCiphertext;
+  const apiClient = {
+    async matchCustomer() {
+      return {
+        routeFound: true,
+        deliveryRouteType: "DOWNLOAD_FALLBACK",
+        matchId: "m1",
+        recipients: [{ id: "download", acceptedFormats: ["CHEQI"] }]
+      };
+    },
+    async generateReceiptTemplate() {
+      return { cheqi: { documentNumber: "INV-UPLOAD" } };
+    },
+    async uploadClientEncryptedReceipt(request) {
+      attemptedCiphertext = request.ciphertext;
+      throw new CheqiApiError("upload timed out", { httpStatusCode: 408, errorCode: "TIMEOUT_ERROR" });
+    }
+  };
+  const service = new ReceiptService(
+    apiClient,
+    new EncryptionService(),
+    new MatchingService(apiClient),
+    "http://localhost:5190"
+  );
+  const result = await service.processCompleteReceipt({}, { documentNumber: "INV-UPLOAD" });
+
+  assert.equal(result.getDeliveryStatus(), DeliveryStatus.PENDING_DOWNLOAD_UPLOAD);
+  assert.equal(result.getDownloadCiphertext(), attemptedCiphertext);
+  assert.ok(result.getTemplateHash());
+  assert.equal(result.getCanonicalJson(), '{"documentNumber":"INV-UPLOAD"}');
+});
+
+test("receipt: online routeFound false does not bypass disabled download fallback", async () => {
+  let templateCalled = false;
+  let uploadCalled = false;
+  const apiClient = {
+    async matchCustomer() { return { routeFound: false, recipients: [] }; },
+    async generateReceiptTemplate() { templateCalled = true; return {}; },
+    async uploadClientEncryptedReceipt() { uploadCalled = true; return {}; }
+  };
+  const service = new ReceiptService(
+    apiClient,
+    new EncryptionService(),
+    new MatchingService(apiClient),
+    "http://localhost:5190"
+  );
+  const result = await service.processCompleteReceipt({}, { documentNumber: "INV-NO-ROUTE" });
+  assert.equal(result.getDeliveryStatus(), DeliveryStatus.CUSTOMER_NOT_FOUND);
+  assert.equal(templateCalled, false);
+  assert.equal(uploadCalled, false);
+  assert.equal(result.getDownloadUrl(), null);
+});
+
+test("receipt: routeFound response without deliveryRouteType is rejected", async () => {
+  const apiClient = {
+    async matchCustomer() { return { routeFound: true, matchId: "m1", recipients: [] }; }
+  };
+  const service = new ReceiptService(apiClient, new EncryptionService(), new MatchingService(apiClient));
+  await assert.rejects(
+    () => service.processCompleteReceipt({}, { documentNumber: "INV-OLD-BACKEND" }),
+    /did not include deliveryRouteType/
+  );
 });
 
 test("receipt: encrypted submission uses backend field name", async () => {
@@ -384,6 +524,8 @@ test("receipt: encrypted envelopes match Java SDK schema", async () => {
     async matchCustomer() {
       return {
         customerFound: true,
+        routeFound: true,
+        deliveryRouteType: "DIGITAL",
         matchId: "match-1",
         recipients: [
           { id: "ubl", publicKey: "public-key-ubl", acceptedFormats: ["UBL_PURCHASE_RECEIPT"] },

@@ -41,6 +41,12 @@ export interface RecipientResolutionResponse {
      */
     routeFound?: boolean;
     /**
+     * The selected receipt delivery route
+     * @type {string}
+     * @memberof RecipientResolutionResponse
+     */
+    deliveryRouteType?: RecipientResolutionResponseDeliveryRouteTypeEnum;
+    /**
      * The unique identifier for the matching process
      * @type {string}
      * @memberof RecipientResolutionResponse
@@ -73,6 +79,16 @@ export interface RecipientResolutionResponse {
 }
 
 
+/**
+ * @export
+ */
+export const RecipientResolutionResponseDeliveryRouteTypeEnum = {
+    DIGITAL: 'DIGITAL',
+    EMAIL_FALLBACK: 'EMAIL_FALLBACK',
+    DOWNLOAD_FALLBACK: 'DOWNLOAD_FALLBACK'
+} as const;
+export type RecipientResolutionResponseDeliveryRouteTypeEnum = typeof RecipientResolutionResponseDeliveryRouteTypeEnum[keyof typeof RecipientResolutionResponseDeliveryRouteTypeEnum];
+
 
 /**
  * Check if a given object implements the RecipientResolutionResponse interface.
@@ -92,6 +108,7 @@ export function RecipientResolutionResponseFromJSONTyped(json: any, ignoreDiscri
     return {
         
         'routeFound': json['routeFound'] == null ? undefined : json['routeFound'],
+        'deliveryRouteType': json['deliveryRouteType'] == null ? undefined : json['deliveryRouteType'],
         'matchId': json['matchId'] == null ? undefined : json['matchId'],
         'recipients': json['recipients'] == null ? undefined : ((json['recipients'] as Array<any>).map(MatchedRecipientFromJSON)),
         'expiresAt': json['expiresAt'] == null ? undefined : (new Date(json['expiresAt'])),
@@ -112,6 +129,7 @@ export function RecipientResolutionResponseToJSONTyped(value?: RecipientResoluti
     return {
         
         'routeFound': value['routeFound'],
+        'deliveryRouteType': value['deliveryRouteType'],
         'matchId': value['matchId'],
         'recipients': value['recipients'] == null ? undefined : ((value['recipients'] as Array<any>).map(MatchedRecipientToJSON)),
         'expiresAt': value['expiresAt'] == null ? undefined : ((value['expiresAt']).toISOString()),

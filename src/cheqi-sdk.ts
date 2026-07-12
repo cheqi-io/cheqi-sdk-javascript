@@ -38,6 +38,12 @@ export class CheqiSDKBuilder {
     return this;
   }
 
+  /** Set the customer-facing receipt origin for a custom API endpoint. */
+  receiptDownloadBaseUrl(receiptDownloadBaseUrl: string): this {
+    this.options.receiptDownloadBaseUrl = receiptDownloadBaseUrl;
+    return this;
+  }
+
   /** Set the API key (typically starts with `sk_live_` or `sk_test_`). */
   apiKey(apiKey: string): this {
     this.options.apiKey = apiKey;
@@ -121,7 +127,12 @@ export class CheqiSDK {
     this.receiptProcessor = new ReceiptProcessor(this.decryptionService);
     this.apiClient = apiClient ?? new DefaultCheqiApiClient(this.config);
     this.matchingService = new MatchingService(this.apiClient);
-    this.receiptService = new ReceiptService(this.apiClient, this.encryptionService, this.matchingService);
+    this.receiptService = new ReceiptService(
+      this.apiClient,
+      this.encryptionService,
+      this.matchingService,
+      this.config.receiptDownloadBaseUrl
+    );
     this.companyService = new CompanyService(this.apiClient);
     this.storeService = new StoreService(this.apiClient);
     this.creditNoteService = new CreditNoteService(

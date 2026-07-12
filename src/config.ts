@@ -9,6 +9,11 @@ export const Environment = {
   PRODUCTION: "https://api.cheqi.io"
 } as const;
 
+export const ReceiptEnvironment = {
+  SANDBOX: "https://sandbox.receipt.cheqi.io",
+  PRODUCTION: "https://receipt.cheqi.io"
+} as const;
+
 const MAX_TIMEOUT_SECONDS = 300;
 const MAX_RETRIES = 10;
 
@@ -21,6 +26,7 @@ const MAX_RETRIES = 10;
 export class CheqiSDKConfig {
   readonly apiEndpoint: string;
   readonly apiKey: Nullable<string>;
+  readonly receiptDownloadBaseUrl: Nullable<string>;
   readonly privateKey: Nullable<string>;
   readonly timeoutSeconds: number;
   readonly maxRetries: number;
@@ -30,6 +36,7 @@ export class CheqiSDKConfig {
     const {
       environment,
       customApiEndpoint,
+      receiptDownloadBaseUrl,
       apiKey = null,
       privateKey = null,
       timeoutSeconds = 30,
@@ -44,6 +51,7 @@ export class CheqiSDKConfig {
     if (!this.apiEndpoint) {
       throw new Error("Either 'environment' or 'customApiEndpoint' must be provided");
     }
+    this.receiptDownloadBaseUrl = receiptDownloadBaseUrl ?? receiptBaseUrlForEnvironment(environment);
 
     // --- timeout ---
     if (timeoutSeconds <= 0) {
@@ -77,6 +85,12 @@ export class CheqiSDKConfig {
 
     this.logger.info(`SDK configured: endpoint=${this.apiEndpoint}, timeout=${this.timeoutSeconds}s, maxRetries=${this.maxRetries}`);
   }
+}
+
+function receiptBaseUrlForEnvironment(environment?: string): string | null {
+  if (environment === Environment.PRODUCTION) return ReceiptEnvironment.PRODUCTION;
+  if (environment === Environment.SANDBOX) return ReceiptEnvironment.SANDBOX;
+  return null;
 }
 
 function isValidApiKeyFormat(key: string): boolean {

@@ -144,6 +144,12 @@ paths:
               $ref: "#/components/schemas/UpdateStoreRequest"
         required: true
       responses:
+        "200":
+          description: Store updated successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/StoreDTO"
         "404":
           description: Store or company not found
           content:
@@ -156,12 +162,6 @@ paths:
             '*/*':
               schema:
                 type: object
-        "200":
-          description: Store updated successfully
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/StoreDTO"
         "400":
           description: Invalid request data
           content:
@@ -199,16 +199,16 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/WebhookResponse"
-        "200":
-          description: Webhook subscription created successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/WebhookResponse"
         "403":
           description: Insufficient permissions - requires read_receipts scope
           content:
             '*/*':
+              schema:
+                $ref: "#/components/schemas/WebhookResponse"
+        "200":
+          description: Webhook subscription created successfully
+          content:
+            application/json:
               schema:
                 $ref: "#/components/schemas/WebhookResponse"
       security:
@@ -232,12 +232,6 @@ paths:
               $ref: "#/components/schemas/IdentificationDetails"
         required: true
       responses:
-        "200":
-          description: Recipient successfully resolved and matched
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/RecipientResolutionResponse"
         "403":
           description: Insufficient permissions - requires write_receipts scope
           content:
@@ -246,6 +240,12 @@ paths:
                 $ref: "#/components/schemas/RecipientResolutionResponse"
         "404":
           description: No recipient found matching the provided identification details
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/RecipientResolutionResponse"
+        "200":
+          description: Recipient successfully resolved and matched
           content:
             '*/*':
               schema:
@@ -372,14 +372,14 @@ paths:
               $ref: "#/components/schemas/EncryptedReceiptsRequest"
         required: true
       responses:
-        "201":
-          description: Receipt created successfully
+        "403":
+          description: Insufficient permissions - requires write_receipts scope
           content:
             '*/*':
               schema:
                 $ref: "#/components/schemas/ReceiptCreatedResponse"
-        "403":
-          description: Insufficient permissions - requires write_receipts scope
+        "201":
+          description: Receipt created successfully
           content:
             '*/*':
               schema:
@@ -438,12 +438,6 @@ paths:
               $ref: "#/components/schemas/ClientReceiptDownloadRequest"
         required: true
       responses:
-        "200":
-          description: Idempotent replay of an identical earlier upload
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/ClientReceiptDownloadResponse"
         "409":
           description: A different receipt is already stored under this download id
           content:
@@ -456,14 +450,20 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/ClientReceiptDownloadResponse"
-        "201":
-          description: Encrypted receipt stored
+        "403":
+          description: Insufficient permissions - requires write_receipts scope
           content:
             '*/*':
               schema:
                 $ref: "#/components/schemas/ClientReceiptDownloadResponse"
-        "403":
-          description: Insufficient permissions - requires write_receipts scope
+        "200":
+          description: Idempotent replay of an identical earlier upload
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ClientReceiptDownloadResponse"
+        "201":
+          description: Encrypted receipt stored
           content:
             '*/*':
               schema:
@@ -560,12 +560,6 @@ paths:
               $ref: "#/components/schemas/EncryptedCreditNotesRequest"
         required: true
       responses:
-        "201":
-          description: Encrypted credit note queued successfully
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/CreditNoteCreatedResponse"
         "400":
           description: Invalid encrypted credit note data
           content:
@@ -574,6 +568,12 @@ paths:
                 $ref: "#/components/schemas/CreditNoteCreatedResponse"
         "403":
           description: Insufficient permissions - requires write_receipts scope
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/CreditNoteCreatedResponse"
+        "201":
+          description: Encrypted credit note queued successfully
           content:
             '*/*':
               schema:
@@ -700,12 +700,6 @@ paths:
               $ref: "#/components/schemas/CreateStoreRequest"
         required: true
       responses:
-        "201":
-          description: Store created successfully
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/StoreDTO"
         "403":
           description: Not authorized to create stores for this company
           content:
@@ -718,6 +712,12 @@ paths:
             '*/*':
               schema:
                 type: object
+        "201":
+          description: Store created successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/StoreDTO"
         "400":
           description: Invalid request data
           content:
@@ -744,14 +744,14 @@ paths:
           type: string
           format: uuid
       responses:
-        "403":
-          description: Not authorized to rotate webhook secret for this client application
+        "200":
+          description: Secret rotated successfully
           content:
             '*/*':
               schema:
                 $ref: "#/components/schemas/WebhookSecretRotationResponse"
-        "200":
-          description: Secret rotated successfully
+        "403":
+          description: Not authorized to rotate webhook secret for this client application
           content:
             '*/*':
               schema:
@@ -908,14 +908,14 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/StoreDTO"
-        "403":
-          description: Not authorized to activate this store
+        "200":
+          description: Store activated successfully
           content:
             '*/*':
               schema:
                 $ref: "#/components/schemas/StoreDTO"
-        "200":
-          description: Store activated successfully
+        "403":
+          description: Not authorized to activate this store
           content:
             '*/*':
               schema:
@@ -933,12 +933,6 @@ paths:
         **Accessible for:** Client Application, Company
       operationId: getQueuedReceipts
       responses:
-        "200":
-          description: Queued receipts returned successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ReceiptQueueDto"
         "403":
           description: Insufficient permissions - requires read_receipts scope
           content:
@@ -948,6 +942,12 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/ReceiptQueueDto"
+        "200":
+          description: Queued receipts returned successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReceiptQueueDto"
       security:
       - cheqi_oauth:
         - read_receipts
@@ -1358,6 +1358,14 @@ components:
           type: boolean
           description: Indicates if Cheqi found a delivery route for the receipt
           example: true
+        deliveryRouteType:
+          type: string
+          description: The selected receipt delivery route
+          example: DIGITAL
+          enum:
+          - DIGITAL
+          - EMAIL_FALLBACK
+          - DOWNLOAD_FALLBACK
         matchId:
           type: string
           description: The unique identifier for the matching process

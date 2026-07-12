@@ -103,10 +103,10 @@ async function importContentKey(contentKey: string, usage: KeyUsage): Promise<Cr
 }
 
 /**
- * Generates a fresh download link locally — no network involved. The URL does not depend
- * on successful server issuance: a customer who opens it before upload sees the pending
- * receipt page. The integration must retain the request, id, and key before exposing the
- * URL so it can finish template generation, encryption, and upload later.
+ * Generates a fresh download link locally — no network involved. Use it after an online
+ * `DOWNLOAD_FALLBACK` decision or when a Cheqi outage requires a deferred customer URL.
+ * The integration must retain the request, id, and key before exposing the URL so it can
+ * finish template generation, encryption, and upload later.
  */
 export function generateDownloadLink(baseUrl: string): DownloadLink {
   const downloadId = toBase64Url(randomBytes(DOWNLOAD_ID_LENGTH));

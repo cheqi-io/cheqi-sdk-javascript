@@ -138,6 +138,7 @@ export interface EncryptedReceipt {
 export interface CheqiSDKOptions {
   environment?: string;
   customApiEndpoint?: string;
+  receiptDownloadBaseUrl?: string;
   apiKey?: Nullable<string>;
   privateKey?: Nullable<string>;
   timeoutSeconds?: number;

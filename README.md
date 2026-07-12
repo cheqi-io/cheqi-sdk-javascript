@@ -6,7 +6,7 @@ TypeScript-first Cheqi SDK for encrypted receipt and credit note processing.
 
 - SDK entrypoint with config and service wiring
 - Customer matching
-- Receipt processing flow: match -> template -> encrypt -> send/email fallback
+- Receipt processing flow: match -> template -> encrypt -> digital, email, or client-encrypted download delivery
 - Credit note processing flow
 - Hybrid RSA-OAEP + AES-256-GCM encryption/decryption
 - Retry-capable HTTP client
@@ -46,6 +46,15 @@ const result = await sdk.receiptService.processCompleteReceipt(
     totalAmount: 12.1
   }
 );
+
+if (result.deliveryStatus === "PENDING_DOWNLOAD_TEMPLATE") {
+  // Commit the original request and result.downloadUrl in your durable store
+  // before displaying or printing the URL.
+}
+
+if (result.deliveryStatus === "PENDING_DOWNLOAD_UPLOAD") {
+  // Persist result.downloadCiphertext and retry those exact bytes later.
+}
 ```
 
 ## Notes
@@ -55,12 +64,16 @@ const result = await sdk.receiptService.processCompleteReceipt(
 - The package ships `.d.ts` declarations so it can be consumed directly from TypeScript.
 - The full Java model class hierarchy is still not recreated as class-per-model; the payload contract is represented as typed object shapes instead.
 - XML verification currently normalizes formatting whitespace and hashes the result. If strict XML C14N compatibility is required, that part should be hardened next.
-## Deferred receipt download links
+## Client-encrypted receipt download links
 
-The SDK provides stateless primitives for creating a customer URL before Cheqi is
-reachable. It does not store receipts, start background workers, or choose a retry
-schedule. Your integration owns persistence and decides where and when deferred work
-runs.
+The high-level flow uses the same client-encrypted mechanism when matching selects
+`DOWNLOAD_FALLBACK` and when a transient service failure requires deferred completion.
+When a healthy matching response returns `routeFound: false`, the SDK returns
+`CUSTOMER_NOT_FOUND` and does not bypass a disabled download fallback.
+
+The SDK also provides stateless primitives for resuming a URL under your own scheduler. It
+does not store receipts, start background workers, or choose a retry schedule. Your
+integration owns persistence and decides where and when deferred work runs.
 
 ```ts
 import {
