@@ -1223,3 +1223,20 @@ test("receipt service: full offline download flow round-trips through the upload
     /ciphertext/
   );
 });
+
+test("download: encrypt accepts plain-JSON envelopes with string dates (template responses)", async () => {
+  const { generateDownloadLink, encryptDownloadEnvelope, decryptDownloadEnvelope } =
+    await import("../dist/download/index.js");
+
+  const link = generateDownloadLink("https://receipt.cheqi.io");
+  // Exactly what generateReceiptTemplate returns: parsed JSON, issueDate as a string.
+  const plainJsonEnvelope = {
+    cheqi: { documentNumber: "PLAIN-1", issueDate: "2026-07-14T09:30:00Z", currency: "EUR", totalAmount: 5 }
+  };
+
+  const encrypted = await encryptDownloadEnvelope(plainJsonEnvelope, link.contentKey);
+  const decrypted = await decryptDownloadEnvelope(encrypted, link.contentKey);
+
+  assert.equal(decrypted.cheqi.documentNumber, "PLAIN-1");
+  assert.equal(decrypted.cheqi.issueDate.toISOString(), "2026-07-14T09:30:00.000Z");
+});
