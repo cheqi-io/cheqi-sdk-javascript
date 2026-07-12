@@ -3,6 +3,8 @@ export const DeliveryStatus = {
   DELIVERED_DIGITAL: "DELIVERED_DIGITAL",
   DELIVERED_EMAIL: "DELIVERED_EMAIL",
   DELIVERED_DOWNLOAD: "DELIVERED_DOWNLOAD",
+  PENDING_DOWNLOAD_TEMPLATE: "PENDING_DOWNLOAD_TEMPLATE",
+  PENDING_DOWNLOAD_UPLOAD: "PENDING_DOWNLOAD_UPLOAD",
   CUSTOMER_NOT_FOUND: "CUSTOMER_NOT_FOUND",
   FAILED: "FAILED"
 } as const;
@@ -20,6 +22,9 @@ export interface ReceiptResultInit {
   message?: string | null;
   customerEmail?: string | null;
   downloadUrl?: string | null;
+  downloadCiphertext?: string | null;
+  templateHash?: string | null;
+  canonicalJson?: string | null;
 }
 
 export class ReceiptResult {
@@ -33,6 +38,9 @@ export class ReceiptResult {
   readonly message: string | null;
   readonly customerEmail: string | null;
   readonly downloadUrl: string | null;
+  readonly downloadCiphertext: string | null;
+  readonly templateHash: string | null;
+  readonly canonicalJson: string | null;
 
   constructor(init: ReceiptResultInit) {
     this.success = init.success;
@@ -45,6 +53,9 @@ export class ReceiptResult {
     this.message = init.message ?? null;
     this.customerEmail = init.customerEmail ?? null;
     this.downloadUrl = init.downloadUrl ?? null;
+    this.downloadCiphertext = init.downloadCiphertext ?? null;
+    this.templateHash = init.templateHash ?? null;
+    this.canonicalJson = init.canonicalJson ?? null;
   }
 
   static deliveredToApp(response: Record<string, unknown>, templateContent: string): ReceiptResult {
@@ -83,6 +94,56 @@ export class ReceiptResult {
       templateContent,
       downloadUrl: typeof response.downloadUrl === "string" ? response.downloadUrl : null,
       message: "Receipt available for self-service download"
+    });
+  }
+
+  static deliveredViaClientDownload(
+    response: unknown,
+    templateHash: string,
+    canonicalJson: string,
+    downloadUrl: string
+  ): ReceiptResult {
+    return new ReceiptResult({
+      success: true,
+      deliveryStatus: DeliveryStatus.DELIVERED_DOWNLOAD,
+      deliveryMethod: "DOWNLOAD",
+      customerFound: true,
+      receiptCount: 1,
+      response,
+      templateContent: canonicalJson,
+      templateHash,
+      canonicalJson,
+      downloadUrl,
+      message: "Receipt available through an encrypted download link"
+    });
+  }
+
+  static pendingDownloadTemplate(downloadUrl: string, message: string): ReceiptResult {
+    return new ReceiptResult({
+      success: true,
+      deliveryStatus: DeliveryStatus.PENDING_DOWNLOAD_TEMPLATE,
+      deliveryMethod: "DOWNLOAD",
+      downloadUrl,
+      message
+    });
+  }
+
+  static pendingDownloadUpload(
+    downloadUrl: string,
+    downloadCiphertext: string,
+    templateHash: string,
+    canonicalJson: string,
+    message: string
+  ): ReceiptResult {
+    return new ReceiptResult({
+      success: true,
+      deliveryStatus: DeliveryStatus.PENDING_DOWNLOAD_UPLOAD,
+      deliveryMethod: "DOWNLOAD",
+      downloadUrl,
+      downloadCiphertext,
+      templateHash,
+      canonicalJson,
+      message
     });
   }
 
@@ -138,6 +199,10 @@ export class ReceiptResult {
   getDownloadUrl(): string | null {
     return this.downloadUrl;
   }
+
+  getDownloadCiphertext(): string | null { return this.downloadCiphertext; }
+  getTemplateHash(): string | null { return this.templateHash; }
+  getCanonicalJson(): string | null { return this.canonicalJson; }
 
   getMessage(): string | null {
     return this.message;

@@ -1,4 +1,10 @@
 import { CheqiSDKError, ErrorCodes, ReceiptProcessingError } from "../errors.js";
+import {
+  buildDownloadEnvelope,
+  encryptDownloadEnvelope,
+  generateDownloadLink,
+  type DownloadLink
+} from "../download/index.js";
 import { ReceiptResult } from "../models.js";
 import type {
   CheqiApiClient,
@@ -56,7 +62,8 @@ export class ReceiptService {
       "generateReceiptTemplate" | "sendEncryptedReceipts" | "sendReceiptViaEmail" | "uploadClientEncryptedReceipt"
     >,
     private readonly encryptionService: EncryptionService,
-    private readonly matchingService: MatchingService
+    private readonly matchingService: MatchingService,
+    private readonly receiptDownloadBaseUrl: string | null = null
   ) {}
 
   async processCompleteReceipt(
@@ -68,8 +75,23 @@ export class ReceiptService {
     this.validateProcessInputs(identificationDetails, receiptRequest);
 
     try {
-      const matchResponse = await this.matchingService.matchCustomer(identificationDetails, accessToken);
+      let matchResponse: RecipientResolutionResponse;
+      try {
+        matchResponse = await this.matchingService.matchCustomer(identificationDetails, accessToken);
+      } catch (error) {
+        if (isDeferredFailure(error)) {
+          return ReceiptResult.pendingDownloadTemplate(this.createDownloadLink().url, errorMessage(error));
+        }
+        throw error;
+      }
       const recipientEmail = identificationDetails.recipientEmail;
+
+      if (routeFound(matchResponse) && matchResponse.deliveryRouteType == null) {
+        throw new CheqiSDKError(
+          "Matching response did not include deliveryRouteType; refusing legacy fallback-compatible submission",
+          { errorCode: ErrorCodes.INVALID_RESPONSE }
+        );
+      }
 
       if (!routeFound(matchResponse) && !recipientEmail) {
         return ReceiptResult.customerNotFound();
@@ -83,9 +105,20 @@ export class ReceiptService {
         taxesApplied: resolveTaxesApplied(receiptRequest)
       } as unknown as ReceiptTemplateGenerationRequest;
 
-      const templateResponse = await this.generateReceiptTemplate(templateGenerationRequest, accessToken);
+      let templateResponse: ReceiptTemplateResponse;
+      try {
+        templateResponse = await this.generateReceiptTemplate(templateGenerationRequest, accessToken);
+      } catch (error) {
+        if (isDeferredFailure(error)) {
+          return ReceiptResult.pendingDownloadTemplate(this.createDownloadLink().url, errorMessage(error));
+        }
+        throw error;
+      }
 
       if (routeFound(matchResponse)) {
+        if (matchResponse.deliveryRouteType === "DOWNLOAD_FALLBACK") {
+          return this.deliverClientEncryptedDownload(this.createDownloadLink(), templateResponse, accessToken);
+        }
         const encryptedReceipts = this.buildEncryptedReceipts(
           matchResponse,
           templateResponse,
@@ -231,6 +264,45 @@ export class ReceiptService {
     return this.apiClient.uploadClientEncryptedReceipt(request, accessToken);
   }
 
+  private async deliverClientEncryptedDownload(
+    link: DownloadLink,
+    templateResponse: ReceiptTemplateResponse,
+    accessToken: string | null
+  ): Promise<ReceiptResult> {
+    const envelope = buildDownloadEnvelope(templateResponse);
+    const canonicalJson = serializeJson(templateResponse.cheqi ?? {});
+    const templateHash = sha256Hex(canonicalJson);
+    const ciphertext = await encryptDownloadEnvelope(envelope, link.contentKey);
+    try {
+      const response = await this.uploadClientEncryptedReceipt(
+        { downloadId: link.downloadId, ciphertext, templateHash },
+        accessToken
+      );
+      return ReceiptResult.deliveredViaClientDownload(response, templateHash, canonicalJson, link.url);
+    } catch (error) {
+      if (isDeferredFailure(error)) {
+        return ReceiptResult.pendingDownloadUpload(
+          link.url,
+          ciphertext,
+          templateHash,
+          canonicalJson,
+          errorMessage(error)
+        );
+      }
+      throw error;
+    }
+  }
+
+  private createDownloadLink(): DownloadLink {
+    if (!this.receiptDownloadBaseUrl) {
+      throw new CheqiSDKError(
+        "Receipt download base URL is required for automatic encrypted fallback; configure a standard Environment or receiptDownloadBaseUrl",
+        { errorCode: ErrorCodes.CONFIGURATION_ERROR }
+      );
+    }
+    return generateDownloadLink(this.receiptDownloadBaseUrl);
+  }
+
   private buildEncryptedReceipts(
     matchResponse: RecipientResolutionResponse,
     templateResponse: ReceiptTemplateResponse,
@@ -280,6 +352,22 @@ export class ReceiptService {
       });
     }
   }
+}
+
+function isDeferredFailure(error: unknown): boolean {
+  let current: unknown = error;
+  while (current instanceof Error) {
+    if (current instanceof CheqiSDKError) {
+      return current.isNetworkError() || current.httpStatusCode === 408 || current.httpStatusCode === 429 ||
+        current.httpStatusCode >= 500;
+    }
+    current = current.cause;
+  }
+  return false;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function enrichWithVatContext(

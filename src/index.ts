@@ -1,5 +1,5 @@
 export { CheqiSDK, CheqiSDKBuilder } from "./cheqi-sdk.js";
-export { Environment, CheqiSDKConfig } from "./config.js";
+export { Environment, ReceiptEnvironment, CheqiSDKConfig } from "./config.js";
 export * from "./errors.js";
 export type { Logger } from "./logger.js";
 export { ConsoleLogger, NoopLogger } from "./logger.js";
