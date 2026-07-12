@@ -12,6 +12,8 @@ export type {
   BarcodeType,
   BuyerType,
   CardDetails,
+  ClientReceiptDownloadRequest,
+  ClientReceiptDownloadResponse,
   CreditNoteContextEnvelope,
   ReceiptContextEnvelope,
   Charge,
@@ -171,6 +173,10 @@ export interface CheqiApiClient {
     templateHash: string,
     accessToken?: string | null
   ): Promise<Record<string, unknown>>;
+  uploadClientEncryptedReceipt(
+    request: import("./models/generated/index.js").ClientReceiptDownloadRequest,
+    accessToken?: string | null
+  ): Promise<import("./models/generated/index.js").ClientReceiptDownloadResponse>;
   sendEncryptedCreditNotes(
     matchId: string,
     parentCheqiReceiptId: string,

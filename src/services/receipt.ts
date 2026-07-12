@@ -2,6 +2,8 @@ import { CheqiSDKError, ErrorCodes, ReceiptProcessingError } from "../errors.js"
 import { ReceiptResult } from "../models.js";
 import type {
   CheqiApiClient,
+  ClientReceiptDownloadRequest,
+  ClientReceiptDownloadResponse,
   EncryptedReceiptRequest,
   IdentificationDetails,
   MatchedRecipient,
@@ -51,7 +53,7 @@ export class ReceiptService {
   constructor(
     private readonly apiClient: Pick<
       CheqiApiClient,
-      "generateReceiptTemplate" | "sendEncryptedReceipts" | "sendReceiptViaEmail"
+      "generateReceiptTemplate" | "sendEncryptedReceipts" | "sendReceiptViaEmail" | "uploadClientEncryptedReceipt"
     >,
     private readonly encryptionService: EncryptionService,
     private readonly matchingService: MatchingService
@@ -199,6 +201,34 @@ export class ReceiptService {
     }
     await this.apiClient.sendReceiptViaEmail(customerEmail, cheqiReceipt, accessToken);
     return ReceiptResult.deliveredViaEmail(customerEmail);
+  }
+
+  /**
+   * Uploads a client-encrypted receipt for a download link generated locally with
+   * `generateDownloadLink` and encrypted with `encryptDownloadEnvelope` (Download Link
+   * Contract v1). The QR was rendered before this call; the upload may happen much later.
+   *
+   * Idempotent on the exact ciphertext bytes: resend the SAME persisted blob on retries
+   * (200 and 201 are both success). A 409 means different bytes already exist under this
+   * download id — a bug in the integration; do not regenerate the id or retry.
+   */
+  async uploadClientEncryptedReceipt(
+    request: ClientReceiptDownloadRequest,
+    accessToken: string | null = null
+  ): Promise<ClientReceiptDownloadResponse> {
+    if (!request?.downloadId || !/^[A-Za-z0-9_-]{22,64}$/.test(request.downloadId)) {
+      throw new CheqiSDKError("downloadId must be 22-64 base64url characters", {
+        errorCode: ErrorCodes.VALIDATION_ERROR,
+        httpStatusCode: 400
+      });
+    }
+    if (!request.ciphertext) {
+      throw new CheqiSDKError("ciphertext is required", {
+        errorCode: ErrorCodes.VALIDATION_ERROR,
+        httpStatusCode: 400
+      });
+    }
+    return this.apiClient.uploadClientEncryptedReceipt(request, accessToken);
   }
 
   private buildEncryptedReceipts(

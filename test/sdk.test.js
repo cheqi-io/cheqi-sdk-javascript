@@ -1057,3 +1057,169 @@ test("email validation: rejects bare @", () => {
     /companyEmail must be a valid email/
   );
 });
+
+// ──────────────────── Download links (offline-first QR route) ──────────────
+
+test("download: generateDownloadLink produces contract-v1 id, key, and URL", async () => {
+  const { generateDownloadLink, parseDownloadUrl } = await import("../dist/download/index.js");
+
+  const link = generateDownloadLink("https://receipt.cheqi.io/");
+  assert.match(link.downloadId, /^[A-Za-z0-9_-]{22}$/);
+  assert.match(link.contentKey, /^[A-Za-z0-9_-]{43}$/);
+  assert.equal(link.url, `https://receipt.cheqi.io/${link.downloadId}#${link.contentKey}`);
+
+  // Round-trips through the parser the download page uses.
+  assert.deepEqual(parseDownloadUrl(link.url), {
+    downloadId: link.downloadId,
+    contentKey: link.contentKey
+  });
+
+  // Fresh entropy per call.
+  const other = generateDownloadLink("https://receipt.cheqi.io");
+  assert.notEqual(other.downloadId, link.downloadId);
+  assert.notEqual(other.contentKey, link.contentKey);
+});
+
+test("download: envelope encrypt/decrypt round-trips the generated ReceiptEnvelope model", async () => {
+  const { generateDownloadLink, encryptDownloadEnvelope, decryptDownloadEnvelope } =
+    await import("../dist/download/index.js");
+
+  const envelope = {
+    cheqi: {
+      documentNumber: "INV-42",
+      currency: "EUR",
+      totalAmount: 12.5,
+      sellingParty: { companyName: "Test BV" }
+    },
+    ublPurchaseReceipt: "<PurchaseReceipt/>"
+  };
+  const link = generateDownloadLink("https://receipt.cheqi.io");
+
+  const encrypted = await encryptDownloadEnvelope(envelope, link.contentKey);
+  const decrypted = await decryptDownloadEnvelope(encrypted, link.contentKey);
+
+  assert.equal(decrypted.cheqi.documentNumber, "INV-42");
+  assert.equal(decrypted.cheqi.totalAmount, 12.5);
+  assert.equal(decrypted.cheqi.sellingParty.companyName, "Test BV");
+  assert.equal(decrypted.ublPurchaseReceipt, "<PurchaseReceipt/>");
+
+  // Encrypt-once semantics: two encryptions of the same envelope differ (fresh IV),
+  // which is exactly why retries must resend stored bytes rather than re-encrypt.
+  const again = await encryptDownloadEnvelope(envelope, link.contentKey);
+  assert.notEqual(again, encrypted);
+});
+
+test("download: wrong key and tampered ciphertext are rejected", async () => {
+  const { generateDownloadLink, encryptDownloadEnvelope, decryptDownloadEnvelope } =
+    await import("../dist/download/index.js");
+  const { DecryptionError } = await import("../dist/errors.js");
+
+  const link = generateDownloadLink("https://receipt.cheqi.io");
+  const encrypted = await encryptDownloadEnvelope({ cheqi: { documentNumber: "X" } }, link.contentKey);
+
+  const wrongKey = generateDownloadLink("https://receipt.cheqi.io").contentKey;
+  await assert.rejects(() => decryptDownloadEnvelope(encrypted, wrongKey), DecryptionError);
+
+  const bytes = Buffer.from(encrypted, "base64");
+  bytes[bytes.length - 1] ^= 0xff;
+  await assert.rejects(
+    () => decryptDownloadEnvelope(bytes.toString("base64"), link.contentKey),
+    DecryptionError
+  );
+
+  await assert.rejects(() => decryptDownloadEnvelope(encrypted, "too-short"), DecryptionError);
+});
+
+test("download: framing is byte-compatible with the SDK's node:crypto hybrid framing", async () => {
+  const { generateDownloadLink, encryptDownloadEnvelope, decryptDownloadEnvelope } =
+    await import("../dist/download/index.js");
+  const { createDecipheriv, createCipheriv, randomBytes } = await import("node:crypto");
+
+  const link = generateDownloadLink("https://receipt.cheqi.io");
+  const keyBytes = Buffer.from(link.contentKey.replaceAll("-", "+").replaceAll("_", "/"), "base64");
+
+  // WebCrypto-encrypted blob decrypts with the exact slicing DecryptionService.aesDecrypt uses.
+  const encrypted = await encryptDownloadEnvelope({ cheqi: { documentNumber: "INTEROP" } }, link.contentKey);
+  const combined = Buffer.from(encrypted, "base64");
+  const iv = combined.subarray(0, 12);
+  const ciphertext = combined.subarray(12, combined.length - 16);
+  const tag = combined.subarray(combined.length - 16);
+  const decipher = createDecipheriv("aes-256-gcm", keyBytes, iv);
+  decipher.setAuthTag(tag);
+  const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
+  assert.equal(JSON.parse(plaintext).cheqi.documentNumber, "INTEROP");
+
+  // And the reverse: a node:crypto-encrypted blob decrypts via the WebCrypto module.
+  const iv2 = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", keyBytes, iv2);
+  const body = Buffer.concat([cipher.update(JSON.stringify({ cheqi: { documentNumber: "REVERSE" } }), "utf8"), cipher.final()]);
+  const nodeBlob = Buffer.concat([iv2, body, cipher.getAuthTag()]).toString("base64");
+  const decrypted = await decryptDownloadEnvelope(nodeBlob, link.contentKey);
+  assert.equal(decrypted.cheqi.documentNumber, "REVERSE");
+});
+
+test("client: uploadClientEncryptedReceipt posts the contract body to /receipt/download", async () => {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url: String(url), method: init.method, body: JSON.parse(init.body) });
+    return new Response(
+      JSON.stringify({ cheqiReceiptId: "CHQ-1", createdAt: "2026-07-14T10:00:00Z", expiresAt: "2027-07-14T10:00:00Z" }),
+      { status: 201, headers: { "Content-Type": "application/json" } }
+    );
+  };
+  const client = new DefaultCheqiApiClient(
+    new CheqiSDKConfig({ environment: "https://api.example.test", apiKey: "sk_test_1", logger: new NoopLogger() }),
+    fetchImpl
+  );
+
+  const response = await client.uploadClientEncryptedReceipt({
+    downloadId: "Zk9qYx3vT1KpN8wL2sRd_g",
+    ciphertext: "AAAA",
+    templateHash: "abc123"
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].method, "POST");
+  assert.ok(calls[0].url.endsWith("/receipt/download"));
+  assert.deepEqual(calls[0].body, {
+    downloadId: "Zk9qYx3vT1KpN8wL2sRd_g",
+    ciphertext: "AAAA",
+    templateHash: "abc123"
+  });
+  assert.equal(response.cheqiReceiptId, "CHQ-1");
+});
+
+test("receipt service: full offline download flow round-trips through the upload call", async () => {
+  const { generateDownloadLink, encryptDownloadEnvelope, decryptDownloadEnvelope } =
+    await import("../dist/download/index.js");
+  const { ReceiptService } = await import("../dist/index.js");
+
+  const link = generateDownloadLink("https://receipt.cheqi.io");
+  const ciphertext = await encryptDownloadEnvelope({ cheqi: { documentNumber: "OFFLINE-1" } }, link.contentKey);
+
+  let uploaded = null;
+  const service = new ReceiptService(
+    {
+      uploadClientEncryptedReceipt: async (request) => {
+        uploaded = request;
+        return { cheqiReceiptId: "CHQ-2" };
+      }
+    },
+    null,
+    null
+  );
+
+  const response = await service.uploadClientEncryptedReceipt({ downloadId: link.downloadId, ciphertext });
+  assert.equal(response.cheqiReceiptId, "CHQ-2");
+
+  // The exact bytes the service uploaded decrypt with the key from the QR fragment.
+  const decrypted = await decryptDownloadEnvelope(uploaded.ciphertext, link.contentKey);
+  assert.equal(decrypted.cheqi.documentNumber, "OFFLINE-1");
+
+  // Validation guards.
+  await assert.rejects(() => service.uploadClientEncryptedReceipt({ downloadId: "nope", ciphertext }), /downloadId/);
+  await assert.rejects(
+    () => service.uploadClientEncryptedReceipt({ downloadId: link.downloadId, ciphertext: "" }),
+    /ciphertext/
+  );
+});

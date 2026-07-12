@@ -4,6 +4,8 @@ import type { Logger } from "../logger.js";
 import { NoopLogger } from "../logger.js";
 import type {
   CheqiApiClient,
+  ClientReceiptDownloadRequest,
+  ClientReceiptDownloadResponse,
   CreateStoreRequest,
   CreditNoteTemplateGenerationRequest,
   CreditNoteTemplateResponse,
@@ -140,6 +142,17 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
       },
       accessToken,
       operation: "sendEncryptedReceipts"
+    });
+  }
+
+  async uploadClientEncryptedReceipt(
+    request: ClientReceiptDownloadRequest,
+    accessToken?: string | null
+  ): Promise<ClientReceiptDownloadResponse> {
+    return this.request("POST", Endpoints.CLIENT_RECEIPT_DOWNLOAD_ENDPOINT, {
+      body: normalizeValue(request),
+      accessToken,
+      operation: "uploadClientEncryptedReceipt"
     });
   }
 

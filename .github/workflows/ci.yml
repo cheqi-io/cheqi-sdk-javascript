@@ -46,7 +46,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: ['18', '20', '22']
+        # Keep in sync with the "engines" field in package.json (>= 20): the download
+        # module relies on globalThis.crypto (WebCrypto), unflagged from Node 19+.
+        node-version: ['20', '22', '24']
     steps:
       - uses: actions/checkout@v4
 
