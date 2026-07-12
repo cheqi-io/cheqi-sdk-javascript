@@ -32,6 +32,10 @@
     "./entity": {
       "types": "./dist/entity/index.d.ts",
       "default": "./dist/entity/index.js"
+    },
+    "./download": {
+      "types": "./dist/download/index.d.ts",
+      "default": "./dist/download/index.js"
     }
   },
   "files": [
