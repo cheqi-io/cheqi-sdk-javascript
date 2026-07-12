@@ -3,10 +3,15 @@
  * ("Download Link Contract v1" — the offline-first QR route).
  *
  * The download id and AES-256-GCM content key are generated locally, with no network,
- * so a terminal can render the QR `<baseUrl>/<downloadId>#<contentKey>` even while the
- * Cheqi API is unreachable. The content key travels only in the URL fragment, which
- * browsers never send to any server: Cheqi stores ciphertext it can never decrypt, and
- * decryption happens on the customer's device.
+ * so an integration can render the QR `<baseUrl>/<downloadId>#<contentKey>` even while
+ * the Cheqi API is unreachable. Before exposing the URL, the integration is responsible
+ * for retaining the original template request, download id, and content key so it can
+ * finish issuance later. This SDK does not provide storage, scheduling, or background
+ * retry behavior.
+ *
+ * The content key travels only in the URL fragment, which browsers never send to any
+ * server: Cheqi stores ciphertext it can never decrypt, and decryption happens on the
+ * customer's device.
  *
  * This module is intentionally separate from {@link ../services/decryption.js | DecryptionService}
  * (the Node-only RSA + AES path for receipts delivered to Cheqi wallets) and is
@@ -23,6 +28,7 @@ import { AES_KEY_LENGTH, GCM_IV_LENGTH, GCM_TAG_LENGTH } from "../crypto.js";
 import { DecryptionError, EncryptionError } from "../errors.js";
 import type { ReceiptEnvelope } from "../models/generated/ReceiptEnvelope.js";
 import { ReceiptEnvelopeFromJSON, ReceiptEnvelopeToJSON } from "../models/generated/ReceiptEnvelope.js";
+import type { ReceiptTemplateResponse } from "../models/generated/ReceiptTemplateResponse.js";
 
 // Re-exported so browser-safe consumers can type envelopes without importing the SDK root.
 export type { ReceiptEnvelope };
@@ -30,7 +36,7 @@ export type { ReceiptEnvelope };
 /** Download id length in bytes (128 bits — the enumeration defense on the public endpoint). */
 export const DOWNLOAD_ID_LENGTH = 16;
 
-/** A freshly generated download link: render `url` as the QR immediately, upload later. */
+/** A freshly generated download link. The integration owns persistence and later processing. */
 export interface DownloadLink {
   /** base64url (unpadded) download id; the only part of the link the server ever sees. */
   downloadId: string;
@@ -97,9 +103,10 @@ async function importContentKey(contentKey: string, usage: KeyUsage): Promise<Cr
 }
 
 /**
- * Generates a fresh download link locally — no network involved. Call this at transaction
- * close and render `url` as the QR regardless of connectivity; upload the encrypted
- * envelope asynchronously afterwards.
+ * Generates a fresh download link locally — no network involved. The URL does not depend
+ * on successful server issuance: a customer who opens it before upload sees the pending
+ * receipt page. The integration must retain the request, id, and key before exposing the
+ * URL so it can finish template generation, encryption, and upload later.
  */
 export function generateDownloadLink(baseUrl: string): DownloadLink {
   const downloadId = toBase64Url(randomBytes(DOWNLOAD_ID_LENGTH));
@@ -129,6 +136,24 @@ export function parseDownloadUrl(url: string): { downloadId: string; contentKey:
     throw new DecryptionError("Download URL is missing the download id or content key");
   }
   return { downloadId, contentKey };
+}
+
+/**
+ * Converts the canonical response from `POST /receipt/template` to the standard envelope
+ * encrypted for a client-generated download link. Receipt content is never generated or
+ * normalized locally; all formats present in the server response are preserved.
+ */
+export function buildDownloadEnvelope(template: ReceiptTemplateResponse): ReceiptEnvelope {
+  if (!template) {
+    throw new EncryptionError("Receipt template response is required");
+  }
+
+  return {
+    cheqi: template.cheqi,
+    ublPurchaseReceipt: template.ublPurchaseReceipt,
+    ublInvoice: template.ublInvoice,
+    vatMetaData: template.vatMetadata
+  };
 }
 
 /**
