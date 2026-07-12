@@ -24,6 +24,9 @@ import { DecryptionError, EncryptionError } from "../errors.js";
 import type { ReceiptEnvelope } from "../models/generated/ReceiptEnvelope.js";
 import { ReceiptEnvelopeFromJSON, ReceiptEnvelopeToJSON } from "../models/generated/ReceiptEnvelope.js";
 
+// Re-exported so browser-safe consumers can type envelopes without importing the SDK root.
+export type { ReceiptEnvelope };
+
 /** Download id length in bytes (128 bits — the enumeration defense on the public endpoint). */
 export const DOWNLOAD_ID_LENGTH = 16;
 
@@ -137,7 +140,12 @@ export function parseDownloadUrl(url: string): { downloadId: string; contentKey:
 export async function encryptDownloadEnvelope(envelope: ReceiptEnvelope, contentKey: string): Promise<string> {
   const key = await importContentKey(contentKey, "encrypt");
   const iv = randomBytes(GCM_IV_LENGTH);
-  const plaintext = new TextEncoder().encode(JSON.stringify(ReceiptEnvelopeToJSON(envelope)));
+  // Normalize through FromJSON first: callers commonly pass plain parsed JSON (e.g. a
+  // generateReceiptTemplate response, where issueDate is a string), while ToJSON assumes
+  // hydrated model objects (Date instances). The round-trip accepts both and allow-lists
+  // the envelope to known model fields.
+  const normalized = ReceiptEnvelopeToJSON(ReceiptEnvelopeFromJSON(envelope));
+  const plaintext = new TextEncoder().encode(JSON.stringify(normalized));
 
   const encrypted = new Uint8Array(
     await subtle().encrypt({ name: "AES-GCM", iv: iv as BufferSource }, key, plaintext as BufferSource)
@@ -151,7 +159,7 @@ export async function encryptDownloadEnvelope(envelope: ReceiptEnvelope, content
 
 /**
  * Decrypts a `base64(iv || ciphertext || tag)` blob (as served by
- * `GET /public/receipt/v2/{downloadId}`) with the content key from the URL fragment.
+ * `GET /public/receipt/encrypted/{downloadId}`) with the content key from the URL fragment.
  * Throws {@link DecryptionError} when the key is wrong or the blob was tampered with.
  */
 export async function decryptDownloadEnvelope(encryptedEnvelope: string, contentKey: string): Promise<ReceiptEnvelope> {
