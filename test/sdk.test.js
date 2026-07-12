@@ -1189,17 +1189,22 @@ test("client: uploadClientEncryptedReceipt posts the contract body to /receipt/d
   assert.equal(response.cheqiReceiptId, "CHQ-1");
 });
 
-test("receipt service: full offline download flow round-trips through the upload call", async () => {
-  const { generateDownloadLink, encryptDownloadEnvelope, decryptDownloadEnvelope } =
+test("receipt service: deferred download uses the canonical template response", async () => {
+  const { buildDownloadEnvelope, generateDownloadLink, encryptDownloadEnvelope, decryptDownloadEnvelope } =
     await import("../dist/download/index.js");
   const { ReceiptService } = await import("../dist/index.js");
 
   const link = generateDownloadLink("https://receipt.cheqi.io");
-  const ciphertext = await encryptDownloadEnvelope({ cheqi: { documentNumber: "OFFLINE-1" } }, link.contentKey);
 
   let uploaded = null;
   const service = new ReceiptService(
     {
+      generateReceiptTemplate: async () => ({
+        cheqi: { documentNumber: "DEFERRED-1" },
+        ublPurchaseReceipt: "<PurchaseReceipt/>",
+        ublInvoice: "<Invoice/>",
+        vatMetadata: { vatRegime: "DOMESTIC_B2C" }
+      }),
       uploadClientEncryptedReceipt: async (request) => {
         uploaded = request;
         return { cheqiReceiptId: "CHQ-2" };
@@ -1209,12 +1214,24 @@ test("receipt service: full offline download flow round-trips through the upload
     null
   );
 
+  // The integration retained its template request and link credentials while offline.
+  // Once it schedules the work, the SDK obtains the canonical server template and only
+  // then builds and encrypts the download envelope.
+  const template = await service.generateReceiptTemplate({
+    receiptTemplateRequest: { documentNumber: "DEFERRED-1" },
+    formats: ["CHEQI", "UBL_PURCHASE_RECEIPT", "UBL_INVOICE"],
+    taxesApplied: true
+  });
+  const ciphertext = await encryptDownloadEnvelope(buildDownloadEnvelope(template), link.contentKey);
   const response = await service.uploadClientEncryptedReceipt({ downloadId: link.downloadId, ciphertext });
   assert.equal(response.cheqiReceiptId, "CHQ-2");
 
   // The exact bytes the service uploaded decrypt with the key from the QR fragment.
   const decrypted = await decryptDownloadEnvelope(uploaded.ciphertext, link.contentKey);
-  assert.equal(decrypted.cheqi.documentNumber, "OFFLINE-1");
+  assert.equal(decrypted.cheqi.documentNumber, "DEFERRED-1");
+  assert.equal(decrypted.ublPurchaseReceipt, "<PurchaseReceipt/>");
+  assert.equal(decrypted.ublInvoice, "<Invoice/>");
+  assert.equal(decrypted.vatMetaData.vatRegime, "DOMESTIC_B2C");
 
   // Validation guards.
   await assert.rejects(() => service.uploadClientEncryptedReceipt({ downloadId: "nope", ciphertext }), /downloadId/);
@@ -1222,6 +1239,11 @@ test("receipt service: full offline download flow round-trips through the upload
     () => service.uploadClientEncryptedReceipt({ downloadId: link.downloadId, ciphertext: "" }),
     /ciphertext/
   );
+});
+
+test("download: buildDownloadEnvelope requires a template response", async () => {
+  const { buildDownloadEnvelope, EncryptionError } = await import("../dist/index.js");
+  assert.throws(() => buildDownloadEnvelope(null), EncryptionError);
 });
 
 test("download: encrypt accepts plain-JSON envelopes with string dates (template responses)", async () => {

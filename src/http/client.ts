@@ -27,7 +27,7 @@ import { RetryHandler } from "./retry.js";
 const SDK_VERSION: string = (() => {
   try {
     // Dynamic import not needed — we just embed the constant at build time.
-    return "0.1.2";
+    return "0.3.0";
   } catch {
     return "unknown";
   }
