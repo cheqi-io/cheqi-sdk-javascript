@@ -37,17 +37,21 @@ export interface DownloadLink {
   url: string;
 }
 
-function subtle(): SubtleCrypto {
-  const subtleCrypto = globalThis.crypto?.subtle;
-  if (!subtleCrypto) {
+function webCrypto(): Crypto {
+  const cryptoApi = globalThis.crypto;
+  if (!cryptoApi?.subtle) {
     throw new EncryptionError("WebCrypto is not available in this environment (requires a browser or Node >= 20)");
   }
-  return subtleCrypto;
+  return cryptoApi;
+}
+
+function subtle(): SubtleCrypto {
+  return webCrypto().subtle;
 }
 
 function randomBytes(length: number): Uint8Array {
   const bytes = new Uint8Array(length);
-  globalThis.crypto.getRandomValues(bytes);
+  webCrypto().getRandomValues(bytes);
   return bytes;
 }
 
