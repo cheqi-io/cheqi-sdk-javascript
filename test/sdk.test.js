@@ -1157,3 +1157,69 @@ test("download: framing is byte-compatible with the SDK's node:crypto hybrid fra
   const decrypted = await decryptDownloadEnvelope(nodeBlob, link.contentKey);
   assert.equal(decrypted.cheqi.documentNumber, "REVERSE");
 });
+
+test("client: uploadClientEncryptedReceipt posts the contract body to /receipt/download", async () => {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url: String(url), method: init.method, body: JSON.parse(init.body) });
+    return new Response(
+      JSON.stringify({ cheqiReceiptId: "CHQ-1", createdAt: "2026-07-14T10:00:00Z", expiresAt: "2027-07-14T10:00:00Z" }),
+      { status: 201, headers: { "Content-Type": "application/json" } }
+    );
+  };
+  const client = new DefaultCheqiApiClient(
+    new CheqiSDKConfig({ environment: "https://api.example.test", apiKey: "sk_test_1", logger: new NoopLogger() }),
+    fetchImpl
+  );
+
+  const response = await client.uploadClientEncryptedReceipt({
+    downloadId: "Zk9qYx3vT1KpN8wL2sRd_g",
+    ciphertext: "AAAA",
+    templateHash: "abc123"
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].method, "POST");
+  assert.ok(calls[0].url.endsWith("/receipt/download"));
+  assert.deepEqual(calls[0].body, {
+    downloadId: "Zk9qYx3vT1KpN8wL2sRd_g",
+    ciphertext: "AAAA",
+    templateHash: "abc123"
+  });
+  assert.equal(response.cheqiReceiptId, "CHQ-1");
+});
+
+test("receipt service: full offline download flow round-trips through the upload call", async () => {
+  const { generateDownloadLink, encryptDownloadEnvelope, decryptDownloadEnvelope } =
+    await import("../dist/download/index.js");
+  const { ReceiptService } = await import("../dist/index.js");
+
+  const link = generateDownloadLink("https://receipt.cheqi.io");
+  const ciphertext = await encryptDownloadEnvelope({ cheqi: { documentNumber: "OFFLINE-1" } }, link.contentKey);
+
+  let uploaded = null;
+  const service = new ReceiptService(
+    {
+      uploadClientEncryptedReceipt: async (request) => {
+        uploaded = request;
+        return { cheqiReceiptId: "CHQ-2" };
+      }
+    },
+    null,
+    null
+  );
+
+  const response = await service.uploadClientEncryptedReceipt({ downloadId: link.downloadId, ciphertext });
+  assert.equal(response.cheqiReceiptId, "CHQ-2");
+
+  // The exact bytes the service uploaded decrypt with the key from the QR fragment.
+  const decrypted = await decryptDownloadEnvelope(uploaded.ciphertext, link.contentKey);
+  assert.equal(decrypted.cheqi.documentNumber, "OFFLINE-1");
+
+  // Validation guards.
+  await assert.rejects(() => service.uploadClientEncryptedReceipt({ downloadId: "nope", ciphertext }), /downloadId/);
+  await assert.rejects(
+    () => service.uploadClientEncryptedReceipt({ downloadId: link.downloadId, ciphertext: "" }),
+    /ciphertext/
+  );
+});
