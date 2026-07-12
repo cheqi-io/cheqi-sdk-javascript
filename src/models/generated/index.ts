@@ -13,6 +13,8 @@ export * from './CardDetails.js';
 export * from './Charge.js';
 export * from './CheqiCreditNote.js';
 export * from './CheqiReceipt.js';
+export * from './ClientReceiptDownloadRequest.js';
+export * from './ClientReceiptDownloadResponse.js';
 export * from './CompanyCreationRequest.js';
 export * from './CompanyIdentifierDTO.js';
 export * from './CompanyIdentifierRequirement.js';
