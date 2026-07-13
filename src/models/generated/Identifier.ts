@@ -24,7 +24,7 @@ export interface Identifier {
      * @type {string}
      * @memberof Identifier
      */
-    name?: string;
+    type?: string;
     /**
      * 
      * @type {string}
@@ -50,7 +50,7 @@ export function IdentifierFromJSONTyped(json: any, ignoreDiscriminator: boolean)
     }
     return {
         
-        'name': json['name'] == null ? undefined : json['name'],
+        'type': json['type'] == null ? undefined : json['type'],
         'value': json['value'] == null ? undefined : json['value'],
     };
 }
@@ -66,7 +66,7 @@ export function IdentifierToJSONTyped(value?: Identifier | null, ignoreDiscrimin
 
     return {
         
-        'name': value['name'],
+        'type': value['type'],
         'value': value['value'],
     };
 }

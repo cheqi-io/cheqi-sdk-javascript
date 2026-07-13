@@ -53,6 +53,12 @@ export interface SellingParty {
      */
     taxNumber?: string;
     /**
+     * The phone number of the selling party
+     * @type {string}
+     * @memberof SellingParty
+     */
+    phoneNumber?: string;
+    /**
      * All company identifiers of the selling party
      * @type {Array<CompanyIdentifierDTO>}
      * @memberof SellingParty
@@ -86,6 +92,7 @@ export function SellingPartyFromJSONTyped(json: any, ignoreDiscriminator: boolea
         'companyName': json['companyName'] == null ? undefined : json['companyName'],
         'companyLegalName': json['companyLegalName'] == null ? undefined : json['companyLegalName'],
         'taxNumber': json['taxNumber'] == null ? undefined : json['taxNumber'],
+        'phoneNumber': json['phoneNumber'] == null ? undefined : json['phoneNumber'],
         'identifiers': json['identifiers'] == null ? undefined : ((json['identifiers'] as Array<any>).map(CompanyIdentifierDTOFromJSON)),
         'address': json['address'] == null ? undefined : PartyAddressFromJSON(json['address']),
     };
@@ -105,6 +112,7 @@ export function SellingPartyToJSONTyped(value?: SellingParty | null, ignoreDiscr
         'companyName': value['companyName'],
         'companyLegalName': value['companyLegalName'],
         'taxNumber': value['taxNumber'],
+        'phoneNumber': value['phoneNumber'],
         'identifiers': value['identifiers'] == null ? undefined : ((value['identifiers'] as Array<any>).map(CompanyIdentifierDTOToJSON)),
         'address': PartyAddressToJSON(value['address']),
     };

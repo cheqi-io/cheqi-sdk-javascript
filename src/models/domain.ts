@@ -136,7 +136,7 @@ export class NotificationDisplayCodeBuilder extends BuilderBase<NotificationDisp
 
 export class Identifier {
   value?: string;
-  schemeID?: string;
+  type?: string;
 
   constructor(init: Partial<IdentifierShape> = {}) {
     Object.assign(this, init);
@@ -149,7 +149,7 @@ export class Identifier {
 
 export class IdentifierBuilder extends BuilderBase<IdentifierShape> {
   value(value: string): this { this.values.value = value; return this; }
-  schemeID(value: string): this { this.values.schemeID = value; return this; }
+  type(value: string): this { this.values.type = value; return this; }
   build(): IdentifierShape { return { ...this.values }; }
 }
 
