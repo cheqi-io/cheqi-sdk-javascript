@@ -199,16 +199,16 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/WebhookResponse"
-        "403":
-          description: Insufficient permissions - requires read_receipts scope
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/WebhookResponse"
         "200":
           description: Webhook subscription created successfully
           content:
             application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookResponse"
+        "403":
+          description: Insufficient permissions - requires read_receipts scope
+          content:
+            '*/*':
               schema:
                 $ref: "#/components/schemas/WebhookResponse"
       security:
@@ -283,6 +283,12 @@ paths:
               $ref: "#/components/schemas/ReceiptTemplateGenerationRequest"
         required: true
       responses:
+        "201":
+          description: Receipt template created successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ReceiptTemplateResponse"
         "400":
           description: Invalid template request data
           content:
@@ -291,12 +297,6 @@ paths:
                 $ref: "#/components/schemas/ReceiptTemplateResponse"
         "403":
           description: Insufficient permissions - requires write_receipts scope
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/ReceiptTemplateResponse"
-        "201":
-          description: Receipt template created successfully
           content:
             '*/*':
               schema:
@@ -372,14 +372,14 @@ paths:
               $ref: "#/components/schemas/EncryptedReceiptsRequest"
         required: true
       responses:
-        "403":
-          description: Insufficient permissions - requires write_receipts scope
+        "201":
+          description: Receipt created successfully
           content:
             '*/*':
               schema:
                 $ref: "#/components/schemas/ReceiptCreatedResponse"
-        "201":
-          description: Receipt created successfully
+        "403":
+          description: Insufficient permissions - requires write_receipts scope
           content:
             '*/*':
               schema:
@@ -456,14 +456,14 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/ClientReceiptDownloadResponse"
-        "200":
-          description: Idempotent replay of an identical earlier upload
+        "201":
+          description: Encrypted receipt stored
           content:
             '*/*':
               schema:
                 $ref: "#/components/schemas/ClientReceiptDownloadResponse"
-        "201":
-          description: Encrypted receipt stored
+        "200":
+          description: Idempotent replay of an identical earlier upload
           content:
             '*/*':
               schema:
@@ -858,14 +858,14 @@ paths:
           type: string
           format: uuid
       responses:
-        "404":
-          description: Store or company not found
+        "200":
+          description: Store deactivated successfully
           content:
             '*/*':
               schema:
                 $ref: "#/components/schemas/StoreDTO"
-        "200":
-          description: Store deactivated successfully
+        "404":
+          description: Store or company not found
           content:
             '*/*':
               schema:
@@ -902,14 +902,14 @@ paths:
           type: string
           format: uuid
       responses:
-        "404":
-          description: Store or company not found
+        "200":
+          description: Store activated successfully
           content:
             '*/*':
               schema:
                 $ref: "#/components/schemas/StoreDTO"
-        "200":
-          description: Store activated successfully
+        "404":
+          description: Store or company not found
           content:
             '*/*':
               schema:
@@ -933,6 +933,12 @@ paths:
         **Accessible for:** Client Application, Company
       operationId: getQueuedReceipts
       responses:
+        "200":
+          description: Queued receipts returned successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReceiptQueueDto"
         "403":
           description: Insufficient permissions - requires read_receipts scope
           content:
@@ -942,12 +948,6 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/ReceiptQueueDto"
-        "200":
-          description: Queued receipts returned successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ReceiptQueueDto"
       security:
       - cheqi_oauth:
         - read_receipts
@@ -1456,7 +1456,7 @@ components:
     Identifier:
       type: object
       properties:
-        name:
+        type:
           type: string
         value:
           type: string
@@ -2027,6 +2027,10 @@ components:
           type: string
           description: The tax number of the selling party
           example: "123456789"
+        phoneNumber:
+          type: string
+          description: The phone number of the selling party
+          example: +31 20 123 4567
         identifiers:
           type: array
           description: All company identifiers of the selling party

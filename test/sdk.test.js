@@ -18,6 +18,7 @@ import {
   EncryptionService,
   Environment,
   IdentificationDetails,
+  Identifier as ReceiptIdentifier,
   MatchingService,
   NoopLogger,
   Product,
@@ -878,8 +879,13 @@ test("model builders: IdentificationDetails", () => {
 });
 
 test("model builders: ReceiptTemplateRequest", () => {
+  const orderReference = ReceiptIdentifier.builder()
+    .type("ORDER_NUMBER")
+    .value("ORDER-123")
+    .build();
   const req = ReceiptTemplateRequest.builder()
     .documentNumber("INV-001")
+    .identifiers([orderReference])
     .currency("EUR")
     .totalAmount(12.10)
     .addProduct(
@@ -896,6 +902,7 @@ test("model builders: ReceiptTemplateRequest", () => {
     .build();
 
   assert.equal(req.documentNumber, "INV-001");
+  assert.deepEqual(req.identifiers, [{ type: "ORDER_NUMBER", value: "ORDER-123" }]);
   assert.equal(req.products.length, 1);
   assert.equal(req.products[0].name, "Coffee");
 });
@@ -1229,6 +1236,7 @@ test("download: envelope encrypt/decrypt round-trips the generated ReceiptEnvelo
   const envelope = {
     cheqi: {
       documentNumber: "INV-42",
+      identifiers: [{ type: "TRANSACTION_ID", value: "TX-42" }],
       currency: "EUR",
       totalAmount: 12.5,
       sellingParty: { companyName: "Test BV" }
@@ -1241,6 +1249,7 @@ test("download: envelope encrypt/decrypt round-trips the generated ReceiptEnvelo
   const decrypted = await decryptDownloadEnvelope(encrypted, link.contentKey);
 
   assert.equal(decrypted.cheqi.documentNumber, "INV-42");
+  assert.deepEqual(decrypted.cheqi.identifiers, [{ type: "TRANSACTION_ID", value: "TX-42" }]);
   assert.equal(decrypted.cheqi.totalAmount, 12.5);
   assert.equal(decrypted.cheqi.sellingParty.companyName, "Test BV");
   assert.equal(decrypted.ublPurchaseReceipt, "<PurchaseReceipt/>");
