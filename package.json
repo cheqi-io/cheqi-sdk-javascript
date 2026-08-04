@@ -1,6 +1,6 @@
 {
   "name": "@cheqi/sdk",
-  "version": "0.5.0",
+  "version": "2.1.0",
   "description": "Cheqi TypeScript SDK for encrypted receipt and credit note processing",
   "license": "MIT",
   "author": "Cheqi",
@@ -28,10 +28,6 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    },
-    "./entity": {
-      "types": "./dist/entity/index.d.ts",
-      "default": "./dist/entity/index.js"
     },
     "./download": {
       "types": "./dist/download/index.d.ts",

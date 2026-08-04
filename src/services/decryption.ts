@@ -1,30 +1,40 @@
 import { constants, createDecipheriv, createPrivateKey, privateDecrypt } from "node:crypto";
 import { AES_KEY_LENGTH, GCM_IV_LENGTH, GCM_TAG_LENGTH } from "../crypto.js";
 import { DecryptionError } from "../errors.js";
-import { CreditNoteContextEnvelopeFromJSON } from "../models/generated/CreditNoteContextEnvelope.js";
+import { ReceiptEnvelopeFromJSON } from "../models/generated/ReceiptEnvelope.js";
 import type {
-  CreditNoteEnvelope,
-  DecryptedDeliveredCreditNote,
-  EncryptedCreditNote,
+  CreditNoteInitiationRequest,
   EncryptedCreditNoteInitiationRequest,
-  EncryptedReceipt
+  EncryptedCreditNoteInitiationRequestResponse,
+  EncryptedReceiptDeliveryResponse,
+  ReceiptEnvelope,
+  WebhookCreditNoteInitiationRequest,
+  WebhookReceiptEnvelope
 } from "../types.js";
 import { decodeKey } from "../utils.js";
 
+type ReceiptDelivery = EncryptedReceiptDeliveryResponse | WebhookReceiptEnvelope;
+type CreditNoteInitiationDelivery =
+  | EncryptedCreditNoteInitiationRequest
+  | EncryptedCreditNoteInitiationRequestResponse
+  | WebhookCreditNoteInitiationRequest;
+
+function requireText(value: string | undefined, field: string): string {
+  if (!value?.trim()) {
+    throw new TypeError(`${field} cannot be null or empty`);
+  }
+  return value;
+}
+
 function rsaDecrypt(encryptedKeyBase64: string, privateKeyBase64: string): Buffer {
-  if (!encryptedKeyBase64) {
-    throw new DecryptionError("Encrypted key cannot be empty");
-  }
-  if (!privateKeyBase64) {
-    throw new DecryptionError("Private key is required for decryption");
-  }
+  requireText(encryptedKeyBase64, "encryptedKey");
+  requireText(privateKeyBase64, "privateKeyBase64");
 
   const privateKey = createPrivateKey({
     key: decodeKey(privateKeyBase64),
     format: "der",
     type: "pkcs8"
   });
-
   const decryptedKey = privateDecrypt(
     {
       key: privateKey,
@@ -35,21 +45,21 @@ function rsaDecrypt(encryptedKeyBase64: string, privateKeyBase64: string): Buffe
   );
 
   if (decryptedKey.length !== AES_KEY_LENGTH) {
-    throw new DecryptionError(`Decrypted AES key has invalid length: expected ${AES_KEY_LENGTH} bytes, got ${decryptedKey.length}`);
+    throw new DecryptionError(
+      `Decrypted AES key has invalid length: expected ${AES_KEY_LENGTH} bytes, got ${decryptedKey.length}`
+    );
   }
-
   return decryptedKey;
 }
 
 function aesDecrypt(encryptedDataBase64: string, aesKey: Buffer): string {
-  if (!encryptedDataBase64) {
-    throw new DecryptionError("Encrypted data cannot be empty");
-  }
-
+  requireText(encryptedDataBase64, "encryptedData");
   const combined = Buffer.from(encryptedDataBase64, "base64");
   const minLength = GCM_IV_LENGTH + GCM_TAG_LENGTH;
   if (combined.length < minLength) {
-    throw new DecryptionError(`Encrypted data too short: expected at least ${minLength} bytes, got ${combined.length}`);
+    throw new DecryptionError(
+      `Encrypted data too short: expected at least ${minLength} bytes, got ${combined.length}`
+    );
   }
 
   const iv = combined.subarray(0, GCM_IV_LENGTH);
@@ -60,121 +70,116 @@ function aesDecrypt(encryptedDataBase64: string, aesKey: Buffer): string {
   return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
 }
 
-/**
- * Decrypts encrypted receipts and credit-note initiation requests using
- * the seller's RSA private key.
- */
+/** Decrypts complete recipient envelopes with the recipient's private key. */
 export class DecryptionService {
-  /**
-   * Decrypt an encrypted receipt payload.
-   * @param encryptedReceipt  The encrypted receipt from the Cheqi backend.
-   * @param privateKeyBase64  Base64-encoded PKCS#8 DER private key.
-   * @returns The decrypted receipt content and optional customer details.
-   */
-  decryptReceipt(encryptedReceipt: EncryptedReceipt, privateKeyBase64: string): {
-    receiptContent: string;
-    customerDetails: string | null;
-  } {
-    if (!encryptedReceipt) {
-      throw new DecryptionError("Encrypted receipt cannot be null");
+  /** Accepts either a polling delivery or `data.encryptedReceipt` webhook envelope. */
+  decryptReceipt(delivery: ReceiptDelivery, privateKeyBase64: string): ReceiptEnvelope {
+    if (!delivery) {
+      throw new TypeError("delivery cannot be null");
     }
+    const encryptedEnvelope = requireText(delivery.encryptedEnvelope, "delivery.encryptedEnvelope");
+    const encryptedEnvelopeKey = requireText(
+      delivery.encryptedEnvelopeKey,
+      "delivery.encryptedEnvelopeKey"
+    );
 
     try {
-      const encryptedKey = encryptedReceipt.encryptedSymmetricKey ?? "";
-      const encryptedPayload = encryptedReceipt.encryptedReceipt ?? "";
-      const receiptKey = rsaDecrypt(encryptedKey, privateKeyBase64);
-      const receiptContent = aesDecrypt(encryptedPayload, receiptKey);
-
-      let customerDetails: string | null = null;
-      if (encryptedReceipt.encryptedCustomerDetails && encryptedReceipt.encryptedCustomerAesKey) {
-        const customerKey = rsaDecrypt(encryptedReceipt.encryptedCustomerAesKey, privateKeyBase64);
-        customerDetails = aesDecrypt(encryptedReceipt.encryptedCustomerDetails, customerKey);
-      }
-
-      return { receiptContent, customerDetails };
+      const plaintext = aesDecrypt(
+        encryptedEnvelope,
+        rsaDecrypt(encryptedEnvelopeKey, privateKeyBase64)
+      );
+      return ReceiptEnvelopeFromJSON(JSON.parse(plaintext));
     } catch (error) {
-      if (error instanceof DecryptionError) {
-        throw error;
-      }
-      throw new DecryptionError(`Failed to decrypt receipt: ${String((error as Error).message)}`, {
+      throw new DecryptionError("Failed to decrypt receipt envelope", { cause: error });
+    }
+  }
+
+  /** Decrypts a customer credit-note initiation payload without deserializing it. */
+  decryptCreditNoteInitiation(
+    request: CreditNoteInitiationDelivery,
+    privateKeyBase64: string
+  ): string {
+    if (!request) {
+      throw new TypeError("request cannot be null");
+    }
+    const encryptedRequest = requireText(
+      request.encryptedCreditNoteInitiationRequest,
+      "request.encryptedCreditNoteInitiationRequest"
+    );
+    const encryptedSymmetricKey = requireText(
+      request.encryptedSymmetricKey,
+      "request.encryptedSymmetricKey"
+    );
+
+    try {
+      return aesDecrypt(
+        encryptedRequest,
+        rsaDecrypt(encryptedSymmetricKey, privateKeyBase64)
+      );
+    } catch (error) {
+      throw new DecryptionError("Failed to decrypt credit-note initiation request", { cause: error });
+    }
+  }
+
+  /** Decrypts, deserializes, and validates a customer return request. */
+  decryptCreditNoteInitiationRequest(
+    request: CreditNoteInitiationDelivery,
+    privateKeyBase64: string
+  ): CreditNoteInitiationRequest {
+    const plaintext = this.decryptCreditNoteInitiation(request, privateKeyBase64);
+    try {
+      const parsed = JSON.parse(plaintext) as CreditNoteInitiationRequest;
+      validateCreditNoteInitiationRequest(parsed);
+      return parsed;
+    } catch (error) {
+      throw new DecryptionError("Failed to deserialize credit-note initiation request", {
         cause: error
       });
     }
   }
+}
 
-  /**
-   * Decrypt an encrypted credit-note initiation request.
-   * @param encryptedCreditNote  The encrypted credit-note from a webhook.
-   * @param privateKeyBase64     Base64-encoded PKCS#8 DER private key.
-   * @returns The decrypted credit-note content.
-   */
-  decryptCreditNote(
-    encryptedCreditNote: EncryptedCreditNoteInitiationRequest,
-    privateKeyBase64: string
-  ): { content: string } {
-    if (!encryptedCreditNote) {
-      throw new DecryptionError("Encrypted credit note cannot be null");
+/** Validates the plaintext fields Cheqi cannot inspect in its zero-knowledge flow. */
+export function validateCreditNoteInitiationRequest(request: CreditNoteInitiationRequest): void {
+  requireRequiredText(request.cheqiReceiptId, "cheqiReceiptId");
+  requireRequiredText(request.receiptId, "receiptId");
+  if (request.customerNote != null && request.customerNote.length > 1000) {
+    throw new TypeError("customerNote must be at most 1000 characters");
+  }
+  if (!request.lineItems?.length) {
+    throw new TypeError("At least one return line item is required");
+  }
+  for (const lineItem of request.lineItems) {
+    requireRequiredText(lineItem.productId, "lineItems.productId");
+    if (lineItem.productId.length > 255) {
+      throw new TypeError("lineItems.productId must be at most 255 characters");
     }
-
-    try {
-      const encryptedKey = encryptedCreditNote.encryptedSymmetricKey ?? "";
-      const encryptedPayload = encryptedCreditNote.encryptedCreditNoteInitiationRequest ?? "";
-
-      const aesKey = rsaDecrypt(encryptedKey, privateKeyBase64);
-      return {
-        content: aesDecrypt(encryptedPayload, aesKey)
-      };
-    } catch (error) {
-      if (error instanceof DecryptionError) {
-        throw error;
-      }
-      throw new DecryptionError(`Failed to decrypt credit note: ${String((error as Error).message)}`, {
-        cause: error
-      });
+    if (lineItem.quantity == null || lineItem.quantity <= 0) {
+      throw new TypeError("lineItems.quantity must be greater than zero");
+    }
+    if (!lineItem.reasonCode) {
+      throw new TypeError("lineItems.reasonCode is required");
+    }
+    if (lineItem.reasonDescription != null && lineItem.reasonDescription.length > 1000) {
+      throw new TypeError("lineItems.reasonDescription must be at most 1000 characters");
     }
   }
-
-  /**
-   * Decrypt an encrypted delivered credit-note payload and optional credit-note context.
-   * @param encryptedCreditNote  The encrypted delivered credit-note payload from the backend.
-   * @param privateKeyBase64     Base64-encoded PKCS#8 DER private key.
-   * @returns The decrypted credit-note envelope and optional context envelope.
-   */
-  decryptDeliveredCreditNote(
-    encryptedCreditNote: EncryptedCreditNote,
-    privateKeyBase64: string
-  ): DecryptedDeliveredCreditNote {
-    if (!encryptedCreditNote) {
-      throw new DecryptionError("Encrypted credit note cannot be null");
+  if (!request.refundPreference) {
+    throw new TypeError("refundPreference is required");
+  }
+  if (request.refundPreference === "BANK_TRANSFER") {
+    if (!request.refundBankAccount) {
+      throw new TypeError("refundBankAccount is required for BANK_TRANSFER");
     }
+    requireRequiredText(request.refundBankAccount.iban, "refundBankAccount.iban");
+    requireRequiredText(request.refundBankAccount.accountHolder, "refundBankAccount.accountHolder");
+  } else if (request.refundBankAccount != null) {
+    throw new TypeError("refundBankAccount is only allowed for BANK_TRANSFER");
+  }
+}
 
-    try {
-      const payloadKey = rsaDecrypt(encryptedCreditNote.encryptedSymmetricKey ?? "", privateKeyBase64);
-      const rawJson = aesDecrypt(encryptedCreditNote.encryptedCreditNote ?? "", payloadKey);
-      const creditNoteEnvelope = JSON.parse(rawJson) as CreditNoteEnvelope;
-
-      let creditNoteContextEnvelope = null;
-      let rawCreditNoteContextJson: string | null = null;
-
-      if (encryptedCreditNote.encryptedCustomerDetails && encryptedCreditNote.encryptedCustomerAesKey) {
-        const contextKey = rsaDecrypt(encryptedCreditNote.encryptedCustomerAesKey, privateKeyBase64);
-        rawCreditNoteContextJson = aesDecrypt(encryptedCreditNote.encryptedCustomerDetails, contextKey);
-        creditNoteContextEnvelope = CreditNoteContextEnvelopeFromJSON(JSON.parse(rawCreditNoteContextJson));
-      }
-
-      return {
-        creditNoteEnvelope,
-        creditNoteContextEnvelope,
-        rawJson,
-        rawCreditNoteContextJson
-      };
-    } catch (error) {
-      if (error instanceof DecryptionError) {
-        throw error;
-      }
-      throw new DecryptionError(`Failed to decrypt delivered credit note: ${String((error as Error).message)}`, {
-        cause: error
-      });
-    }
+function requireRequiredText(value: string | undefined, field: string): asserts value is string {
+  if (!value?.trim()) {
+    throw new TypeError(`${field} is required`);
   }
 }

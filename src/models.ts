@@ -1,311 +1,131 @@
-/** Delivery outcome of a processed receipt. Mirrors the Java SDK `DeliveryStatus`. */
-export const DeliveryStatus = {
-  DELIVERED_DIGITAL: "DELIVERED_DIGITAL",
-  DELIVERED_EMAIL: "DELIVERED_EMAIL",
-  DELIVERED_DOWNLOAD: "DELIVERED_DOWNLOAD",
-  PENDING_DOWNLOAD_TEMPLATE: "PENDING_DOWNLOAD_TEMPLATE",
-  PENDING_DOWNLOAD_UPLOAD: "PENDING_DOWNLOAD_UPLOAD",
-  CUSTOMER_NOT_FOUND: "CUSTOMER_NOT_FOUND",
-  FAILED: "FAILED"
-} as const;
+import type {
+  ClientReceiptDownloadResponse,
+  ReceiptSubmissionResponse,
+  ReceiptSubmissionResponseStatusEnum
+} from "./models/generated/index.js";
+import type { RecipientResolutionResponseDeliveryRouteTypeEnum } from "./models/generated/RecipientResolutionResponse.js";
 
-export type DeliveryStatus = (typeof DeliveryStatus)[keyof typeof DeliveryStatus];
-
-export interface ReceiptResultInit {
-  success: boolean;
-  deliveryStatus?: DeliveryStatus | null;
-  deliveryMethod?: string | null;
-  customerFound?: boolean;
-  receiptCount?: number;
-  response?: unknown;
-  templateContent?: string | null;
-  message?: string | null;
-  customerEmail?: string | null;
-  downloadUrl?: string | null;
-  downloadCiphertext?: string | null;
-  templateHash?: string | null;
-  canonicalJson?: string | null;
-}
-
+/** Outcome of receipt routing and submission. */
 export class ReceiptResult {
-  readonly success: boolean;
-  readonly deliveryStatus: DeliveryStatus | null;
-  readonly deliveryMethod: string | null;
-  readonly customerFound: boolean;
-  readonly receiptCount: number;
-  readonly response: unknown;
-  readonly templateContent: string | null;
-  readonly message: string | null;
-  readonly customerEmail: string | null;
-  readonly downloadUrl: string | null;
-  readonly downloadCiphertext: string | null;
-  readonly templateHash: string | null;
-  readonly canonicalJson: string | null;
+  private constructor(
+    readonly cheqiReceiptId: string | null,
+    readonly matchId: string | null,
+    readonly deliveryRouteType: RecipientResolutionResponseDeliveryRouteTypeEnum,
+    readonly status: ReceiptSubmissionResponseStatusEnum | null,
+    readonly createdAt: Date | null,
+    readonly expiresAt: Date | null,
+    readonly downloadUrl: string | null,
+    readonly downloadEnvelopeRequired: boolean,
+    readonly emailReceiptRequired: boolean
+  ) {}
 
-  constructor(init: ReceiptResultInit) {
-    this.success = init.success;
-    this.deliveryStatus = init.deliveryStatus ?? null;
-    this.deliveryMethod = init.deliveryMethod ?? null;
-    this.customerFound = init.customerFound ?? false;
-    this.receiptCount = init.receiptCount ?? 0;
-    this.response = init.response ?? null;
-    this.templateContent = init.templateContent ?? null;
-    this.message = init.message ?? null;
-    this.customerEmail = init.customerEmail ?? null;
-    this.downloadUrl = init.downloadUrl ?? null;
-    this.downloadCiphertext = init.downloadCiphertext ?? null;
-    this.templateHash = init.templateHash ?? null;
-    this.canonicalJson = init.canonicalJson ?? null;
+  static accepted(
+    response: ReceiptSubmissionResponse,
+    deliveryRouteType: RecipientResolutionResponseDeliveryRouteTypeEnum = "DIGITAL"
+  ): ReceiptResult {
+    if (!response) throw new TypeError("response cannot be null");
+    return new ReceiptResult(
+      response.cheqiReceiptId ?? null,
+      response.matchId ?? null,
+      deliveryRouteType,
+      response.status ?? null,
+      response.createdAt ?? null,
+      null,
+      null,
+      false,
+      false
+    );
   }
 
-  static deliveredToApp(response: Record<string, unknown>, templateContent: string): ReceiptResult {
-    const receiptCount =
-      (Array.isArray(response.createdReceipts) ? response.createdReceipts.length : undefined) ??
-      (typeof response.receiptCount === "number" ? response.receiptCount : 0);
-
-    return new ReceiptResult({
-      success: true,
-      deliveryStatus: DeliveryStatus.DELIVERED_DIGITAL,
-      deliveryMethod: "APP",
-      customerFound: true,
-      receiptCount,
-      response,
-      templateContent,
-      message: "Receipt delivered to customer's Cheqi app"
-    });
+  static downloadEnvelopeRequiredResult(
+    matchId: string,
+    expiresAt: Date | null = null
+  ): ReceiptResult {
+    return new ReceiptResult(
+      null,
+      matchId,
+      "DOWNLOAD_FALLBACK",
+      null,
+      null,
+      expiresAt,
+      null,
+      true,
+      false
+    );
   }
 
-  /**
-   * QR-code self-service download fallback: the receipt was created and Cheqi returned a public
-   * download URL. The merchant terminal renders `downloadUrl` as a QR code for the customer.
-   */
-  static deliveredViaDownload(response: Record<string, unknown>, templateContent: string): ReceiptResult {
-    const receiptCount =
-      (Array.isArray(response.createdReceipts) ? response.createdReceipts.length : undefined) ??
-      (typeof response.receiptCount === "number" ? response.receiptCount : 0);
-
-    return new ReceiptResult({
-      success: true,
-      deliveryStatus: DeliveryStatus.DELIVERED_DOWNLOAD,
-      deliveryMethod: "DOWNLOAD",
-      customerFound: true,
-      receiptCount,
-      response,
-      templateContent,
-      downloadUrl: typeof response.downloadUrl === "string" ? response.downloadUrl : null,
-      message: "Receipt available for self-service download"
-    });
+  static emailReceiptRequiredResult(matchId: string, expiresAt: Date | null = null): ReceiptResult {
+    return new ReceiptResult(
+      null,
+      matchId,
+      "EMAIL_FALLBACK",
+      null,
+      null,
+      expiresAt,
+      null,
+      false,
+      true
+    );
   }
 
-  static deliveredViaClientDownload(
-    response: unknown,
-    templateHash: string,
-    canonicalJson: string,
+  static downloadAccepted(
+    matchId: string | null,
+    response: ClientReceiptDownloadResponse,
     downloadUrl: string
   ): ReceiptResult {
-    return new ReceiptResult({
-      success: true,
-      deliveryStatus: DeliveryStatus.DELIVERED_DOWNLOAD,
-      deliveryMethod: "DOWNLOAD",
-      customerFound: true,
-      receiptCount: 1,
-      response,
-      templateContent: canonicalJson,
-      templateHash,
-      canonicalJson,
+    if (!response) throw new TypeError("response cannot be null");
+    return new ReceiptResult(
+      response.cheqiReceiptId ?? null,
+      matchId,
+      "DOWNLOAD_FALLBACK",
+      null,
+      response.createdAt ?? null,
+      response.expiresAt ?? null,
       downloadUrl,
-      message: "Receipt available through an encrypted download link"
-    });
+      false,
+      false
+    );
   }
 
-  static pendingDownloadTemplate(downloadUrl: string, message: string): ReceiptResult {
-    return new ReceiptResult({
-      success: true,
-      deliveryStatus: DeliveryStatus.PENDING_DOWNLOAD_TEMPLATE,
-      deliveryMethod: "DOWNLOAD",
-      downloadUrl,
-      message
-    });
-  }
-
-  static pendingDownloadUpload(
-    downloadUrl: string,
-    downloadCiphertext: string,
-    templateHash: string,
-    canonicalJson: string,
-    message: string
-  ): ReceiptResult {
-    return new ReceiptResult({
-      success: true,
-      deliveryStatus: DeliveryStatus.PENDING_DOWNLOAD_UPLOAD,
-      deliveryMethod: "DOWNLOAD",
-      downloadUrl,
-      downloadCiphertext,
-      templateHash,
-      canonicalJson,
-      message
-    });
-  }
-
-  static deliveredViaEmail(customerEmail: string): ReceiptResult {
-    return new ReceiptResult({
-      success: true,
-      deliveryStatus: DeliveryStatus.DELIVERED_EMAIL,
-      deliveryMethod: "EMAIL",
-      customerFound: false,
-      customerEmail,
-      message: `Receipt sent via email to ${customerEmail}`
-    });
-  }
-
-  static customerNotFound(): ReceiptResult {
-    return new ReceiptResult({
-      success: false,
-      deliveryStatus: DeliveryStatus.CUSTOMER_NOT_FOUND,
-      customerFound: false,
-      message: "Customer not found with provided payment details"
-    });
-  }
-
-  static failed(message: string): ReceiptResult {
-    return new ReceiptResult({
-      success: false,
-      deliveryStatus: DeliveryStatus.FAILED,
-      customerFound: false,
-      message
-    });
-  }
-
-  isSuccess(): boolean {
-    return this.success;
-  }
-
-  isCustomerNotFound(): boolean {
-    return this.deliveryStatus === DeliveryStatus.CUSTOMER_NOT_FOUND;
-  }
-
-  getDeliveryStatus(): DeliveryStatus | null {
-    return this.deliveryStatus;
-  }
-
-  getReceiptCount(): number {
-    return this.receiptCount;
-  }
-
-  getEmailAddress(): string | null {
-    return this.customerEmail;
-  }
-
-  getDownloadUrl(): string | null {
-    return this.downloadUrl;
-  }
-
-  getDownloadCiphertext(): string | null { return this.downloadCiphertext; }
-  getTemplateHash(): string | null { return this.templateHash; }
-  getCanonicalJson(): string | null { return this.canonicalJson; }
-
-  getMessage(): string | null {
-    return this.message;
-  }
+  isAccepted(): boolean { return Boolean(this.cheqiReceiptId?.trim()); }
+  isSuccess(): boolean { return this.isAccepted(); }
+  isDownloadEnvelopeRequired(): boolean { return this.downloadEnvelopeRequired; }
+  isEmailReceiptRequired(): boolean { return this.emailReceiptRequired; }
+  getCheqiReceiptId(): string | null { return this.cheqiReceiptId; }
+  getMatchId(): string | null { return this.matchId; }
+  getDeliveryRouteType(): RecipientResolutionResponseDeliveryRouteTypeEnum { return this.deliveryRouteType; }
+  getStatus(): ReceiptSubmissionResponseStatusEnum | null { return this.status; }
+  getCreatedAt(): Date | null { return this.createdAt; }
+  getExpiresAt(): Date | null { return this.expiresAt; }
+  getDownloadUrl(): string | null { return this.downloadUrl; }
 }
 
-export interface CreditNoteResultInit {
-  success: boolean;
-  deliveryStatus?: DeliveryStatus | null;
-  customerFound?: boolean;
-  creditNoteCount?: number;
-  response?: unknown;
-  templateContent?: string | null;
-  message?: string | null;
-  emailAddress?: string | null;
-}
-
+/** Result returned after Cheqi accepts an encrypted credit-note processing job. */
 export class CreditNoteResult {
-  readonly success: boolean;
-  readonly deliveryStatus: DeliveryStatus | null;
-  readonly customerFound: boolean;
-  readonly creditNoteCount: number;
-  readonly response: unknown;
-  readonly templateContent: string | null;
-  readonly message: string | null;
-  readonly emailAddress: string | null;
+  private constructor(
+    readonly parentCheqiReceiptId: string,
+    readonly cheqiReceiptId: string | null,
+    readonly matchId: string | null,
+    readonly status: ReceiptSubmissionResponseStatusEnum | null,
+    readonly createdAt: Date | null
+  ) {}
 
-  constructor(init: CreditNoteResultInit) {
-    this.success = init.success;
-    this.deliveryStatus = init.deliveryStatus ?? null;
-    this.customerFound = init.customerFound ?? false;
-    this.creditNoteCount = init.creditNoteCount ?? 0;
-    this.response = init.response ?? null;
-    this.templateContent = init.templateContent ?? null;
-    this.message = init.message ?? null;
-    this.emailAddress = init.emailAddress ?? null;
+  static accepted(parentCheqiReceiptId: string, response: ReceiptSubmissionResponse): CreditNoteResult {
+    if (!response) throw new TypeError("response cannot be null");
+    return new CreditNoteResult(
+      parentCheqiReceiptId,
+      response.cheqiReceiptId ?? null,
+      response.matchId ?? null,
+      response.status ?? null,
+      response.createdAt ?? null
+    );
   }
 
-  static deliveredToApp(response: Record<string, unknown>, templateContent: string): CreditNoteResult {
-    const creditNoteCount =
-      (Array.isArray(response.createdCreditNotes) ? response.createdCreditNotes.length : undefined) ??
-      (typeof response.creditNoteCount === "number" ? response.creditNoteCount : 0);
-
-    return new CreditNoteResult({
-      success: true,
-      deliveryStatus: DeliveryStatus.DELIVERED_DIGITAL,
-      customerFound: true,
-      creditNoteCount,
-      response,
-      templateContent,
-      message: "Credit note delivered to customer's Cheqi app"
-    });
-  }
-
-  static deliveredViaEmail(emailAddress: string): CreditNoteResult {
-    return new CreditNoteResult({
-      success: true,
-      deliveryStatus: DeliveryStatus.DELIVERED_EMAIL,
-      customerFound: false,
-      emailAddress,
-      message: `Credit note sent via email to ${emailAddress}`
-    });
-  }
-
-  static customerNotFound(): CreditNoteResult {
-    return new CreditNoteResult({
-      success: false,
-      deliveryStatus: DeliveryStatus.CUSTOMER_NOT_FOUND,
-      customerFound: false,
-      message: "Customer not found with provided payment details"
-    });
-  }
-
-  static failed(message: string): CreditNoteResult {
-    return new CreditNoteResult({
-      success: false,
-      deliveryStatus: DeliveryStatus.FAILED,
-      customerFound: false,
-      message
-    });
-  }
-
-  isSuccess(): boolean {
-    return this.success;
-  }
-
-  isCustomerNotFound(): boolean {
-    return this.deliveryStatus === DeliveryStatus.CUSTOMER_NOT_FOUND;
-  }
-
-  getDeliveryStatus(): DeliveryStatus | null {
-    return this.deliveryStatus;
-  }
-
-  getCreditNoteCount(): number {
-    return this.creditNoteCount;
-  }
-
-  getEmailAddress(): string | null {
-    return this.emailAddress;
-  }
-
-  getMessage(): string | null {
-    return this.message;
-  }
+  isAccepted(): boolean { return Boolean(this.cheqiReceiptId?.trim()); }
+  isSuccess(): boolean { return this.isAccepted(); }
+  getCheqiReceiptId(): string | null { return this.cheqiReceiptId; }
+  getParentCheqiReceiptId(): string { return this.parentCheqiReceiptId; }
+  getMatchId(): string | null { return this.matchId; }
+  getStatus(): ReceiptSubmissionResponseStatusEnum | null { return this.status; }
+  getCreatedAt(): Date | null { return this.createdAt; }
 }

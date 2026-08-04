@@ -1,32 +1,19 @@
-# Cheqi TypeScript SDK
+# Cheqi JavaScript SDK
 
-TypeScript-first Cheqi SDK for encrypted receipt and credit note processing.
+JavaScript/TypeScript SDK for resolving receipt recipients and issuing end-to-end encrypted Cheqi receipts and credit notes. Its v2.1 contract and behavior align with the Cheqi Java SDK.
 
-## Included
+## Requirements
 
-- SDK entrypoint with config and service wiring
-- Customer matching
-- Receipt processing flow: match -> template -> encrypt -> digital, email, or client-encrypted download delivery
-- Credit note processing flow
-- Hybrid RSA-OAEP + AES-256-GCM encryption/decryption
-- Retry-capable HTTP client
-- JSON canonical hashing and basic XML normalization hashing
-- Company and store service wrappers
-- Generated declarations from the TypeScript source
+- Node.js 20 or newer
+- An RSA key pair for recipient-side envelope decryption
 
-## Install
+## Installation
 
 ```bash
-npm install
+npm install @cheqi/sdk
 ```
 
-## Test
-
-```bash
-npm test
-```
-
-## Usage
+## Initialize the SDK
 
 ```ts
 import { CheqiSDK, Environment } from "@cheqi/sdk";
@@ -35,75 +22,214 @@ const sdk = CheqiSDK.builder()
   .apiEndpoint(Environment.SANDBOX)
   .apiKey("sk_test_...")
   .build();
-
-const result = await sdk.receiptService.processCompleteReceipt(
-  {
-    recipientEmail: "customer@example.com"
-  },
-  {
-    documentNumber: "INV-001",
-    currency: "EUR",
-    totalAmount: 12.1
-  }
-);
-
-if (result.deliveryStatus === "PENDING_DOWNLOAD_TEMPLATE") {
-  // Commit the original request and result.downloadUrl in your durable store
-  // before displaying or printing the URL.
-}
-
-if (result.deliveryStatus === "PENDING_DOWNLOAD_UPLOAD") {
-  // Persist result.downloadCiphertext and retry those exact bytes later.
-}
 ```
 
-## Notes
+Standard API environments are `Environment.SANDBOX`, `Environment.TEST`, and `Environment.PRODUCTION`. Use `.customApiEndpoint(url)` and `.receiptDownloadBaseUrl(url)` for a custom deployment.
 
-- Models are plain TypeScript object shapes with automatic camelCase serialization.
-- The public service structure now includes Java-style `builder()` and `get*Service()` accessors.
-- The package ships `.d.ts` declarations so it can be consumed directly from TypeScript.
-- The full Java model class hierarchy is still not recreated as class-per-model; the payload contract is represented as typed object shapes instead.
-- XML verification currently normalizes formatting whitespace and hashes the result. If strict XML C14N compatibility is required, that part should be hardened next.
-## Client-encrypted receipt download links
+## Receipt issuance
 
-The high-level flow uses the same client-encrypted mechanism when matching selects
-`DOWNLOAD_FALLBACK` and when a transient service failure requires deferred completion.
-When a healthy matching response returns `routeFound: false`, the SDK returns
-`CUSTOMER_NOT_FOUND` and does not bypass a disabled download fallback.
+`ReceiptService.issueReceipt(...)` now performs the definitive zero-knowledge receipt flow:
 
-The SDK also provides stateless primitives for resuming a URL under your own scheduler. It
-does not store receipts, start background workers, or choose a retry schedule. Your
-integration owns persistence and decides where and when deferred work runs.
+1. Resolve the delivery route from `IdentificationDetails`.
+2. Serialize the issuer-supplied `ReceiptPayload` without calculating or changing values.
+3. Encrypt the same payload independently for every matched owner device.
+4. Submit an `EncryptedReceiptEnvelope` containing ciphertext only.
+5. Return a `ReceiptResult` describing acceptance or a required fallback action.
 
 ```ts
 import {
-  buildDownloadEnvelope,
-  encryptDownloadEnvelope,
-  generateDownloadLink
-} from "@cheqi/sdk/download";
+  CardDetails,
+  CheqiSDK,
+  Environment,
+  IdentificationDetails,
+  PaymentDetails,
+  PaymentType,
+  Product,
+  ReceiptPayload,
+  Tax,
+  UnitCode
+} from "@cheqi/sdk";
 
-const link = generateDownloadLink("https://receipt.cheqi.io");
+const sdk = CheqiSDK.builder()
+  .apiEndpoint(Environment.SANDBOX)
+  .apiKey("sk_test_...")
+  .build();
 
-// Persist the complete template request, link.downloadId, and protected
-// link.contentKey using your own durable storage before exposing link.url.
-await receiptJobs.create({ templateRequest, ...link });
-printQr(link.url);
+const identificationDetails = IdentificationDetails.builder()
+  .paymentType(PaymentType.CARD_PAYMENT)
+  .cardDetails(CardDetails.builder()
+    .paymentAccountReference("PAR123456789")
+    .cardProvider("VISA")
+    .lastFourDigits("4242")
+    .build())
+  .build();
 
-// Later, on compute and a schedule controlled by your integration:
-const template = await sdk.receiptService.generateReceiptTemplate(templateRequest);
-const envelope = buildDownloadEnvelope(template);
-const ciphertext = await encryptDownloadEnvelope(envelope, link.contentKey);
+const receiptPayload = ReceiptPayload.builder()
+  .documentNumber("POS-2026-0001")
+  .issueDate(new Date())
+  .currency("EUR")
+  .receiptSubtotal("10.00")
+  .totalBeforeTax("10.00")
+  .totalTaxAmount("2.10")
+  .totalAmount("12.10")
+  .taxesApplied(true)
+  .paymentDetails(PaymentDetails.builder()
+    .paymentMeansCode("48")
+    .description("Card payment")
+    .cardProvider("VISA")
+    .cardLastFour("4242")
+    .merchantId("MID-123")
+    .paymentTerminalId("TID-456")
+    .build())
+  .addProduct(Product.builder()
+    .name("Coffee beans")
+    .brandName("Cheqi Coffee")
+    .identifier("SKU-COFFEE-001")
+    .quantity(1)
+    .baseQuantity(1)
+    .unitCode(UnitCode.C62)
+    .unitPrice("10.00")
+    .subtotal("10.00")
+    .total("12.10")
+    .addTax(21, "VAT", "10.00", "2.10")
+    .build())
+  .addTax(Tax.builder()
+    .rate(21)
+    .type("VAT")
+    .taxableAmount("10.00")
+    .amount("2.10")
+    .label("VAT 21%")
+    .build())
+  .build();
 
-// Persist the exact ciphertext before its first upload attempt. After an ambiguous
-// result, every retry must reuse these bytes rather than encrypting again.
-await receiptJobs.markReady(link.downloadId, ciphertext);
-await sdk.receiptService.uploadClientEncryptedReceipt({
-  downloadId: link.downloadId,
-  ciphertext
-});
+const result = await sdk.getReceiptService()
+  .issueReceipt(identificationDetails, receiptPayload);
+
+if (result.isAccepted()) {
+  console.log(result.getCheqiReceiptId(), result.getDeliveryRouteType());
+} else if (result.isEmailReceiptRequired()) {
+  // Generate and submit the permitted email-fallback receipt explicitly.
+} else if (result.isDownloadEnvelopeRequired()) {
+  // Generate the final ReceiptEnvelope locally, then complete the fallback.
+}
 ```
 
-The customer may open the URL before the receipt is uploaded. The download page reports
-that the receipt is not yet available and can be visited again later. Do not implement
-receipt template generation locally: call the normal template endpoint after connectivity
-returns so CHEQI, UBL, seller, and VAT behavior remains canonical.
+For OAuth, pass the access token as the third argument. To associate a store and use OAuth, pass both explicitly:
+
+```ts
+await sdk.getReceiptService().issueReceipt(identificationDetails, receiptPayload, accessToken);
+await sdk.getReceiptService().issueReceipt(identificationDetails, receiptPayload, storeId, accessToken);
+```
+
+`ReceiptPayload` is definitive. Supply `taxesApplied`, totals, line values, payment presentation, and jurisdictional data yourself. The SDK does not infer, calculate, or reconcile them.
+
+## Delivery routes and download fallback
+
+- `DIGITAL`: encrypted once per owner device and submitted immediately.
+- `DOWNLOAD_FALLBACK`: completed automatically when local payment context is available, otherwise `isDownloadEnvelopeRequired()` is returned.
+- `EMAIL_FALLBACK`: `isEmailReceiptRequired()` is returned; `issueReceipt` does not send email automatically.
+
+To create an encrypted download without recipient matching:
+
+```ts
+const result = await sdk.getReceiptService().issueDownloadReceipt(
+  { paymentType: PaymentType.CASH },
+  receiptPayload,
+  accessToken
+);
+console.log(result.getDownloadUrl());
+```
+
+The content key stays in the URL fragment and is never uploaded to Cheqi. Anyone with the complete URL can decrypt the receipt.
+
+To finish a fallback that requires a caller-generated envelope:
+
+```ts
+const completed = await sdk.getReceiptService().completeDownloadFallback(
+  result,
+  receiptEnvelope,
+  templateHash,
+  accessToken
+);
+```
+
+## Lower-level operations
+
+```ts
+const resolution = await sdk.getMatchingService()
+  .matchCustomer(identificationDetails, accessToken);
+
+const delivery = sdk.getEncryptionService()
+  .encryptReceiptForRecipient(receiptPayloadJson, resolution.recipients[0]);
+
+const response = await sdk.getReceiptService().submitEncryptedReceipt({
+  matchId: resolution.matchId,
+  deviceDeliveries: [delivery]
+}, accessToken);
+```
+
+The caller must use the selected route and preserve identical definitive plaintext across device encryptions.
+
+## Credit notes
+
+Credit notes use the same per-device model and a separate generated envelope:
+
+```ts
+const result = await sdk.getCreditNoteService().issueCreditNote(
+  identificationDetails,
+  parentCheqiReceiptId,
+  definitiveCreditNotePayload,
+  accessToken
+);
+```
+
+Customer return requests are separate from merchant-issued credit notes. Decrypt, deserialize, and validate polling or webhook requests in one call:
+
+```ts
+const request = sdk.getDecryptionService().decryptCreditNoteInitiationRequest(
+  webhook.data.creditNoteInitiationRequest,
+  privateKeyBase64
+);
+```
+
+The validation checks product IDs, positive return quantities, reason codes, notes, refund preference, and bank-account requirements. The merchant remains responsible for eligibility, remaining quantities, accepted outcomes, taxes, and the definitive refund.
+
+## Receipt and webhook decryption
+
+`decryptReceipt` accepts either an `EncryptedReceiptDeliveryResponse` from polling or a `WebhookReceiptEnvelope` from `data.encryptedReceipt` / `data.encryptedCreditNote`:
+
+```ts
+const envelope = sdk.getDecryptionService().decryptReceipt(
+  webhook.data.encryptedReceipt,
+  privateKeyBase64
+);
+```
+
+The plaintext is already a complete `ReceiptEnvelope`; no backend-context merge step is required.
+
+## Store management
+
+Store operations require an OAuth token with the relevant store permissions:
+
+```ts
+const store = await sdk.getStoreService().createStore(companyId, createStoreRequest, accessToken);
+const stores = await sdk.getStoreService().getStores(companyId, undefined, accessToken);
+```
+
+## Generated models
+
+The root package exports the common builders and enums. Every OpenAPI-generated model, enum, and serializer is also available under `Generated`:
+
+```ts
+import { Generated } from "@cheqi/sdk";
+
+const route = Generated.RecipientResolutionResponseDeliveryRouteTypeEnum.DIGITAL;
+```
+
+## Development
+
+```bash
+npm test
+npm run typecheck
+make generate
+```

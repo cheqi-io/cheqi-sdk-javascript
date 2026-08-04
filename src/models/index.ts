@@ -1,3 +1,14 @@
 export * from "../models.js";
 export * from "./domain.js";
+export { AccountIdentifierType } from "./generated/AccountIdentifierType.js";
+export { BarcodeType } from "./generated/BarcodeType.js";
+export { BuyerType } from "./generated/BuyerType.js";
+export { DocumentType } from "./generated/DocumentType.js";
+export { FiscalizationStatus } from "./generated/FiscalizationStatus.js";
+export { PaymentType } from "./generated/PaymentType.js";
+export { ReceiptFormat } from "./generated/ReceiptFormat.js";
+export { RefundPreference } from "./generated/RefundPreference.js";
+export { ReturnReasonCode } from "./generated/ReturnReasonCode.js";
+export { TaxCategoryCode } from "./generated/TaxCategoryCode.js";
+export { UnitCode } from "./generated/UnitCode.js";
 export * as Generated from "./generated/index.js";

@@ -1,84 +1,77 @@
 import type {
-  AddressDTO,
+  Barcode as BarcodeShape,
   BarcodeType,
-  BuyerType,
   CardDetails as CardDetailsShape,
   Charge as ChargeShape,
-  CompanyDTO,
-  CreateStoreRequest as CreateStoreRequestShape,
+  CreditNoteInitiationRequest as CreditNoteInitiationRequestShape,
   Discount as DiscountShape,
+  FiscalizationData as FiscalizationDataShape,
+  FiscalizationStatus,
   IdentificationDetails as IdentificationDetailsShape,
-  IdentificationDetailsPaymentTypeEnum,
   Identifier as IdentifierShape,
-  MatchedRecipient,
-  NotificationDisplayCode as NotificationDisplayCodeShape,
+  JurisdictionalData as JurisdictionalDataShape,
+  JurisdictionField as JurisdictionFieldShape,
+  JurisdictionLegalText as JurisdictionLegalTextShape,
   PaymentAccountDetails as PaymentAccountDetailsShape,
+  PaymentDetails as PaymentDetailsShape,
+  PaymentType,
   Period as PeriodShape,
   Product as ProductShape,
-  ReceiptFormat,
-  ReceiptTemplateRequest as ReceiptTemplateRequestShape,
-  ReceiptTemplateResponse as ReceiptTemplateResponseShape,
-  ReceiverType,
-  RecipientResolutionResponse as RecipientResolutionResponseShape,
-  SellingParty as SellingPartyShape,
-  ReceivingParty as ReceivingPartyShape,
+  ReceiptPayload as ReceiptPayloadShape,
+  RefundBankAccount as RefundBankAccountShape,
+  RefundPreference,
+  ReturnLineItem as ReturnLineItemShape,
+  ReturnReasonCode,
   Tax as TaxShape,
-  VatMetadata as VatMetadataShape,
-} from "../types.js";
-
-type Optional<T> = T | null | undefined;
+  TaxCategoryCode,
+  UnitCode
+} from "./generated/index.js";
 
 class BuilderBase<T> {
-  protected values: any = {};
-
-  from(value: Partial<T>): this {
-    Object.assign(this.values, value);
-    return this;
-  }
+  protected values: Partial<T> = {};
+  from(value: Partial<T>): this { Object.assign(this.values, value); return this; }
 }
 
-export class CardDetails {
-  paymentAccountNumber?: string;
-  paymentAccountReference?: string;
-  cardProvider?: string;
+export class CardDetails implements CardDetailsShape {
+  paymentAccountReference!: string;
+  cardProvider?: CardDetailsShape["cardProvider"];
+  lastFourDigits?: string;
 
-  constructor(init: Partial<CardDetailsShape> = {}) {
-    Object.assign(this, init);
-  }
-
-  static builder(): CardDetailsBuilder {
-    return new CardDetailsBuilder();
-  }
+  constructor(init: Partial<CardDetailsShape> = {}) { Object.assign(this, init); }
+  static builder(): CardDetailsBuilder { return new CardDetailsBuilder(); }
 }
 
 export class CardDetailsBuilder extends BuilderBase<CardDetailsShape> {
-  paymentAccountNumber(value: string): this { this.values.paymentAccountNumber = value; return this; }
   paymentAccountReference(value: string): this { this.values.paymentAccountReference = value; return this; }
-  cardProvider(value: string): this { this.values.cardProvider = value; return this; }
-  build(): CardDetailsShape { return { ...this.values }; }
+  cardProvider(value: CardDetailsShape["cardProvider"]): this { this.values.cardProvider = value; return this; }
+  lastFourDigits(value: string): this { this.values.lastFourDigits = value; return this; }
+  build(): CardDetails {
+    requireValue(this.values.paymentAccountReference, "paymentAccountReference");
+    return new CardDetails(this.values);
+  }
 }
 
-export class PaymentAccountDetails {
-  identifier?: string;
-  identifierType?: string;
-
-  constructor(init: Partial<PaymentAccountDetailsShape> = {}) {
-    Object.assign(this, init);
-  }
-
-  static builder(): PaymentAccountDetailsBuilder {
-    return new PaymentAccountDetailsBuilder();
-  }
+export class PaymentAccountDetails implements PaymentAccountDetailsShape {
+  identifier!: string;
+  accountIdentifierType!: PaymentAccountDetailsShape["accountIdentifierType"];
+  bic?: string;
+  bankName?: string;
+  accountHolderName?: string;
+  constructor(init: Partial<PaymentAccountDetailsShape> = {}) { Object.assign(this, init); }
+  static builder(): PaymentAccountDetailsBuilder { return new PaymentAccountDetailsBuilder(); }
 }
 
 export class PaymentAccountDetailsBuilder extends BuilderBase<PaymentAccountDetailsShape> {
   identifier(value: string): this { this.values.identifier = value; return this; }
-  identifierType(value: string): this { this.values.identifierType = value; return this; }
-  build(): PaymentAccountDetailsShape { return { ...this.values }; }
+  accountIdentifierType(value: PaymentAccountDetailsShape["accountIdentifierType"]): this { this.values.accountIdentifierType = value; return this; }
+  bic(value: string): this { this.values.bic = value; return this; }
+  bankName(value: string): this { this.values.bankName = value; return this; }
+  accountHolderName(value: string): this { this.values.accountHolderName = value; return this; }
+  build(): PaymentAccountDetails { return new PaymentAccountDetails(this.values); }
 }
 
 export class IdentificationDetails implements IdentificationDetailsShape {
-  paymentType!: IdentificationDetailsPaymentTypeEnum;
+  paymentType?: PaymentType;
   cardDetails?: CardDetailsShape;
   paymentAccountDetails?: PaymentAccountDetailsShape;
   paymentIds?: string[];
@@ -86,489 +79,524 @@ export class IdentificationDetails implements IdentificationDetailsShape {
   cheqiReceiptId?: string;
   pairingCode?: string;
 
-  constructor(init: Partial<IdentificationDetailsShape> = {}) {
-    Object.assign(this, init);
-  }
-
-  static builder(): IdentificationDetailsBuilder {
-    return new IdentificationDetailsBuilder();
-  }
-
-  getPaymentType(): Optional<IdentificationDetailsPaymentTypeEnum> { return this.paymentType; }
-  getCardDetails(): Optional<CardDetailsShape> { return this.cardDetails; }
-  getPaymentAccountDetails(): Optional<PaymentAccountDetailsShape> { return this.paymentAccountDetails; }
-  getPaymentIds(): Optional<string[]> { return this.paymentIds; }
-  getRecipientEmail(): Optional<string> { return this.recipientEmail; }
-  getCheqiReceiptId(): Optional<string> { return this.cheqiReceiptId; }
-  getPairingCode(): Optional<string> { return this.pairingCode; }
+  constructor(init: Partial<IdentificationDetailsShape> = {}) { Object.assign(this, init); }
+  static builder(): IdentificationDetailsBuilder { return new IdentificationDetailsBuilder(); }
 }
 
 export class IdentificationDetailsBuilder extends BuilderBase<IdentificationDetailsShape> {
-  paymentType(value: IdentificationDetailsPaymentTypeEnum): this { this.values.paymentType = value; return this; }
+  paymentType(value: PaymentType): this { this.values.paymentType = value; return this; }
   cardDetails(value: CardDetailsShape): this { this.values.cardDetails = value; return this; }
   paymentAccountDetails(value: PaymentAccountDetailsShape): this { this.values.paymentAccountDetails = value; return this; }
-  paymentIds(value: string[]): this { this.values.paymentIds = value; return this; }
+  paymentIds(value: string[]): this { this.values.paymentIds = [...value]; return this; }
   recipientEmail(value: string): this { this.values.recipientEmail = value; return this; }
   cheqiReceiptId(value: string): this { this.values.cheqiReceiptId = value; return this; }
   pairingCode(value: string): this { this.values.pairingCode = value; return this; }
   build(): IdentificationDetails { return new IdentificationDetails(this.values); }
 }
 
-export class NotificationDisplayCode implements NotificationDisplayCodeShape {
-  type!: BarcodeType;
-  data!: string;
-
-  constructor(init: NotificationDisplayCodeShape) {
-    this.type = init.type;
-    this.data = init.data;
-  }
-
-  static builder(): NotificationDisplayCodeBuilder {
-    return new NotificationDisplayCodeBuilder();
-  }
-}
-
-export class NotificationDisplayCodeBuilder extends BuilderBase<NotificationDisplayCodeShape> {
-  type(value: BarcodeType): this { (this.values as any).type = value; return this; }
-  data(value: string): this { (this.values as any).data = value; return this; }
-  build(): NotificationDisplayCode { return new NotificationDisplayCode(this.values as NotificationDisplayCodeShape); }
-}
-
-export class Identifier {
-  value?: string;
-  type?: string;
-
-  constructor(init: Partial<IdentifierShape> = {}) {
-    Object.assign(this, init);
-  }
-
-  static builder(): IdentifierBuilder {
-    return new IdentifierBuilder();
-  }
+export class Identifier implements IdentifierShape {
+  type!: string;
+  value!: string;
+  constructor(init: Partial<IdentifierShape> = {}) { Object.assign(this, init); }
+  static builder(): IdentifierBuilder { return new IdentifierBuilder(); }
 }
 
 export class IdentifierBuilder extends BuilderBase<IdentifierShape> {
-  value(value: string): this { this.values.value = value; return this; }
   type(value: string): this { this.values.type = value; return this; }
-  build(): IdentifierShape { return { ...this.values }; }
+  value(value: string): this { this.values.value = value; return this; }
+  build(): Identifier {
+    requireValue(this.values.type, "type");
+    requireValue(this.values.value, "value");
+    return new Identifier(this.values);
+  }
 }
 
-export class Period {
-  startDate?: string;
-  endDate?: string;
+export class Period implements PeriodShape {
+  startDate!: Date;
+  endDate!: Date;
   description?: string;
-
-  constructor(init: Partial<PeriodShape> = {}) {
-    Object.assign(this, init);
-  }
-
-  static builder(): PeriodBuilder {
-    return new PeriodBuilder();
-  }
+  constructor(init: Partial<PeriodShape> = {}) { Object.assign(this, init); }
+  static builder(): PeriodBuilder { return new PeriodBuilder(); }
 }
 
 export class PeriodBuilder extends BuilderBase<PeriodShape> {
-  startDate(value: string): this { this.values.startDate = value; return this; }
-  endDate(value: string): this { this.values.endDate = value; return this; }
+  startDate(value: Date): this { this.values.startDate = value; return this; }
+  endDate(value: Date): this { this.values.endDate = value; return this; }
   description(value: string): this { this.values.description = value; return this; }
-  build(): PeriodShape { return { ...this.values }; }
+  build(): Period {
+    requireValue(this.values.startDate, "startDate");
+    requireValue(this.values.endDate, "endDate");
+    return new Period(this.values);
+  }
 }
 
-export class Barcode {
-  type?: string;
-  data?: string;
+export class Barcode implements BarcodeShape {
+  type!: BarcodeType;
+  data!: string;
   label?: string;
-
-  constructor(init: Partial<{ type?: string; data?: string; label?: string }> = {}) {
-    Object.assign(this, init);
-  }
-
-  static builder(): BarcodeBuilder {
-    return new BarcodeBuilder();
-  }
+  constructor(init: Partial<BarcodeShape> = {}) { Object.assign(this, init); }
+  static builder(): BarcodeBuilder { return new BarcodeBuilder(); }
+  static of(type: BarcodeType, data: string, label?: string): Barcode { return new Barcode({ type, data, label }); }
+  static qrCode(data: string, label?: string): Barcode { return Barcode.of("QR_CODE", data, label); }
 }
 
-export class BarcodeBuilder extends BuilderBase<{ type?: string; data?: string; label?: string }> {
-  type(value: string): this { this.values.type = value; return this; }
+export class BarcodeBuilder extends BuilderBase<BarcodeShape> {
+  type(value: BarcodeType): this { this.values.type = value; return this; }
   data(value: string): this { this.values.data = value; return this; }
   label(value: string): this { this.values.label = value; return this; }
-  build(): { type?: string; data?: string; label?: string } { return { ...this.values }; }
+  build(): Barcode {
+    requireValue(this.values.type, "Barcode type");
+    requireValue(this.values.data, "Barcode data");
+    return new Barcode(this.values);
+  }
 }
 
-export class Tax {
-  rate?: number;
-  type?: string;
-  taxableAmount?: number;
+export class Tax implements TaxShape {
+  rate!: number;
+  type!: string;
+  taxableAmount!: number;
   amount?: number;
   label?: string;
-
-  constructor(init: Partial<TaxShape> = {}) {
-    Object.assign(this, init);
-  }
-
-  static builder(): TaxBuilder {
-    return new TaxBuilder();
-  }
+  category?: TaxCategoryCode;
+  exemptionReasonCode?: string;
+  exemptionReason?: string;
+  constructor(init: Partial<TaxShape> = {}) { Object.assign(this, init); }
+  static builder(): TaxBuilder { return new TaxBuilder(); }
 }
 
 export class TaxBuilder extends BuilderBase<TaxShape> {
   rate(value: number): this { this.values.rate = value; return this; }
   type(value: string): this { this.values.type = value; return this; }
-  taxableAmount(value: number): this { this.values.taxableAmount = value; return this; }
-  amount(value: number): this { this.values.amount = value; return this; }
+  taxableAmount(value: number | string): this { this.values.taxableAmount = Number(value); return this; }
+  amount(value: number | string): this { this.values.amount = Number(value); return this; }
   label(value: string): this { this.values.label = value; return this; }
-  build(): TaxShape { return { ...this.values }; }
+  category(value: TaxCategoryCode): this { this.values.category = value; return this; }
+  exemptionReasonCode(value: string): this { this.values.exemptionReasonCode = value; return this; }
+  exemptionReason(value: string): this { this.values.exemptionReason = value; return this; }
+  build(): Tax {
+    requireValue(this.values.rate, "Tax rate");
+    requireValue(this.values.type, "Tax type");
+    requireValue(this.values.taxableAmount, "Tax taxableAmount");
+    return new Tax(this.values);
+  }
 }
 
-export class Discount {
-  amount?: number;
+export class Discount implements DiscountShape {
+  amount!: number;
   percentage?: number;
   label?: string;
-
-  constructor(init: Partial<DiscountShape> = {}) {
-    Object.assign(this, init);
-  }
-
-  static builder(): DiscountBuilder {
-    return new DiscountBuilder();
+  constructor(init: Partial<DiscountShape> = {}) { Object.assign(this, init); }
+  static builder(): DiscountBuilder { return new DiscountBuilder(); }
+  static of(amount: number | string, label?: string, percentage?: number): Discount {
+    return new Discount({ amount: Number(amount), label, percentage });
   }
 }
 
 export class DiscountBuilder extends BuilderBase<DiscountShape> {
-  amount(value: number): this { this.values.amount = value; return this; }
+  amount(value: number | string): this { this.values.amount = Number(value); return this; }
   percentage(value: number): this { this.values.percentage = value; return this; }
   label(value: string): this { this.values.label = value; return this; }
-  build(): DiscountShape { return { ...this.values }; }
+  build(): Discount {
+    requireValue(this.values.amount, "Discount amount");
+    return new Discount(this.values);
+  }
 }
 
-export class Charge {
-  amount?: number;
+export class Charge implements ChargeShape {
+  amount!: number;
   percentage?: number;
   label?: string;
-
-  constructor(init: Partial<ChargeShape> = {}) {
-    Object.assign(this, init);
-  }
-
-  static builder(): ChargeBuilder {
-    return new ChargeBuilder();
+  constructor(init: Partial<ChargeShape> = {}) { Object.assign(this, init); }
+  static builder(): ChargeBuilder { return new ChargeBuilder(); }
+  static of(amount: number | string, label?: string, percentage?: number): Charge {
+    return new Charge({ amount: Number(amount), label, percentage });
   }
 }
 
 export class ChargeBuilder extends BuilderBase<ChargeShape> {
-  amount(value: number): this { this.values.amount = value; return this; }
+  amount(value: number | string): this { this.values.amount = Number(value); return this; }
   percentage(value: number): this { this.values.percentage = value; return this; }
   label(value: string): this { this.values.label = value; return this; }
-  build(): ChargeShape { return { ...this.values }; }
+  build(): Charge {
+    requireValue(this.values.amount, "Charge amount");
+    return new Charge(this.values);
+  }
 }
 
-export class Product {
-  name?: string;
-  identifier?: string;
-  description?: string;
+export class Product implements ProductShape {
+  name!: string;
+  identifier!: string;
+  quantity!: number;
+  unitCode!: UnitCode;
+  unitPrice!: number;
+  taxes!: TaxShape[];
+  subtotal!: number;
+  total!: number;
   brandName?: string;
-  quantity?: number;
+  description?: string;
   baseQuantity?: number;
-  unitCode?: any;
-  unitPrice?: number;
+  period?: PeriodShape;
   discounts?: DiscountShape[];
   charges?: ChargeShape[];
-  taxes?: TaxShape[];
-  subtotal?: number;
-  total?: number;
-  barcodes?: any[];
-  period?: PeriodShape;
+  barcodes?: BarcodeShape[];
 
-  constructor(init: Partial<ProductShape> = {}) {
-    Object.assign(this, init);
-  }
-
-  static builder(): ProductBuilder {
-    return new ProductBuilder();
-  }
+  constructor(init: Partial<ProductShape> = {}) { Object.assign(this, init); }
+  static builder(): ProductBuilder { return new ProductBuilder(); }
 }
 
 export class ProductBuilder extends BuilderBase<ProductShape> {
+  private taxItems: TaxShape[] = [];
+  private discountItems: DiscountShape[] = [];
+  private chargeItems: ChargeShape[] = [];
+  private barcodeItems: BarcodeShape[] = [];
+
+  from(value: Partial<ProductShape>): this {
+    super.from(value);
+    this.taxItems = [...(value.taxes ?? [])];
+    this.discountItems = [...(value.discounts ?? [])];
+    this.chargeItems = [...(value.charges ?? [])];
+    this.barcodeItems = [...(value.barcodes ?? [])];
+    return this;
+  }
   name(value: string): this { this.values.name = value; return this; }
   identifier(value: string): this { this.values.identifier = value; return this; }
   description(value: string): this { this.values.description = value; return this; }
   brandName(value: string): this { this.values.brandName = value; return this; }
   quantity(value: number): this { this.values.quantity = value; return this; }
   baseQuantity(value: number): this { this.values.baseQuantity = value; return this; }
-  unitCode(value: string): this { this.values.unitCode = value; return this; }
-  unitPrice(value: number): this { this.values.unitPrice = value; return this; }
-  discounts(value: DiscountShape[]): this { this.values.discounts = value; return this; }
-  charges(value: ChargeShape[]): this { this.values.charges = value; return this; }
-  taxes(value: TaxShape[]): this { this.values.taxes = value; return this; }
-  subtotal(value: number): this { this.values.subtotal = value; return this; }
-  total(value: number): this { this.values.total = value; return this; }
-  barcodes(value: any[]): this { this.values.barcodes = value; return this; }
+  unitCode(value: UnitCode): this { this.values.unitCode = value; return this; }
+  unitPrice(value: number | string): this { this.values.unitPrice = Number(value); return this; }
+  subtotal(value: number | string): this { this.values.subtotal = Number(value); return this; }
+  total(value: number | string): this { this.values.total = Number(value); return this; }
   period(value: PeriodShape): this { this.values.period = value; return this; }
-  addTax(rate: number, type: string, taxableAmount: number, amount: number): this {
-    const existing = this.values.taxes ?? [];
-    this.values.taxes = [...existing, Tax.builder().rate(rate).type(type).taxableAmount(taxableAmount).amount(amount).build()];
+  taxes(values: TaxShape[]): this { this.taxItems = [...values]; return this; }
+  addTax(value: TaxShape): this;
+  addTax(rate: number, type: string, taxableAmount: number | string, amount: number | string): this;
+  addTax(valueOrRate: TaxShape | number, type?: string, taxableAmount?: number | string, amount?: number | string): this {
+    this.taxItems.push(typeof valueOrRate === "number"
+      ? Tax.builder().rate(valueOrRate).type(type!).taxableAmount(taxableAmount!).amount(amount!).build()
+      : valueOrRate);
     return this;
   }
-  addDiscount(amount: number, label: string, percentage?: number): this {
-    const existing = this.values.discounts ?? [];
-    this.values.discounts = [...existing, Discount.builder().amount(amount).label(label).percentage(percentage ?? 0).build()];
+  discounts(values: DiscountShape[]): this { this.discountItems = [...values]; return this; }
+  addDiscount(value: DiscountShape): this;
+  addDiscount(amount: number | string, label: string, percentage?: number): this;
+  addDiscount(valueOrAmount: DiscountShape | number | string, label?: string, percentage?: number): this {
+    this.discountItems.push(typeof valueOrAmount === "object" ? valueOrAmount : Discount.of(valueOrAmount, label, percentage));
     return this;
   }
-  addCharge(amount: number, label: string, percentage?: number): this {
-    const existing = this.values.charges ?? [];
-    this.values.charges = [...existing, Charge.builder().amount(amount).label(label).percentage(percentage ?? 0).build()];
+  charges(values: ChargeShape[]): this { this.chargeItems = [...values]; return this; }
+  addCharge(value: ChargeShape): this;
+  addCharge(amount: number | string, label: string, percentage?: number): this;
+  addCharge(valueOrAmount: ChargeShape | number | string, label?: string, percentage?: number): this {
+    this.chargeItems.push(typeof valueOrAmount === "object" ? valueOrAmount : Charge.of(valueOrAmount, label, percentage));
     return this;
   }
-  build(): ProductShape { return { ...this.values }; }
+  barcodes(values: BarcodeShape[]): this { this.barcodeItems = [...values]; return this; }
+  addBarcode(value: BarcodeShape): this { this.barcodeItems.push(value); return this; }
+  addQrCode(data: string, label?: string): this { this.barcodeItems.push(Barcode.qrCode(data, label)); return this; }
+  build(): Product {
+    for (const field of ["name", "identifier", "quantity", "unitCode", "unitPrice", "subtotal", "total"] as const) {
+      requireValue(this.values[field], `Product ${field}`);
+    }
+    return new Product({
+      ...this.values,
+      taxes: this.taxItems,
+      discounts: this.discountItems.length ? this.discountItems : undefined,
+      charges: this.chargeItems.length ? this.chargeItems : undefined,
+      barcodes: this.barcodeItems.length ? this.barcodeItems : undefined
+    });
+  }
 }
 
-export class PaymentInfo {
-  paymentType?: string;
-  paymentAccountReference?: string;
-  cardIssuer?: string;
-  cardBrand?: string;
-  lastFourDigits?: string;
-  paymentIds?: string[];
-
-  constructor(init: Partial<PaymentInfo> = {}) { Object.assign(this, init); }
-  static builder(): PaymentInfoBuilder { return new PaymentInfoBuilder(); }
+export class PaymentDetails implements PaymentDetailsShape {
+  paymentMeansCode?: string;
+  description?: string;
+  cardProvider?: string;
+  cardLastFour?: string;
+  accountIdentifier?: string;
+  accountIdentifierType?: string;
+  merchantId?: string;
+  paymentTerminalId?: string;
+  constructor(init: Partial<PaymentDetailsShape> = {}) { Object.assign(this, init); }
+  static builder(): PaymentDetailsBuilder { return new PaymentDetailsBuilder(); }
 }
 
-export class PaymentInfoBuilder extends BuilderBase<PaymentInfo> {
-  paymentType(value: string): this { this.values.paymentType = value; return this; }
-  paymentAccountReference(value: string): this { this.values.paymentAccountReference = value; return this; }
-  cardIssuer(value: string): this { this.values.cardIssuer = value; return this; }
-  cardBrand(value: string): this { this.values.cardBrand = value; return this; }
-  lastFourDigits(value: string): this { this.values.lastFourDigits = value; return this; }
-  paymentIds(value: string[]): this { this.values.paymentIds = value; return this; }
-  build(): PaymentInfo { return new PaymentInfo(this.values); }
+export class PaymentDetailsBuilder extends BuilderBase<PaymentDetailsShape> {
+  paymentMeansCode(value: string): this { this.values.paymentMeansCode = value; return this; }
+  description(value: string): this { this.values.description = value; return this; }
+  cardProvider(value: string): this { this.values.cardProvider = value; return this; }
+  cardLastFour(value: string): this { this.values.cardLastFour = value; return this; }
+  accountIdentifier(value: string): this { this.values.accountIdentifier = value; return this; }
+  accountIdentifierType(value: string): this { this.values.accountIdentifierType = value; return this; }
+  merchantId(value: string): this { this.values.merchantId = value; return this; }
+  paymentTerminalId(value: string): this { this.values.paymentTerminalId = value; return this; }
+  build(): PaymentDetails { return new PaymentDetails(this.values); }
 }
 
-export class VatMetadata {
-  supplierCountry?: string;
-  buyerCountry?: string;
-  crossBorder?: boolean;
-  buyerType?: BuyerType;
-  vatOnReceipt?: boolean;
-  vatRegime?: string;
-  taxesApplied?: boolean;
-
-  constructor(init: Partial<VatMetadataShape> = {}) { Object.assign(this, init); }
-  static builder(): VatMetadataBuilder { return new VatMetadataBuilder(); }
+export class JurisdictionField implements JurisdictionFieldShape {
+  code!: string;
+  value!: string;
+  label?: string;
+  constructor(init: Partial<JurisdictionFieldShape> = {}) { Object.assign(this, init); }
+  static of(code: string, value: string, label?: string): JurisdictionField {
+    return new JurisdictionField({ code, value, label });
+  }
 }
 
-export class VatMetadataBuilder extends BuilderBase<VatMetadataShape> {
-  supplierCountry(value: string): this { this.values.supplierCountry = value; return this; }
-  buyerCountry(value: string): this { this.values.buyerCountry = value; return this; }
-  crossBorder(value: boolean): this { this.values.crossBorder = value; return this; }
-  buyerType(value: BuyerType): this { this.values.buyerType = value; return this; }
-  vatOnReceipt(value: boolean): this { this.values.vatOnReceipt = value; return this; }
-  vatRegime(value: string): this { this.values.vatRegime = value; return this; }
-  taxesApplied(value: boolean): this { this.values.taxesApplied = value; return this; }
-  build(): VatMetadataShape { return { ...this.values }; }
+export class JurisdictionLegalText implements JurisdictionLegalTextShape {
+  code!: string;
+  text!: string;
+  languageCode?: string;
+  displayRole?: JurisdictionLegalTextShape["displayRole"];
+  constructor(init: Partial<JurisdictionLegalTextShape> = {}) { Object.assign(this, init); }
+  static of(code: string, text: string, languageCode?: string): JurisdictionLegalText {
+    return new JurisdictionLegalText({ code, text, languageCode });
+  }
 }
 
-export class ReceiptTemplateRequest {
-  childCompanyId?: string;
-  documentNumber?: string;
+export class FiscalizationData implements FiscalizationDataShape {
+  system!: string;
+  status!: FiscalizationStatus;
+  fiscalDocumentNumber?: string;
+  fiscalDeviceId?: string;
+  cashRegisterId?: string;
+  businessPremiseId?: string;
+  operatorId?: string;
+  transactionId?: string;
+  sequenceNumber?: string;
+  authorityReference?: string;
+  softwareId?: string;
+  verificationCode?: string;
+  signature?: string;
+  signatureAlgorithm?: string;
+  verificationUrl?: string;
+  timestamp?: Date;
+  additionalFields?: JurisdictionFieldShape[];
+
+  constructor(init: Partial<FiscalizationDataShape> = {}) { Object.assign(this, init); }
+  static of(system: string, status: FiscalizationStatus): FiscalizationData {
+    requireValue(system, "system");
+    requireValue(status, "status");
+    return new FiscalizationData({ system, status });
+  }
+  addField(code: string, value: string, label?: string): this {
+    this.additionalFields = [...(this.additionalFields ?? []), JurisdictionField.of(code, value, label)];
+    return this;
+  }
+}
+
+export class JurisdictionalData implements JurisdictionalDataShape {
+  countryCode?: string;
+  regime?: string;
+  regimeVersion?: string;
+  fiscalization?: FiscalizationDataShape;
+  legalTexts?: JurisdictionLegalTextShape[];
+  additionalFields?: JurisdictionFieldShape[];
+  constructor(init: Partial<JurisdictionalDataShape> = {}) { Object.assign(this, init); }
+  static builder(): JurisdictionalDataBuilder { return new JurisdictionalDataBuilder(); }
+}
+
+export class JurisdictionalDataBuilder extends BuilderBase<JurisdictionalDataShape> {
+  private legalTextItems: JurisdictionLegalTextShape[] = [];
+  private fieldItems: JurisdictionFieldShape[] = [];
+  countryCode(value: string): this { this.values.countryCode = value; return this; }
+  regime(value: string): this { this.values.regime = value; return this; }
+  regimeVersion(value: string): this { this.values.regimeVersion = value; return this; }
+  fiscalization(value: FiscalizationDataShape): this { this.values.fiscalization = value; return this; }
+  addLegalText(value: JurisdictionLegalTextShape): this;
+  addLegalText(code: string, text: string, languageCode?: string): this;
+  addLegalText(valueOrCode: JurisdictionLegalTextShape | string, text?: string, languageCode?: string): this {
+    this.legalTextItems.push(typeof valueOrCode === "string"
+      ? JurisdictionLegalText.of(valueOrCode, text!, languageCode)
+      : valueOrCode);
+    return this;
+  }
+  addField(value: JurisdictionFieldShape): this;
+  addField(code: string, value: string, label?: string): this;
+  addField(valueOrCode: JurisdictionFieldShape | string, value?: string, label?: string): this {
+    this.fieldItems.push(typeof valueOrCode === "string"
+      ? JurisdictionField.of(valueOrCode, value!, label)
+      : valueOrCode);
+    return this;
+  }
+  build(): JurisdictionalData {
+    return new JurisdictionalData({
+      ...this.values,
+      legalTexts: optionalArray(this.legalTextItems),
+      additionalFields: optionalArray(this.fieldItems)
+    });
+  }
+}
+
+export class ReceiptPayload implements ReceiptPayloadShape {
+  documentNumber!: string;
+  issueDate!: Date;
+  currency!: string;
+  receiptSubtotal!: number;
+  totalBeforeTax!: number;
+  totalTaxAmount!: number;
+  totalAmount!: number;
+  taxesApplied!: boolean;
+  products!: ProductShape[];
   identifiers?: IdentifierShape[];
-  issueDate?: Date;
-  currency?: string;
-  receiptSubtotal?: number;
-  totalBeforeTax?: number;
-  totalTaxAmount?: number;
-  totalAmount?: number;
-  products?: ProductShape[];
   discounts?: DiscountShape[];
   charges?: ChargeShape[];
   taxes?: TaxShape[];
   transactionDate?: Date;
   purchaseDate?: Date;
   period?: PeriodShape;
-  barcodes?: any[];
-  note?: string;
+  barcodes?: BarcodeShape[];
+  paymentDetails?: PaymentDetailsShape;
+  jurisdictionalData?: ReceiptPayloadShape["jurisdictionalData"];
 
-  constructor(init: Partial<ReceiptTemplateRequestShape> = {}) {
-    Object.assign(this, init);
-  }
-
-  static builder(): ReceiptTemplateRequestBuilder {
-    return new ReceiptTemplateRequestBuilder();
-  }
+  constructor(init: Partial<ReceiptPayloadShape> = {}) { Object.assign(this, init); }
+  static builder(): ReceiptPayloadBuilder { return new ReceiptPayloadBuilder(); }
 }
 
-export class ReceiptTemplateRequestBuilder extends BuilderBase<ReceiptTemplateRequestShape> {
-  childCompanyId(value: string): this { this.values.childCompanyId = value; return this; }
+export class ReceiptPayloadBuilder extends BuilderBase<ReceiptPayloadShape> {
+  private productItems: ProductShape[] = [];
+  private identifierItems: IdentifierShape[] = [];
+  private discountItems: DiscountShape[] = [];
+  private chargeItems: ChargeShape[] = [];
+  private taxItems: TaxShape[] = [];
+  private barcodeItems: BarcodeShape[] = [];
+
   documentNumber(value: string): this { this.values.documentNumber = value; return this; }
-  identifiers(value: IdentifierShape[]): this { this.values.identifiers = value; return this; }
   issueDate(value: Date): this { this.values.issueDate = value; return this; }
   currency(value: string): this { this.values.currency = value; return this; }
-  receiptSubtotal(value: number): this { this.values.receiptSubtotal = value; return this; }
-  totalBeforeTax(value: number): this { this.values.totalBeforeTax = value; return this; }
-  totalTaxAmount(value: number): this { this.values.totalTaxAmount = value; return this; }
-  totalAmount(value: number): this { this.values.totalAmount = value; return this; }
-  products(value: ProductShape[]): this { this.values.products = value; return this; }
-  discounts(value: DiscountShape[]): this { this.values.discounts = value; return this; }
-  charges(value: ChargeShape[]): this { this.values.charges = value; return this; }
-  taxes(value: TaxShape[]): this { this.values.taxes = value; return this; }
+  receiptSubtotal(value: number | string): this { this.values.receiptSubtotal = Number(value); return this; }
+  totalBeforeTax(value: number | string): this { this.values.totalBeforeTax = Number(value); return this; }
+  totalTaxAmount(value: number | string): this { this.values.totalTaxAmount = Number(value); return this; }
+  totalAmount(value: number | string): this { this.values.totalAmount = Number(value); return this; }
+  taxesApplied(value: boolean): this { this.values.taxesApplied = value; return this; }
   transactionDate(value: Date): this { this.values.transactionDate = value; return this; }
   purchaseDate(value: Date): this { this.values.purchaseDate = value; return this; }
   period(value: PeriodShape): this { this.values.period = value; return this; }
-  barcodes(value: any[]): this { this.values.barcodes = value; return this; }
-  note(value: string): this { this.values.note = value; return this; }
-  addProduct(product: ProductShape): this {
-    this.values.products = [...(this.values.products ?? []), product];
-    return this;
+  paymentDetails(value: PaymentDetailsShape): this { this.values.paymentDetails = value; return this; }
+  jurisdictionalData(value: NonNullable<ReceiptPayloadShape["jurisdictionalData"]>): this { this.values.jurisdictionalData = value; return this; }
+  products(values: ProductShape[]): this { this.productItems = [...values]; return this; }
+  addProduct(value: ProductShape): this { this.productItems.push(value); return this; }
+  identifiers(values: IdentifierShape[]): this { this.identifierItems = [...values]; return this; }
+  addIdentifier(value: IdentifierShape): this { this.identifierItems.push(value); return this; }
+  discounts(values: DiscountShape[]): this { this.discountItems = [...values]; return this; }
+  addDiscount(value: DiscountShape): this { this.discountItems.push(value); return this; }
+  charges(values: ChargeShape[]): this { this.chargeItems = [...values]; return this; }
+  addCharge(value: ChargeShape): this { this.chargeItems.push(value); return this; }
+  taxes(values: TaxShape[]): this { this.taxItems = [...values]; return this; }
+  addTax(value: TaxShape): this { this.taxItems.push(value); return this; }
+  barcodes(values: BarcodeShape[]): this { this.barcodeItems = [...values]; return this; }
+  addBarcode(value: BarcodeShape): this { this.barcodeItems.push(value); return this; }
+  addQrCode(data: string, label?: string): this { this.barcodeItems.push(Barcode.qrCode(data, label)); return this; }
+  build(): ReceiptPayload {
+    for (const field of [
+      "documentNumber", "issueDate", "currency", "receiptSubtotal", "totalBeforeTax",
+      "totalTaxAmount", "totalAmount", "taxesApplied"
+    ] as const) requireValue(this.values[field], field);
+    if (!this.productItems.length) throw new TypeError("products must contain at least one item");
+    return new ReceiptPayload({
+      ...this.values,
+      products: this.productItems,
+      identifiers: optionalArray(this.identifierItems),
+      discounts: optionalArray(this.discountItems),
+      charges: optionalArray(this.chargeItems),
+      taxes: optionalArray(this.taxItems),
+      barcodes: optionalArray(this.barcodeItems)
+    });
   }
-  addTax(tax: TaxShape): this {
-    this.values.taxes = [...(this.values.taxes ?? []), tax];
-    return this;
-  }
-  addDiscount(discount: DiscountShape): this {
-    this.values.discounts = [...(this.values.discounts ?? []), discount];
-    return this;
-  }
-  addCharge(charge: ChargeShape): this {
-    this.values.charges = [...(this.values.charges ?? []), charge];
-    return this;
-  }
-  build(): ReceiptTemplateRequest { return new ReceiptTemplateRequest(this.values); }
 }
 
-export class ReceiptTemplateResponse implements Partial<ReceiptTemplateResponseShape> {
-  ubl?: string;
-  cheqi?: any;
-  vatMetadata?: any;
-
-  constructor(init: Partial<ReceiptTemplateResponseShape> = {}) {
-    Object.assign(this, init);
+export class RefundBankAccount implements RefundBankAccountShape {
+  iban!: string;
+  bic?: string;
+  accountHolder!: string;
+  constructor(init?: Partial<RefundBankAccountShape>);
+  constructor(iban: string, bic: string | undefined, accountHolder: string);
+  constructor(
+    initOrIban: Partial<RefundBankAccountShape> | string = {},
+    bic?: string,
+    accountHolder?: string
+  ) {
+    Object.assign(this, typeof initOrIban === "string"
+      ? { iban: initOrIban, bic, accountHolder }
+      : initOrIban);
   }
 }
 
-export class CompanyAddress implements Partial<AddressDTO> {
-  streetName?: string;
-  additionalStreetName?: string;
-  addressLine?: string;
-  region?: string;
-  cityName?: string;
-  postalZone?: string;
-  countryIsoCode?: string;
-
-  constructor(init: Partial<AddressDTO> = {}) { Object.assign(this, init); }
-  static builder(): CompanyAddressBuilder { return new CompanyAddressBuilder(); }
+export class ReturnLineItem implements ReturnLineItemShape {
+  productId!: string;
+  quantity!: number;
+  reasonCode!: ReturnReasonCode;
+  reasonDescription?: string;
+  constructor(init?: Partial<ReturnLineItemShape>);
+  constructor(productId: string, quantity: number, reasonCode: ReturnReasonCode, reasonDescription?: string);
+  constructor(
+    initOrProductId: Partial<ReturnLineItemShape> | string = {},
+    quantity?: number,
+    reasonCode?: ReturnReasonCode,
+    reasonDescription?: string
+  ) {
+    Object.assign(this, typeof initOrProductId === "string"
+      ? { productId: initOrProductId, quantity, reasonCode, reasonDescription }
+      : initOrProductId);
+  }
 }
 
-export class CompanyAddressBuilder extends BuilderBase<AddressDTO> {
-  streetName(value: string): this { this.values.streetName = value; return this; }
-  additionalStreetName(value: string): this { this.values.additionalStreetName = value; return this; }
-  addressLine(value: string): this { this.values.addressLine = value; return this; }
-  region(value: string): this { this.values.region = value; return this; }
-  cityName(value: string): this { this.values.cityName = value; return this; }
-  postalZone(value: string): this { this.values.postalZone = value; return this; }
-  countryIsoCode(value: string): this { this.values.countryIsoCode = value; return this; }
-  build(): CompanyAddress { return new CompanyAddress(this.values); }
+export class CreditNoteInitiationRequest implements CreditNoteInitiationRequestShape {
+  cheqiReceiptId!: string;
+  receiptId!: string;
+  customerNote?: string;
+  lineItems!: ReturnLineItemShape[];
+  refundPreference!: RefundPreference;
+  refundBankAccount?: RefundBankAccountShape;
+  constructor(init: Partial<CreditNoteInitiationRequestShape> = {}) { Object.assign(this, init); }
+  static builder(): CreditNoteInitiationRequestBuilder { return new CreditNoteInitiationRequestBuilder(); }
 }
 
-export class Company {
-  companyName?: string;
-  companyLegalName?: string;
-  chamberOfCommerceNumber?: string;
-  taxNumber?: string;
-  companyEmail?: string;
-  phoneNumber?: string;
-  website?: string;
-  returnDays?: number;
-  companyReceiptText?: string;
-  companyLogoUrl?: string;
-  address?: CompanyAddress;
+export class CreditNoteInitiationRequestBuilder extends BuilderBase<CreditNoteInitiationRequestShape> {
+  cheqiReceiptId(value: string): this { this.values.cheqiReceiptId = value; return this; }
+  receiptId(value: string): this { this.values.receiptId = value; return this; }
+  customerNote(value: string): this { this.values.customerNote = value; return this; }
+  lineItems(value: ReturnLineItemShape[]): this { this.values.lineItems = [...value]; return this; }
+  refundPreference(value: RefundPreference): this { this.values.refundPreference = value; return this; }
+  refundBankAccount(value: RefundBankAccountShape): this { this.values.refundBankAccount = value; return this; }
+  build(): CreditNoteInitiationRequest {
+    const request = new CreditNoteInitiationRequest(this.values);
+    validateInitiationRequest(request);
+    return request;
+  }
+}
 
-  constructor(init: Partial<Company> = {}) { Object.assign(this, init); }
-  static builder(): CompanyBuilder { return new CompanyBuilder(); }
+function optionalArray<T>(values: T[]): T[] | undefined { return values.length ? values : undefined; }
 
-  toCompanyDTO(): CompanyDTO {
-    // The provisioning API models tax/registration numbers as company identifiers.
-    const identifiers: NonNullable<CompanyDTO["identifiers"]> = new Set();
-    if (this.taxNumber) {
-      identifiers.add({ identifierType: "TAX", value: this.taxNumber });
+function requireValue(value: unknown, name: string): void {
+  if (value == null || (typeof value === "string" && !value.trim())) {
+    throw new TypeError(`${name} is required`);
+  }
+}
+
+function validateInitiationRequest(request: CreditNoteInitiationRequestShape): void {
+  requireValue(request.cheqiReceiptId, "cheqiReceiptId");
+  requireValue(request.receiptId, "receiptId");
+  if (request.customerNote != null && request.customerNote.length > 1000) {
+    throw new TypeError("customerNote must be at most 1000 characters");
+  }
+  if (!request.lineItems?.length) throw new TypeError("At least one return line item is required");
+  for (const lineItem of request.lineItems) {
+    requireValue(lineItem.productId, "lineItems.productId");
+    if (lineItem.productId.length > 255) throw new TypeError("lineItems.productId must be at most 255 characters");
+    if (lineItem.quantity == null || lineItem.quantity <= 0) throw new TypeError("lineItems.quantity must be greater than zero");
+    requireValue(lineItem.reasonCode, "lineItems.reasonCode");
+    if (lineItem.reasonDescription != null && lineItem.reasonDescription.length > 1000) {
+      throw new TypeError("lineItems.reasonDescription must be at most 1000 characters");
     }
-    if (this.chamberOfCommerceNumber) {
-      identifiers.add({ identifierType: "COMPANY_REGISTRATION", value: this.chamberOfCommerceNumber });
-    }
-
-    return {
-      companyName: this.companyName ?? "",
-      companyLegalName: this.companyLegalName ?? "",
-      identifiers: identifiers.size > 0 ? identifiers : undefined,
-      companyEmail: this.companyEmail ?? "",
-      address: {
-        streetName: this.address?.streetName ?? "",
-        cityName: this.address?.cityName ?? "",
-        postalZone: this.address?.postalZone ?? "",
-        countryIsoCode: this.address?.countryIsoCode ?? "",
-        additionalStreetName: this.address?.additionalStreetName,
-        addressLine: this.address?.addressLine,
-        region: this.address?.region,
-      },
-      phoneNumber: this.phoneNumber,
-      website: this.website,
-      returnDays: this.returnDays,
-      companyReceiptText: this.companyReceiptText,
-    };
   }
-}
-
-export class CompanyBuilder extends BuilderBase<Company> {
-  companyName(value: string): this { this.values.companyName = value; return this; }
-  companyLegalName(value: string): this { this.values.companyLegalName = value; return this; }
-  chamberOfCommerceNumber(value: string): this { this.values.chamberOfCommerceNumber = value; return this; }
-  taxNumber(value: string): this { this.values.taxNumber = value; return this; }
-  companyEmail(value: string): this { this.values.companyEmail = value; return this; }
-  phoneNumber(value: string): this { this.values.phoneNumber = value; return this; }
-  website(value: string): this { this.values.website = value; return this; }
-  returnDays(value: number): this { this.values.returnDays = value; return this; }
-  companyReceiptText(value: string): this { this.values.companyReceiptText = value; return this; }
-  companyLogoUrl(value: string): this { this.values.companyLogoUrl = value; return this; }
-  address(value: CompanyAddress): this { this.values.address = value; return this; }
-  build(): Company { return new Company(this.values); }
-}
-
-export class CreateStoreRequest {
-  storeName?: string;
-  storeCode?: string;
-  address?: CompanyAddress;
-  phoneNumber?: string;
-  email?: string;
-  openingHours?: string;
-
-  constructor(init: Partial<CreateStoreRequest> = {}) { Object.assign(this, init); }
-  static builder(): CreateStoreRequestBuilder { return new CreateStoreRequestBuilder(); }
-
-  toCreateStoreRequestDTO(): CreateStoreRequestShape {
-    return {
-      storeName: this.storeName ?? "",
-      storeCode: this.storeCode ?? "",
-      addressDto: {
-        streetName: this.address?.streetName ?? "",
-        cityName: this.address?.cityName ?? "",
-        postalZone: this.address?.postalZone ?? "",
-        countryIsoCode: this.address?.countryIsoCode ?? "",
-        additionalStreetName: this.address?.additionalStreetName,
-        addressLine: this.address?.addressLine,
-        region: this.address?.region,
-      },
-      phoneNumber: this.phoneNumber,
-      email: this.email,
-      openingHours: this.openingHours,
-    };
+  requireValue(request.refundPreference, "refundPreference");
+  if (request.refundPreference === "BANK_TRANSFER") {
+    if (!request.refundBankAccount) throw new TypeError("refundBankAccount is required for BANK_TRANSFER");
+    requireValue(request.refundBankAccount.iban, "refundBankAccount.iban");
+    requireValue(request.refundBankAccount.accountHolder, "refundBankAccount.accountHolder");
+  } else if (request.refundBankAccount) {
+    throw new TypeError("refundBankAccount is only allowed for BANK_TRANSFER");
   }
-}
-
-export class CreateStoreRequestBuilder extends BuilderBase<CreateStoreRequest> {
-  storeName(value: string): this { this.values.storeName = value; return this; }
-  storeCode(value: string): this { this.values.storeCode = value; return this; }
-  address(value: CompanyAddress): this { this.values.address = value; return this; }
-  phoneNumber(value: string): this { this.values.phoneNumber = value; return this; }
-  email(value: string): this { this.values.email = value; return this; }
-  openingHours(value: string): this { this.values.openingHours = value; return this; }
-  build(): CreateStoreRequest { return new CreateStoreRequest(this.values); }
 }

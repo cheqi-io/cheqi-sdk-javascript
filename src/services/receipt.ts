@@ -1,6 +1,6 @@
-import { CheqiSDKError, ErrorCodes, ReceiptProcessingError } from "../errors.js";
+import { randomUUID } from "node:crypto";
+import { CheqiApiError, CheqiSDKError, ErrorCodes } from "../errors.js";
 import {
-  buildDownloadEnvelope,
   encryptDownloadEnvelope,
   generateDownloadLink,
   type DownloadLink
@@ -8,395 +8,306 @@ import {
 import { ReceiptResult } from "../models.js";
 import type {
   CheqiApiClient,
-  ClientReceiptDownloadRequest,
-  ClientReceiptDownloadResponse,
-  EncryptedReceiptRequest,
+  EncryptedReceiptEnvelope,
+  EncryptedReceiptPayload,
   IdentificationDetails,
   MatchedRecipient,
-  NotificationDisplayCode,
   ReceiptEnvelope,
-  ReceiptFormat,
-  ReceiptTemplateGenerationRequest,
-  ReceiptTemplateRequest,
-  ReceiptTemplateResponse,
+  ReceiptPayload,
+  ReceiptSubmissionResponse,
   RecipientResolutionResponse
 } from "../types.js";
-import { isValidEmail, serializeJson, sha256Hex } from "../utils.js";
+import type { RecipientResolutionResponseDeliveryRouteTypeEnum } from "../models/generated/RecipientResolutionResponse.js";
+import { serializeJson } from "../utils.js";
+import { VerificationService } from "./verification.js";
 import { EncryptionService } from "./encryption.js";
 import { MatchingService } from "./matching.js";
 
-type ReceiptTemplateRequestWithVatContext = ReceiptTemplateRequest & {
-  buyerCountryCode?: string;
-  buyerType?: ReceiptTemplateGenerationRequest["buyerType"];
-  taxesApplied?: boolean;
-};
+const PAYLOAD_DOCUMENT_VERSION = "receipt-payload-v1";
+const UUID_PATTERN = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 
-function uniqueFormats(recipients: MatchedRecipient[] = []): ReceiptFormat[] {
-  const seen = new Set<ReceiptFormat>();
-  const formats: ReceiptFormat[] = [];
-
-  for (const recipient of recipients) {
-    for (const format of recipient.acceptedFormats ?? []) {
-      if (!seen.has(format)) {
-        seen.add(format);
-        formats.push(format);
-      }
-    }
-  }
-
-  return formats;
-}
-
-function routeFound(matchResponse: RecipientResolutionResponse): boolean {
-  return Boolean(matchResponse.routeFound ?? (matchResponse as { customerFound?: boolean }).customerFound);
-}
-
-function matchedRecipients(matchResponse: RecipientResolutionResponse): MatchedRecipient[] {
-  return matchResponse.recipients ?? [];
-}
-
+/** Issues definitive receipt payloads through Cheqi's zero-knowledge device flow. */
 export class ReceiptService {
+  private readonly verificationService = new VerificationService();
+
   constructor(
     private readonly apiClient: Pick<
       CheqiApiClient,
-      "generateReceiptTemplate" | "sendEncryptedReceipts" | "sendReceiptViaEmail" | "uploadClientEncryptedReceipt"
+      "submitEncryptedReceipt" | "uploadEncryptedDownloadReceipt"
     >,
     private readonly encryptionService: EncryptionService,
     private readonly matchingService: MatchingService,
-    private readonly receiptDownloadBaseUrl: string | null = null
-  ) {}
+    private readonly receiptDownloadBaseUrl: string | null = "https://receipt.cheqi.io"
+  ) {
+    if (!apiClient) throw new TypeError("apiClient cannot be null");
+    if (!encryptionService) throw new TypeError("encryptionService cannot be null");
+    if (!matchingService) throw new TypeError("matchingService cannot be null");
+  }
 
-  async processCompleteReceipt(
+  /**
+   * Resolves a route, then encrypts the exact supplied payload independently for
+   * every matched owner device. With three arguments, a UUID is treated as a
+   * storeId and any other non-empty string as an access token.
+   */
+  async issueReceipt(
     identificationDetails: IdentificationDetails,
-    receiptRequest: ReceiptTemplateRequest,
-    accessToken: string | null = null,
-    notificationDisplayCode: NotificationDisplayCode | null = null
+    receiptPayload: ReceiptPayload,
+    storeIdOrAccessToken: string | null = null,
+    accessToken?: string | null
   ): Promise<ReceiptResult> {
-    this.validateProcessInputs(identificationDetails, receiptRequest);
+    requireNonNull(identificationDetails, "identificationDetails");
+    requireNonNull(receiptPayload, "receiptPayload");
+    const { storeId, token } = resolveReceiptArguments(storeIdOrAccessToken, accessToken);
+    validateOptionalAccessToken(token);
 
     try {
-      let matchResponse: RecipientResolutionResponse;
-      try {
-        matchResponse = await this.matchingService.matchCustomer(identificationDetails, accessToken);
-      } catch (error) {
-        if (isDeferredFailure(error)) {
-          return ReceiptResult.pendingDownloadTemplate(this.createDownloadLink().url, errorMessage(error));
-        }
-        throw error;
-      }
-      const recipientEmail = identificationDetails.recipientEmail;
+      const resolution = await this.matchingService.matchCustomer(identificationDetails, token);
+      validateResolvedRoute(resolution);
+      const route = resolveRoute(resolution);
 
-      if (routeFound(matchResponse) && matchResponse.deliveryRouteType == null) {
-        throw new CheqiSDKError(
-          "Matching response did not include deliveryRouteType; refusing legacy fallback-compatible submission",
-          { errorCode: ErrorCodes.INVALID_RESPONSE }
+      if (route === "DOWNLOAD_FALLBACK") {
+        if (!identificationDetails.paymentType) {
+          return ReceiptResult.downloadEnvelopeRequiredResult(
+            resolution.matchId!,
+            resolution.expiresAt ?? null
+          );
+        }
+        return this.deliverClientEncryptedDownload(
+          resolution.matchId!,
+          identificationDetails,
+          receiptPayload,
+          token
+        );
+      }
+      if (route === "EMAIL_FALLBACK") {
+        return ReceiptResult.emailReceiptRequiredResult(
+          resolution.matchId!,
+          resolution.expiresAt ?? null
         );
       }
 
-      if (!routeFound(matchResponse) && !recipientEmail) {
-        return ReceiptResult.customerNotFound();
-      }
-
-      const templateGenerationRequest = {
-        receiptTemplateRequest: enrichWithVatContext(receiptRequest, matchResponse),
-        formats: uniqueFormats(matchedRecipients(matchResponse)),
-        buyerCountryCode: getRequestBuyerCountryCode(receiptRequest) ?? matchResponse.buyerCountryCode,
-        buyerType: getRequestBuyerType(receiptRequest) ?? matchResponse.buyerType,
-        taxesApplied: resolveTaxesApplied(receiptRequest)
-      } as unknown as ReceiptTemplateGenerationRequest;
-
-      let templateResponse: ReceiptTemplateResponse;
-      try {
-        templateResponse = await this.generateReceiptTemplate(templateGenerationRequest, accessToken);
-      } catch (error) {
-        if (isDeferredFailure(error)) {
-          return ReceiptResult.pendingDownloadTemplate(this.createDownloadLink().url, errorMessage(error));
-        }
-        throw error;
-      }
-
-      if (routeFound(matchResponse)) {
-        if (matchResponse.deliveryRouteType === "DOWNLOAD_FALLBACK") {
-          return this.deliverClientEncryptedDownload(this.createDownloadLink(), templateResponse, accessToken);
-        }
-        const encryptedReceipts = this.buildEncryptedReceipts(
-          matchResponse,
-          templateResponse,
-          notificationDisplayCode
-        );
-        const templateContent = templateResponse.cheqi
-          ? serializeJson(templateResponse.cheqi)
-          : (templateResponse.ublPurchaseReceipt ?? "");
-        const templateHash = sha256Hex(templateContent);
-        const createdResponse = await this.sendEncryptedReceipts(
-          encryptedReceipts,
-          templateHash,
-          matchResponse,
-          accessToken
-        );
-        if (createdResponse.downloadUrl != null) {
-          return ReceiptResult.deliveredViaDownload(createdResponse, templateContent);
-        }
-        return ReceiptResult.deliveredToApp(createdResponse, templateContent);
-      }
-
-      return this.sendReceiptViaEmail(recipientEmail ?? "", (templateResponse.cheqi ?? {}) as Record<string, unknown>, accessToken);
+      validateDeviceRecipients(resolution);
+      const plaintextJson = serializeJson(receiptPayload);
+      const envelope: EncryptedReceiptEnvelope = {
+        matchId: resolution.matchId!,
+        storeId: storeId ?? undefined,
+        deviceDeliveries: this.encryptForDevices(plaintextJson, resolution.recipients!)
+      };
+      const response = await this.apiClient.submitEncryptedReceipt(envelope, token);
+      return ReceiptResult.accepted(response, route);
     } catch (error) {
-      if (error instanceof CheqiSDKError) {
-        throw error;
+      if (error instanceof CheqiApiError) throw wrapApiError("Receipt submission failed", error);
+      if (error instanceof CheqiSDKError) throw error;
+      throw new CheqiSDKError(`Receipt processing failed: ${errorMessage(error)}`, { cause: error });
+    }
+  }
+
+  /** Creates a client-encrypted download receipt without attempting matching. */
+  async issueDownloadReceipt(
+    identificationDetails: IdentificationDetails,
+    receiptPayload: ReceiptPayload,
+    accessToken: string | null = null
+  ): Promise<ReceiptResult> {
+    requireNonNull(identificationDetails, "identificationDetails");
+    requireNonNull(receiptPayload, "receiptPayload");
+    if (!identificationDetails.paymentType) {
+      throw validationError("identificationDetails.paymentType is required");
+    }
+    validateOptionalAccessToken(accessToken);
+    try {
+      return await this.deliverClientEncryptedDownload(
+        null,
+        identificationDetails,
+        receiptPayload,
+        accessToken
+      );
+    } catch (error) {
+      if (error instanceof CheqiApiError) {
+        throw wrapApiError("Encrypted download receipt submission failed", error);
       }
-      throw new ReceiptProcessingError(`Receipt processing failed: ${String((error as Error).message)}`, {
+      if (error instanceof CheqiSDKError) throw error;
+      throw new CheqiSDKError(`Download receipt processing failed: ${errorMessage(error)}`, {
         cause: error
       });
     }
   }
 
-  generateReceiptTemplate(
-    request: ReceiptTemplateGenerationRequest,
+  async submitEncryptedReceipt(
+    envelope: EncryptedReceiptEnvelope,
     accessToken: string | null = null
-  ): Promise<ReceiptTemplateResponse> {
-    if (!request) {
-      throw new CheqiSDKError("Receipt template request cannot be null", {
-        errorCode: ErrorCodes.VALIDATION_ERROR,
-        httpStatusCode: 400
+  ): Promise<ReceiptSubmissionResponse> {
+    requireNonNull(envelope, "envelope");
+    validateOptionalAccessToken(accessToken);
+    try {
+      return await this.apiClient.submitEncryptedReceipt(envelope, accessToken);
+    } catch (error) {
+      if (error instanceof CheqiApiError) {
+        throw wrapApiError("Encrypted receipt submission failed", error);
+      }
+      if (error instanceof CheqiSDKError) throw error;
+      throw new CheqiSDKError(`Encrypted receipt submission failed: ${errorMessage(error)}`, {
+        cause: error
       });
     }
-    return this.apiClient.generateReceiptTemplate(request, accessToken);
   }
 
-  createEncryptedReceipts(
-    purchaseReceipt: string,
-    recipient: MatchedRecipient,
-    notificationDisplayCode: NotificationDisplayCode | null = null
-  ): EncryptedReceiptRequest {
-    if (!purchaseReceipt.trim()) {
-      throw new CheqiSDKError("Purchase receipt cannot be null or empty", {
-        errorCode: ErrorCodes.VALIDATION_ERROR,
-        httpStatusCode: 400
-      });
+  /** Completes a fallback after the caller generated the final receipt envelope locally. */
+  async completeDownloadFallback(
+    fallbackResult: ReceiptResult,
+    receiptEnvelope: ReceiptEnvelope,
+    templateHash: string | null = null,
+    accessToken: string | null = null
+  ): Promise<ReceiptResult> {
+    requireNonNull(fallbackResult, "fallbackResult");
+    requireNonNull(receiptEnvelope, "receiptEnvelope");
+    if (
+      !fallbackResult.isDownloadEnvelopeRequired() ||
+      fallbackResult.getDeliveryRouteType() !== "DOWNLOAD_FALLBACK"
+    ) {
+      throw validationError("fallbackResult does not require a download receipt envelope");
     }
-    if (!recipient) {
-      throw new CheqiSDKError("Recipient cannot be null", {
-        errorCode: ErrorCodes.VALIDATION_ERROR,
-        httpStatusCode: 400
-      });
-    }
+    validateOptionalAccessToken(accessToken);
+    const baseUrl = requireDownloadBaseUrl(this.receiptDownloadBaseUrl);
 
-    return {
-      ...this.encryptionService.encryptReceiptForRecipient(purchaseReceipt, recipient),
-      notificationDisplayCode: notificationDisplayCode ?? undefined
-    };
+    try {
+      const link = generateDownloadLink(baseUrl);
+      const ciphertext = await encryptDownloadEnvelope(receiptEnvelope, link.contentKey);
+      const response = await this.apiClient.uploadEncryptedDownloadReceipt(
+        {
+          downloadId: link.downloadId,
+          ciphertext,
+          templateHash
+        },
+        accessToken
+      );
+      return ReceiptResult.downloadAccepted(fallbackResult.getMatchId(), response, link.url);
+    } catch (error) {
+      if (error instanceof CheqiApiError) {
+        throw wrapApiError("Encrypted download receipt submission failed", error);
+      }
+      if (error instanceof CheqiSDKError) throw error;
+      throw new CheqiSDKError(`Download fallback processing failed: ${errorMessage(error)}`, {
+        cause: error
+      });
+    }
   }
 
-  sendEncryptedReceipts(
-    encryptedReceipts: EncryptedReceiptRequest[],
-    templateHash: string,
-    matchResponse: RecipientResolutionResponse,
-    accessToken: string | null = null
-  ): Promise<Record<string, unknown>> {
-    if (encryptedReceipts.length === 0) {
-      throw new CheqiSDKError("Encrypted receipts cannot be null or empty", {
-        errorCode: ErrorCodes.VALIDATION_ERROR,
-        httpStatusCode: 400
-      });
-    }
-    if (!templateHash.trim()) {
-      throw new CheqiSDKError("Template hash cannot be null or empty", {
-        errorCode: ErrorCodes.VALIDATION_ERROR,
-        httpStatusCode: 400
-      });
-    }
-    if (!routeFound(matchResponse) || !matchResponse.matchId) {
-      throw new CheqiSDKError("Cannot send receipts: customer was not found during matching", {
-        errorCode: ErrorCodes.CUSTOMER_NOT_FOUND,
-        httpStatusCode: 400
-      });
-    }
-
-    return this.apiClient.sendEncryptedReceipts(
-      matchResponse.matchId,
-      encryptedReceipts,
-      templateHash,
-      accessToken
+  private encryptForDevices(
+    plaintextJson: string,
+    recipients: MatchedRecipient[]
+  ): EncryptedReceiptPayload[] {
+    return recipients.map((recipient) =>
+      this.encryptionService.encryptReceiptForRecipient(plaintextJson, recipient)
     );
   }
 
-  async sendReceiptViaEmail(
-    customerEmail: string,
-    cheqiReceipt: Record<string, unknown>,
-    accessToken: string | null = null
-  ): Promise<ReceiptResult> {
-    if (!isValidEmail(customerEmail)) {
-      throw new CheqiSDKError("Valid customer email is required", {
-        errorCode: ErrorCodes.VALIDATION_ERROR,
-        httpStatusCode: 400
-      });
-    }
-    await this.apiClient.sendReceiptViaEmail(customerEmail, cheqiReceipt, accessToken);
-    return ReceiptResult.deliveredViaEmail(customerEmail);
-  }
-
-  /**
-   * Uploads a client-encrypted receipt for a download link generated locally with
-   * `generateDownloadLink` and encrypted with `encryptDownloadEnvelope` (Download Link
-   * Contract v1). The QR was rendered before this call; the upload may happen much later.
-   *
-   * Idempotent on the exact ciphertext bytes: resend the SAME persisted blob on retries
-   * (200 and 201 are both success). A 409 means different bytes already exist under this
-   * download id — a bug in the integration; do not regenerate the id or retry.
-   */
-  async uploadClientEncryptedReceipt(
-    request: ClientReceiptDownloadRequest,
-    accessToken: string | null = null
-  ): Promise<ClientReceiptDownloadResponse> {
-    if (!request?.downloadId || !/^[A-Za-z0-9_-]{22,64}$/.test(request.downloadId)) {
-      throw new CheqiSDKError("downloadId must be 22-64 base64url characters", {
-        errorCode: ErrorCodes.VALIDATION_ERROR,
-        httpStatusCode: 400
-      });
-    }
-    if (!request.ciphertext) {
-      throw new CheqiSDKError("ciphertext is required", {
-        errorCode: ErrorCodes.VALIDATION_ERROR,
-        httpStatusCode: 400
-      });
-    }
-    return this.apiClient.uploadClientEncryptedReceipt(request, accessToken);
-  }
-
   private async deliverClientEncryptedDownload(
-    link: DownloadLink,
-    templateResponse: ReceiptTemplateResponse,
+    matchId: string | null,
+    identificationDetails: IdentificationDetails,
+    receiptPayload: ReceiptPayload,
     accessToken: string | null
   ): Promise<ReceiptResult> {
-    const envelope = buildDownloadEnvelope(templateResponse);
-    const canonicalJson = serializeJson(templateResponse.cheqi ?? {});
-    const templateHash = sha256Hex(canonicalJson);
+    const link = generateDownloadLink(requireDownloadBaseUrl(this.receiptDownloadBaseUrl));
+    const cheqiDocument = this.buildDownloadCheqiDocument(receiptPayload, identificationDetails);
+    const envelope: ReceiptEnvelope = {
+      cheqiReceiptId: link.downloadId,
+      envelopeVersion: 1,
+      receiptGeneratorVersion: PAYLOAD_DOCUMENT_VERSION,
+      receiptUuid: randomUUID(),
+      documents: {
+        CHEQI: { mediaType: "application/json", content: cheqiDocument }
+      }
+    };
     const ciphertext = await encryptDownloadEnvelope(envelope, link.contentKey);
-    try {
-      const response = await this.uploadClientEncryptedReceipt(
-        { downloadId: link.downloadId, ciphertext, templateHash },
-        accessToken
-      );
-      return ReceiptResult.deliveredViaClientDownload(response, templateHash, canonicalJson, link.url);
-    } catch (error) {
-      if (isDeferredFailure(error)) {
-        return ReceiptResult.pendingDownloadUpload(
-          link.url,
-          ciphertext,
-          templateHash,
-          canonicalJson,
-          errorMessage(error)
-        );
-      }
-      throw error;
-    }
+    const templateHash = this.verificationService.calculateCheqiReceiptHash(cheqiDocument);
+    const response = await this.apiClient.uploadEncryptedDownloadReceipt(
+      { downloadId: link.downloadId, ciphertext, templateHash },
+      accessToken
+    );
+    return ReceiptResult.downloadAccepted(matchId, response, link.url);
   }
 
-  private createDownloadLink(): DownloadLink {
-    if (!this.receiptDownloadBaseUrl) {
-      throw new CheqiSDKError(
-        "Receipt download base URL is required for automatic encrypted fallback; configure a standard Environment or receiptDownloadBaseUrl",
-        { errorCode: ErrorCodes.CONFIGURATION_ERROR }
-      );
-    }
-    return generateDownloadLink(this.receiptDownloadBaseUrl);
-  }
-
-  private buildEncryptedReceipts(
-    matchResponse: RecipientResolutionResponse,
-    templateResponse: ReceiptTemplateResponse,
-    notificationDisplayCode: NotificationDisplayCode | null
-  ): EncryptedReceiptRequest[] {
-    const encryptedReceipts: EncryptedReceiptRequest[] = [];
-
-    for (const recipient of matchedRecipients(matchResponse)) {
-      const acceptedFormats = recipient.acceptedFormats ?? [];
-      const envelope: ReceiptEnvelope = {};
-
-      if (acceptedFormats.includes("CHEQI" as any) && templateResponse.cheqi) {
-        envelope.cheqi = templateResponse.cheqi;
-      }
-      if (acceptedFormats.includes("UBL_PURCHASE_RECEIPT" as any) && templateResponse.ublPurchaseReceipt) {
-        envelope.ublPurchaseReceipt = templateResponse.ublPurchaseReceipt;
-      }
-      if (acceptedFormats.includes("UBL_INVOICE" as any) && templateResponse.ublInvoice) {
-        envelope.ublInvoice = templateResponse.ublInvoice;
-      }
-      if (templateResponse.vatMetadata) {
-        envelope.vatMetaData = templateResponse.vatMetadata;
-      }
-
-      encryptedReceipts.push(
-        this.createEncryptedReceipts(serializeJson(envelope), recipient, notificationDisplayCode)
-      );
-    }
-
-    return encryptedReceipts;
-  }
-
-  private validateProcessInputs(
-    identificationDetails: IdentificationDetails | null | undefined,
-    receiptRequest: ReceiptTemplateRequest | null | undefined
-  ): void {
-    if (!identificationDetails) {
-      throw new CheqiSDKError("Identification details cannot be null", {
-        errorCode: ErrorCodes.VALIDATION_ERROR,
-        httpStatusCode: 400
-      });
-    }
-    if (!receiptRequest) {
-      throw new CheqiSDKError("Receipt template request cannot be null", {
-        errorCode: ErrorCodes.VALIDATION_ERROR,
-        httpStatusCode: 400
-      });
-    }
+  /** Builds the browser-download CHEQI JSON without modifying the supplied payload values. */
+  buildDownloadCheqiDocument(
+    receiptPayload: ReceiptPayload,
+    identificationDetails: IdentificationDetails
+  ): string {
+    return serializeJson({ ...receiptPayload, identificationDetails });
   }
 }
 
-function isDeferredFailure(error: unknown): boolean {
-  let current: unknown = error;
-  while (current instanceof Error) {
-    if (current instanceof CheqiSDKError) {
-      return current.isNetworkError() || current.httpStatusCode === 408 || current.httpStatusCode === 429 ||
-        current.httpStatusCode >= 500;
-    }
-    current = current.cause;
+function validateResolvedRoute(resolution: RecipientResolutionResponse): void {
+  if (!resolution?.routeFound) {
+    throw new CheqiSDKError("No Cheqi owner-device route was found", {
+      errorCode: ErrorCodes.CUSTOMER_NOT_FOUND,
+      httpStatusCode: 404
+    });
   }
-  return false;
+  if (!resolution.matchId?.trim()) {
+    throw validationError("Recipient resolution did not include matchId");
+  }
+}
+
+function resolveRoute(
+  resolution: RecipientResolutionResponse
+): RecipientResolutionResponseDeliveryRouteTypeEnum {
+  if (resolution.deliveryRouteType) return resolution.deliveryRouteType;
+  if (resolution.recipients?.length) return "DIGITAL";
+  throw validationError("Recipient resolution did not include deliveryRouteType");
+}
+
+function validateDeviceRecipients(resolution: RecipientResolutionResponse): void {
+  if (!resolution.recipients?.length) {
+    throw validationError("Recipient resolution did not include owner devices");
+  }
+}
+
+function resolveReceiptArguments(
+  storeIdOrAccessToken: string | null,
+  explicitAccessToken: string | null | undefined
+): { storeId: string | null; token: string | null } {
+  if (explicitAccessToken !== undefined) {
+    return { storeId: storeIdOrAccessToken, token: explicitAccessToken };
+  }
+  if (storeIdOrAccessToken && !UUID_PATTERN.test(storeIdOrAccessToken)) {
+    return { storeId: null, token: storeIdOrAccessToken };
+  }
+  return { storeId: storeIdOrAccessToken, token: null };
+}
+
+function validateOptionalAccessToken(accessToken: string | null): void {
+  if (accessToken != null && !accessToken.trim()) {
+    throw validationError("accessToken cannot be empty");
+  }
+}
+
+function requireDownloadBaseUrl(value: string | null): string {
+  if (!value?.trim()) {
+    throw validationError("A receipt download base URL is required to complete download fallback");
+  }
+  return value;
+}
+
+function requireNonNull<T>(value: T | null | undefined, name: string): asserts value is T {
+  if (value == null) throw validationError(`${name} cannot be null`);
+}
+
+function validationError(message: string): CheqiSDKError {
+  return new CheqiSDKError(message, {
+    errorCode: ErrorCodes.VALIDATION_ERROR,
+    httpStatusCode: 400
+  });
 }
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function enrichWithVatContext(
-  request: ReceiptTemplateRequest,
-  matchResponse: RecipientResolutionResponse
-): ReceiptTemplateRequestWithVatContext {
-  return {
-    ...request,
-    buyerCountryCode: getRequestBuyerCountryCode(request) ?? matchResponse.buyerCountryCode,
-    buyerType: getRequestBuyerType(request) ?? matchResponse.buyerType,
-    taxesApplied: resolveTaxesApplied(request)
-  };
-}
-
-function resolveTaxesApplied(request: ReceiptTemplateRequest): boolean {
-  const enriched = request as ReceiptTemplateRequestWithVatContext;
-  if (enriched.taxesApplied !== undefined && enriched.taxesApplied !== null) {
-    return enriched.taxesApplied;
-  }
-  if (typeof request.totalTaxAmount === "number" && request.totalTaxAmount > 0) {
-    return true;
-  }
-  return Array.isArray(request.taxes) && request.taxes.length > 0;
-}
-
-function getRequestBuyerCountryCode(request: ReceiptTemplateRequest): string | undefined {
-  return (request as ReceiptTemplateRequestWithVatContext).buyerCountryCode;
-}
-
-function getRequestBuyerType(request: ReceiptTemplateRequest): ReceiptTemplateGenerationRequest["buyerType"] | undefined {
-  return (request as ReceiptTemplateRequestWithVatContext).buyerType;
+function wrapApiError(prefix: string, error: CheqiApiError): CheqiSDKError {
+  return new CheqiSDKError(`${prefix}: ${error.message}`, {
+    cause: error,
+    errorCode: error.errorCode,
+    httpStatusCode: error.httpStatusCode,
+    correlationId: error.correlationId
+  });
 }

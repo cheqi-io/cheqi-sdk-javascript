@@ -4,34 +4,30 @@ import type { Logger } from "../logger.js";
 import { NoopLogger } from "../logger.js";
 import type {
   CheqiApiClient,
+  CheqiReceipt,
   ClientReceiptDownloadRequest,
   ClientReceiptDownloadResponse,
   CreateStoreRequest,
-  CreditNoteTemplateGenerationRequest,
-  CreditNoteTemplateResponse,
-  EncryptedCreditNote,
-  EncryptedReceiptRequest,
+  EncryptedCreditNoteEnvelope,
+  EncryptedReceiptEnvelope,
   FetchLike,
   IdentificationDetails,
-  ReceiptTemplateGenerationRequest,
-  ReceiptTemplateResponse,
+  ReceiptSubmissionResponse,
   RecipientResolutionResponse,
   RequestOptions,
-  ProvisionCompanyRequest
+  StoreDTO,
+  UpdateStoreRequest
 } from "../types.js";
 import { normalizeValue, serializeJson } from "../utils.js";
+import { ClientReceiptDownloadResponseFromJSON } from "../models/generated/ClientReceiptDownloadResponse.js";
+import { RecipientResolutionResponseFromJSON } from "../models/generated/RecipientResolutionResponse.js";
+import { ReceiptSubmissionResponseFromJSON } from "../models/generated/ReceiptSubmissionResponse.js";
+import { StoreDTOFromJSON } from "../models/generated/StoreDTO.js";
 import { Endpoints } from "./endpoints.js";
 import { RetryHandler } from "./retry.js";
 
 // read version at module load; falls back gracefully
-const SDK_VERSION: string = (() => {
-  try {
-    // Dynamic import not needed — we just embed the constant at build time.
-    return "0.4.0";
-  } catch {
-    return "unknown";
-  }
-})();
+const SDK_VERSION = "2.1.0";
 
 function mapErrorCode(status: number) {
   if (status === 400) return ErrorCodes.INVALID_REQUEST;
@@ -95,137 +91,123 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
     this.userAgent = `CheqiSDK-TypeScript/${SDK_VERSION}`;
   }
 
-  async generateReceiptTemplate(
-    request: ReceiptTemplateGenerationRequest,
-    accessToken?: string | null
-  ): Promise<ReceiptTemplateResponse> {
-    return this.request("POST", Endpoints.TEMPLATE_ENDPOINT, {
-      body: normalizeValue(request),
-      accessToken,
-      operation: "generateReceiptTemplate"
-    });
-  }
-
-  async generateCreditNoteTemplate(
-    request: CreditNoteTemplateGenerationRequest,
-    accessToken?: string | null
-  ): Promise<CreditNoteTemplateResponse> {
-    return this.request("POST", Endpoints.CREDIT_NOTE_TEMPLATE_ENDPOINT, {
-      body: normalizeValue(request),
-      accessToken,
-      operation: "generateCreditNoteTemplate"
-    });
-  }
-
   async matchCustomer(
     request: IdentificationDetails,
     accessToken?: string | null
   ): Promise<RecipientResolutionResponse> {
-    return this.request("POST", Endpoints.CUSTOMER_MATCH_ENDPOINT, {
+    return RecipientResolutionResponseFromJSON(await this.request("POST", Endpoints.CUSTOMER_MATCH_ENDPOINT, {
       body: normalizeValue(request),
       accessToken,
       operation: "matchCustomer"
-    });
+    }));
   }
 
-  async sendEncryptedReceipts(
-    matchId: string,
-    encryptedReceipts: EncryptedReceiptRequest[],
-    templateHash: string,
+  async submitEncryptedReceipt(
+    envelope: EncryptedReceiptEnvelope,
     accessToken?: string | null
-  ): Promise<Record<string, unknown>> {
-    return this.request("POST", Endpoints.ENCRYPTED_RECEIPT_ENDPOINT, {
-      body: {
-        matchId,
-        encryptedReceiptRequests: encryptedReceipts.map((receipt) => normalizeValue(receipt)),
-        templateHash
-      },
+  ): Promise<ReceiptSubmissionResponse> {
+    if (!envelope?.matchId?.trim() || !envelope.deviceDeliveries?.length) {
+      throw new CheqiApiError("Encrypted receipt envelope requires matchId and deviceDeliveries", {
+        errorCode: ErrorCodes.INVALID_REQUEST,
+        httpStatusCode: 400
+      });
+    }
+    return ReceiptSubmissionResponseFromJSON(await this.request("POST", Endpoints.ENCRYPTED_RECEIPT_ENDPOINT, {
+      body: normalizeValue(envelope),
       accessToken,
-      operation: "sendEncryptedReceipts"
-    });
+      operation: "submitEncryptedReceipt"
+    }));
   }
 
-  async uploadClientEncryptedReceipt(
+  async uploadEncryptedDownloadReceipt(
     request: ClientReceiptDownloadRequest,
     accessToken?: string | null
   ): Promise<ClientReceiptDownloadResponse> {
-    return this.request("POST", Endpoints.CLIENT_RECEIPT_DOWNLOAD_ENDPOINT, {
+    if (!request?.downloadId || !/^[A-Za-z0-9_-]{22,64}$/.test(request.downloadId)) {
+      throw new CheqiApiError("downloadId must be 22-64 base64url characters", {
+        errorCode: ErrorCodes.INVALID_REQUEST,
+        httpStatusCode: 400
+      });
+    }
+    if (!request.ciphertext?.trim()) {
+      throw new CheqiApiError("ciphertext is required", {
+        errorCode: ErrorCodes.INVALID_REQUEST,
+        httpStatusCode: 400
+      });
+    }
+    return ClientReceiptDownloadResponseFromJSON(await this.request("POST", Endpoints.CLIENT_RECEIPT_DOWNLOAD_ENDPOINT, {
       body: normalizeValue(request),
       accessToken,
-      operation: "uploadClientEncryptedReceipt"
-    });
+      operation: "uploadEncryptedDownloadReceipt"
+    }));
   }
 
-  async sendEncryptedCreditNotes(
-    matchId: string,
-    parentCheqiReceiptId: string,
-    encryptedCreditNotes: EncryptedCreditNote[],
-    templateHash: string,
+  async submitEncryptedCreditNote(
+    envelope: EncryptedCreditNoteEnvelope,
     accessToken?: string | null
-  ): Promise<Record<string, unknown>> {
-    return this.request("POST", Endpoints.ENCRYPTED_CREDIT_NOTE_ENDPOINT, {
-      body: {
-        matchId,
-        parentCheqiReceiptId,
-        encryptedCreditNotes: encryptedCreditNotes.map((creditNote) => normalizeValue(creditNote)),
-        templateHash
-      },
+  ): Promise<ReceiptSubmissionResponse> {
+    if (
+      !envelope?.matchId?.trim() ||
+      !envelope.parentCheqiReceiptId?.trim() ||
+      !envelope.deviceDeliveries?.length
+    ) {
+      throw new CheqiApiError(
+        "Encrypted credit-note envelope requires matchId, parentCheqiReceiptId, and deviceDeliveries",
+        { errorCode: ErrorCodes.INVALID_REQUEST, httpStatusCode: 400 }
+      );
+    }
+    return ReceiptSubmissionResponseFromJSON(await this.request("POST", Endpoints.ENCRYPTED_CREDIT_NOTE_ENDPOINT, {
+      body: normalizeValue(envelope),
       accessToken,
-      operation: "sendEncryptedCreditNotes"
-    });
+      operation: "submitEncryptedCreditNote"
+    }));
   }
 
   async sendReceiptViaEmail(
     customerEmail: string,
-    receipt: Record<string, unknown> | string,
+    receipt: CheqiReceipt,
     accessToken?: string | null
   ): Promise<void> {
     await this.request("POST", Endpoints.EMAIL_RECEIPT_ENDPOINT, {
       body: {
         customerEmail,
-        cheqiReceipt: typeof receipt === "string" ? JSON.parse(receipt) : receipt
+        cheqiReceipt: normalizeValue(receipt)
       },
       accessToken,
       operation: "sendReceiptViaEmail"
     });
   }
 
-  async provisionCompany(request: ProvisionCompanyRequest): Promise<Record<string, unknown>> {
-    return this.request("POST", Endpoints.COMPANY_PROVISION_ENDPOINT, {
-      body: normalizeValue(request),
-      operation: "provisionCompany"
-    });
-  }
-
-  async createStore(companyId: string, request: CreateStoreRequest, accessToken?: string | null): Promise<Record<string, unknown>> {
-    return this.request("POST", Endpoints.COMPANY_STORES_ENDPOINT(companyId), {
+  async createStore(companyId: string, request: CreateStoreRequest, accessToken?: string | null): Promise<StoreDTO> {
+    return StoreDTOFromJSON(await this.request("POST", Endpoints.COMPANY_STORES_ENDPOINT(companyId), {
       body: normalizeValue(request),
       accessToken,
       operation: "createStore"
-    });
+    }));
   }
 
-  async getStores(companyId: string, activeOnly?: boolean, accessToken?: string | null): Promise<Record<string, unknown>> {
-    return this.request("GET", Endpoints.COMPANY_STORES_ENDPOINT(companyId), {
+  async getStores(companyId: string, activeOnly?: boolean, accessToken?: string | null): Promise<StoreDTO[]> {
+    const stores = await this.request("GET", Endpoints.COMPANY_STORES_ENDPOINT(companyId), {
       params: { activeOnly },
       accessToken,
       operation: "getStores"
     });
+    return (stores as unknown[]).map(StoreDTOFromJSON);
   }
 
-  async getStore(companyId: string, storeId: string, accessToken?: string | null): Promise<Record<string, unknown>> {
-    return this.request("GET", Endpoints.COMPANY_STORE_ENDPOINT(companyId, storeId), {
+  async getStore(companyId: string, storeId: string, accessToken?: string | null): Promise<StoreDTO> {
+    return StoreDTOFromJSON(await this.request("GET", Endpoints.COMPANY_STORE_ENDPOINT(companyId, storeId), {
       accessToken,
       operation: "getStore"
-    });
+    }));
   }
 
-  async updateStore(companyId: string, storeId: string, request: CreateStoreRequest, accessToken?: string | null): Promise<Record<string, unknown>> {
-    return this.request("PUT", Endpoints.COMPANY_STORE_ENDPOINT(companyId, storeId), {
+  async updateStore(companyId: string, storeId: string, request: UpdateStoreRequest, accessToken?: string | null): Promise<StoreDTO> {
+    return StoreDTOFromJSON(await this.request("PUT", Endpoints.COMPANY_STORE_ENDPOINT(companyId, storeId), {
       body: normalizeValue(request),
       accessToken,
       operation: "updateStore"
-    });
+    }));
   }
 
   async deleteStore(companyId: string, storeId: string, accessToken?: string | null): Promise<void> {
