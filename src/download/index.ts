@@ -28,7 +28,6 @@ import { AES_KEY_LENGTH, GCM_IV_LENGTH, GCM_TAG_LENGTH } from "../crypto.js";
 import { DecryptionError, EncryptionError } from "../errors.js";
 import type { ReceiptEnvelope } from "../models/generated/ReceiptEnvelope.js";
 import { ReceiptEnvelopeFromJSON, ReceiptEnvelopeToJSON } from "../models/generated/ReceiptEnvelope.js";
-import type { ReceiptTemplateResponse } from "../models/generated/ReceiptTemplateResponse.js";
 
 // Re-exported so browser-safe consumers can type envelopes without importing the SDK root.
 export type { ReceiptEnvelope };
@@ -109,9 +108,13 @@ async function importContentKey(contentKey: string, usage: KeyUsage): Promise<Cr
  * finish template generation, encryption, and upload later.
  */
 export function generateDownloadLink(baseUrl: string): DownloadLink {
+  if (!baseUrl?.trim()) {
+    throw new EncryptionError("baseUrl cannot be null or empty");
+  }
+  const receiptBaseUrl = receiptOrigin(baseUrl);
   const downloadId = toBase64Url(randomBytes(DOWNLOAD_ID_LENGTH));
   const contentKey = toBase64Url(randomBytes(AES_KEY_LENGTH));
-  return { downloadId, contentKey, url: buildDownloadUrl(baseUrl, downloadId, contentKey) };
+  return { downloadId, contentKey, url: buildDownloadUrl(receiptBaseUrl, downloadId, contentKey) };
 }
 
 /** Builds the customer-facing URL. The content key MUST stay in the fragment. */
@@ -135,25 +138,20 @@ export function parseDownloadUrl(url: string): { downloadId: string; contentKey:
   if (!downloadId || !contentKey) {
     throw new DecryptionError("Download URL is missing the download id or content key");
   }
+  if (!/^[A-Za-z0-9_-]{22,64}$/.test(downloadId)) {
+    throw new DecryptionError("downloadId must be 22-64 base64url characters");
+  }
+  if (!/^[A-Za-z0-9_-]{43}$/.test(contentKey)) {
+    throw new DecryptionError("contentKey must be an unpadded base64url AES-256 key");
+  }
   return { downloadId, contentKey };
 }
 
-/**
- * Converts the canonical response from `POST /receipt/template` to the standard envelope
- * encrypted for a client-generated download link. Receipt content is never generated or
- * normalized locally; all formats present in the server response are preserved.
- */
-export function buildDownloadEnvelope(template: ReceiptTemplateResponse): ReceiptEnvelope {
-  if (!template) {
-    throw new EncryptionError("Receipt template response is required");
-  }
-
-  return {
-    cheqi: template.cheqi,
-    ublPurchaseReceipt: template.ublPurchaseReceipt,
-    ublInvoice: template.ublInvoice,
-    vatMetaData: template.vatMetadata
-  };
+function receiptOrigin(baseUrl: string): string {
+  if (baseUrl === "https://api.cheqi.io") return "https://receipt.cheqi.io";
+  if (baseUrl === "https://sandbox.api.cheqi.io") return "https://sandbox.receipt.cheqi.io";
+  if (baseUrl === "https://test.api.cheqi.io") return "https://test.receipt.cheqi.io";
+  return baseUrl;
 }
 
 /**
@@ -165,10 +163,8 @@ export function buildDownloadEnvelope(template: ReceiptTemplateResponse): Receip
 export async function encryptDownloadEnvelope(envelope: ReceiptEnvelope, contentKey: string): Promise<string> {
   const key = await importContentKey(contentKey, "encrypt");
   const iv = randomBytes(GCM_IV_LENGTH);
-  // Normalize through FromJSON first: callers commonly pass plain parsed JSON (e.g. a
-  // generateReceiptTemplate response, where issueDate is a string), while ToJSON assumes
-  // hydrated model objects (Date instances). The round-trip accepts both and allow-lists
-  // the envelope to known model fields.
+  // Normalize through FromJSON first so callers may pass either plain parsed JSON or
+  // hydrated model objects. The round-trip also allow-lists the current envelope fields.
   const normalized = ReceiptEnvelopeToJSON(ReceiptEnvelopeFromJSON(envelope));
   const plaintext = new TextEncoder().encode(JSON.stringify(normalized));
 
@@ -219,5 +215,33 @@ export async function decryptDownloadEnvelope(encryptedEnvelope: string, content
     return ReceiptEnvelopeFromJSON(JSON.parse(new TextDecoder().decode(plaintext)));
   } catch {
     throw new DecryptionError("Decrypted envelope is not valid JSON");
+  }
+}
+
+/** Object-oriented facade matching the Java SDK's stateless DownloadService. */
+export class DownloadService {
+  static readonly DOWNLOAD_ID_LENGTH = DOWNLOAD_ID_LENGTH;
+  static readonly CONTENT_KEY_LENGTH = AES_KEY_LENGTH;
+  static readonly PRODUCTION_BASE_URL = "https://receipt.cheqi.io";
+  static readonly SANDBOX_BASE_URL = "https://sandbox.receipt.cheqi.io";
+
+  generateDownloadLink(baseUrl: string): DownloadLink {
+    return generateDownloadLink(baseUrl);
+  }
+
+  buildDownloadUrl(baseUrl: string, downloadId: string, contentKey: string): string {
+    return buildDownloadUrl(baseUrl, downloadId, contentKey);
+  }
+
+  parseDownloadUrl(url: string): DownloadLink {
+    return { ...parseDownloadUrl(url), url };
+  }
+
+  encryptDownloadEnvelope(envelope: ReceiptEnvelope, contentKey: string): Promise<string> {
+    return encryptDownloadEnvelope(envelope, contentKey);
+  }
+
+  decryptDownloadEnvelope(ciphertext: string, contentKey: string): Promise<ReceiptEnvelope> {
+    return decryptDownloadEnvelope(ciphertext, contentKey);
   }
 }

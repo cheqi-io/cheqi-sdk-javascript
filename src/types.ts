@@ -6,134 +6,54 @@ export interface JsonObject {
   [key: string]: JsonValue | undefined;
 }
 
-// Re-export generated types so existing consumers continue to work
 export type {
   AddressDTO,
+  Barcode,
   BarcodeType,
   BuyerType,
   CardDetails,
+  Charge,
+  CheqiReceipt,
   ClientReceiptDownloadRequest,
   ClientReceiptDownloadResponse,
-  CreditNoteContextEnvelope,
-  ReceiptContextEnvelope,
-  Charge,
-  CheqiCreditNote,
-  CheqiReceipt,
+  CompanyCreationRequest,
   CreateStoreRequest,
-  CreditNoteTemplateGenerationRequest,
-  CreditNoteTemplateRequest,
-  CreditNoteTemplateResponse,
+  CreditNoteContextEnvelope,
+  CreditNoteInitiationRequest,
   Discount,
-  EncryptedCreditNote,
+  EncryptedCreditNoteEnvelope,
   EncryptedCreditNoteInitiationRequest,
-  EncryptedReceiptRequest,
-  EncryptedReceiptsRequest,
+  EncryptedCreditNoteInitiationRequestResponse,
+  EncryptedReceiptDeliveryResponse,
+  EncryptedReceiptEnvelope,
+  EncryptedReceiptPayload,
+  FiscalizationData,
   IdentificationDetails,
   Identifier,
+  JurisdictionalData,
   MatchedRecipient,
-  NotificationDisplayCode,
   PaymentAccountDetails,
+  PaymentDetails,
   Period,
   Product,
-  ReceiptCreatedResponse,
   ReceiptEnvelope,
+  ReceiptEnvelopeDocument,
   ReceiptFormat,
-  ReceiptTemplateGenerationRequest,
-  ReceiptTemplateRequest,
-  ReceiptTemplateResponse,
+  ReceiptPayload,
+  ReceiptSubmissionResponse,
   RecipientResolutionResponse,
+  RefundBankAccount,
+  RefundPreference,
+  ReturnLineItem,
+  ReturnReasonCode,
   SellingParty,
   ReceivingParty,
   StoreDTO,
   Tax,
-  VatMetadata,
+  UpdateStoreRequest,
+  WebhookCreditNoteInitiationRequest,
+  WebhookReceiptEnvelope
 } from "./models/generated/index.js";
-
-export type CompanyDTO = import("./models/generated/index.js").CompanyCreationRequest;
-export type IdentificationDetailsPaymentTypeEnum = import("./models/generated/index.js").PaymentType;
-export type ProvisionCompanyRequest = import("./models/generated/index.js").CreateChildCompanyRequest;
-export type ProvisionCompanyResponse = import("./models/generated/index.js").CompanyResponseBody;
-export type ReceiverType = import("./models/generated/index.js").ReceiverType;
-
-export interface CreditNoteEnvelope {
-  cheqiCreditNote?: import("./models/generated/index.js").CheqiCreditNote;
-  ublCreditNote?: string;
-}
-
-/** Condition of a returned line item. Mirrors the Java SDK `ReturnCondition`. */
-export type ReturnCondition =
-  | "DEFECTIVE"
-  | "DAMAGED"
-  | "WRONG_ITEM"
-  | "NOT_AS_DESCRIBED"
-  | "UNWANTED"
-  | "EXPIRED"
-  | "INCOMPLETE";
-
-/** Refund preference for a customer-initiated return. Mirrors the Java SDK `RefundPreference`. */
-export type RefundPreference = "ORIGINAL_PAYMENT_METHOD" | "BANK_TRANSFER" | "STORE_CREDIT";
-
-/** Bank account details for a bank-transfer refund. Mirrors the Java SDK `RefundBankAccount`. */
-export interface RefundBankAccount {
-  iban?: string;
-  bic?: string;
-  accountHolder?: string;
-}
-
-/** A single returned line item. Mirrors the Java SDK `ReturnLineItem`. */
-export interface ReturnLineItem {
-  lineItemId?: string;
-  quantityReturned?: number;
-  condition?: ReturnCondition;
-  conditionNotes?: string;
-}
-
-/**
- * A decrypted customer-initiated credit-note (return) request.
- * Mirrors the Java SDK `CreditNoteInitiationRequest`.
- */
-export interface CreditNoteInitiationRequest {
-  cheqiReceiptId?: string;
-  receiptId?: string;
-  returnReason?: string;
-  returnReasonDescription?: string;
-  lineItems?: ReturnLineItem[];
-  refundPreference?: RefundPreference;
-  refundBankAccount?: RefundBankAccount;
-}
-
-export interface DecryptedDeliveredCreditNote {
-  creditNoteEnvelope: CreditNoteEnvelope;
-  creditNoteContextEnvelope: import("./models/generated/index.js").CreditNoteContextEnvelope | null;
-  rawJson: string;
-  rawCreditNoteContextJson: string | null;
-}
-
-/**
- * A decrypted receipt with its context merged into both receipt formats.
- * Mirrors the Java SDK `DecryptedReceipt` returned by `ReceiptProcessor`.
- */
-export interface DecryptedReceipt {
-  receiptEnvelope: import("./models/generated/index.js").ReceiptEnvelope;
-  receiptContextEnvelope: import("./models/generated/index.js").ReceiptContextEnvelope | null;
-  rawReceiptJson: string;
-  rawReceiptContextJson: string | null;
-}
-
-// Custom SDK type for encrypted receipt decryption (extends generated EncryptedReceiptRequest)
-export interface EncryptedReceipt {
-  recipientId?: string;
-  receiptId?: string;
-  receiverType?: string;
-  encryptedReceipt?: string;
-  encryptedSymmetricKey?: string;
-  finalHash?: string;
-  publicKey?: string;
-  supplierPartyId?: string;
-  notificationDisplayCode?: { type: string; data: string };
-  encryptedCustomerDetails?: string;
-  encryptedCustomerAesKey?: string;
-}
 
 export interface CheqiSDKOptions {
   environment?: string;
@@ -151,50 +71,56 @@ export interface RequestOptions {
   params?: Record<string, string | number | boolean | null | undefined>;
   accessToken?: string | null;
   operation: string;
+  /** Override whether transient failures may be retried for this operation. */
+  retryable?: boolean;
 }
 
 export type FetchLike = typeof fetch;
 
+/** HTTP boundary used by the handwritten SDK services. */
 export interface CheqiApiClient {
-  generateReceiptTemplate(
-    request: import("./models/generated/index.js").ReceiptTemplateGenerationRequest,
-    accessToken?: string | null
-  ): Promise<import("./models/generated/index.js").ReceiptTemplateResponse>;
-  generateCreditNoteTemplate(
-    request: import("./models/generated/index.js").CreditNoteTemplateGenerationRequest,
-    accessToken?: string | null
-  ): Promise<import("./models/generated/index.js").CreditNoteTemplateResponse>;
   matchCustomer(
     request: import("./models/generated/index.js").IdentificationDetails,
     accessToken?: string | null
   ): Promise<import("./models/generated/index.js").RecipientResolutionResponse>;
-  sendEncryptedReceipts(
-    matchId: string,
-    encryptedReceipts: import("./models/generated/index.js").EncryptedReceiptRequest[],
-    templateHash: string,
+  submitEncryptedReceipt(
+    request: import("./models/generated/index.js").EncryptedReceiptEnvelope,
     accessToken?: string | null
-  ): Promise<Record<string, unknown>>;
-  uploadClientEncryptedReceipt(
+  ): Promise<import("./models/generated/index.js").ReceiptSubmissionResponse>;
+  submitEncryptedCreditNote(
+    request: import("./models/generated/index.js").EncryptedCreditNoteEnvelope,
+    accessToken?: string | null
+  ): Promise<import("./models/generated/index.js").ReceiptSubmissionResponse>;
+  uploadEncryptedDownloadReceipt(
     request: import("./models/generated/index.js").ClientReceiptDownloadRequest,
     accessToken?: string | null
   ): Promise<import("./models/generated/index.js").ClientReceiptDownloadResponse>;
-  sendEncryptedCreditNotes(
-    matchId: string,
-    parentCheqiReceiptId: string,
-    encryptedCreditNotes: import("./models/generated/index.js").EncryptedCreditNote[],
-    templateHash: string,
-    accessToken?: string | null
-  ): Promise<Record<string, unknown>>;
   sendReceiptViaEmail(
     customerEmail: string,
-    receipt: Record<string, unknown> | string,
+    receipt: import("./models/generated/index.js").CheqiReceipt,
     accessToken?: string | null
   ): Promise<void>;
-  provisionCompany(request: ProvisionCompanyRequest): Promise<Record<string, unknown>>;
-  createStore(companyId: string, request: import("./models/generated/index.js").CreateStoreRequest, accessToken?: string | null): Promise<Record<string, unknown>>;
-  getStores(companyId: string, activeOnly?: boolean, accessToken?: string | null): Promise<Record<string, unknown>>;
-  getStore(companyId: string, storeId: string, accessToken?: string | null): Promise<Record<string, unknown>>;
-  updateStore(companyId: string, storeId: string, request: import("./models/generated/index.js").CreateStoreRequest, accessToken?: string | null): Promise<Record<string, unknown>>;
+  createStore(
+    companyId: string,
+    request: import("./models/generated/index.js").CreateStoreRequest,
+    accessToken?: string | null
+  ): Promise<import("./models/generated/index.js").StoreDTO>;
+  getStores(
+    companyId: string,
+    activeOnly?: boolean,
+    accessToken?: string | null
+  ): Promise<import("./models/generated/index.js").StoreDTO[]>;
+  getStore(
+    companyId: string,
+    storeId: string,
+    accessToken?: string | null
+  ): Promise<import("./models/generated/index.js").StoreDTO>;
+  updateStore(
+    companyId: string,
+    storeId: string,
+    request: import("./models/generated/index.js").UpdateStoreRequest,
+    accessToken?: string | null
+  ): Promise<import("./models/generated/index.js").StoreDTO>;
   deleteStore(companyId: string, storeId: string, accessToken?: string | null): Promise<void>;
   activateStore(companyId: string, storeId: string, accessToken?: string | null): Promise<void>;
   deactivateStore(companyId: string, storeId: string, accessToken?: string | null): Promise<void>;

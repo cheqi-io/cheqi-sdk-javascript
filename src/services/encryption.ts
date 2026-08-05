@@ -1,7 +1,7 @@
 import { constants, createCipheriv, createPublicKey, publicEncrypt, randomBytes, type KeyObject } from "node:crypto";
 import { AES_KEY_LENGTH, GCM_IV_LENGTH } from "../crypto.js";
 import { EncryptionError } from "../errors.js";
-import type { EncryptedReceiptRequest, MatchedRecipient } from "../types.js";
+import type { EncryptedReceiptPayload, MatchedRecipient } from "../types.js";
 import { decodeKey } from "../utils.js";
 
 /**
@@ -51,70 +51,46 @@ function hybridEncrypt(plaintext: string, publicKeyBase64: string): { encryptedD
  */
 export class EncryptionService {
   /**
-   * Encrypt a receipt JSON payload for a single recipient.
-   * @param receiptJson   Serialised receipt envelope (JSON string).
-   * @param recipient     Matched recipient with a public key.
-   * @returns An {@link EncryptedReceiptRequest} ready to be sent to the API.
+   * Encrypt the exact supplied JSON independently for one temporary device
+   * recipient. No receipt values are calculated, enriched, or modified.
    */
-  encryptReceiptForRecipient(receiptJson: string, recipient: MatchedRecipient): EncryptedReceiptRequest {
+  encryptForDevice(plaintextJson: string, recipient: MatchedRecipient): EncryptedReceiptPayload {
     if (!recipient) {
-      throw new EncryptionError("Recipient is required for encryption");
+      throw new EncryptionError("recipient cannot be null");
+    }
+    if (!recipient.id?.trim()) {
+      throw new EncryptionError("recipient.id cannot be null or empty");
+    }
+    if (!recipient.publicKey?.trim()) {
+      throw new EncryptionError("recipient.publicKey cannot be null or empty");
+    }
+    if (!plaintextJson?.trim()) {
+      throw new EncryptionError("plaintextJson cannot be null or empty");
     }
 
     try {
-      if (!recipient.id) {
-        throw new EncryptionError("Recipient ID is required for encryption");
-      }
-      const publicKey = recipient.publicKey ?? "";
-      const { encryptedData, encryptedKey } = hybridEncrypt(receiptJson, publicKey);
+      const { encryptedData, encryptedKey } = hybridEncrypt(plaintextJson, recipient.publicKey);
 
       return {
-        recipientId: recipient.id,
-        publicKey,
-        encryptedReceipt: encryptedData,
-        encryptedSymmetricKey: encryptedKey
+        deviceRecipientId: recipient.id,
+        encryptedContent: encryptedData,
+        encryptedAesKey: encryptedKey
       };
     } catch (error) {
       if (error instanceof EncryptionError) throw error;
-      throw new EncryptionError(`Failed to encrypt receipt for recipient: ${recipient.id ?? "unknown"}`, {
+      throw new EncryptionError(`Failed to encrypt payload for temporary recipient ${recipient.id}`, {
         cause: error
       });
     }
   }
 
-  /**
-   * Encrypt a credit-note JSON payload for a single recipient.
-   * @param creditNoteJson  Serialised credit-note envelope (JSON string).
-   * @param recipient       Matched recipient with a public key.
-   */
-  encryptCreditNoteForRecipient(creditNoteJson: string, recipient: MatchedRecipient): {
-    recipientId?: string;
-    publicKey: string;
-    encryptedCreditNote: string;
-    encryptedSymmetricKey: string;
-  } {
-    if (!recipient) {
-      throw new EncryptionError("Recipient is required for encryption");
-    }
+  /** Compatibility alias for receipt-specific callers. */
+  encryptReceiptForRecipient(receiptJson: string, recipient: MatchedRecipient): EncryptedReceiptPayload {
+    return this.encryptForDevice(receiptJson, recipient);
+  }
 
-    try {
-      if (!recipient.id) {
-        throw new EncryptionError("Recipient ID is required for encryption");
-      }
-      const publicKey = recipient.publicKey ?? "";
-      const { encryptedData, encryptedKey } = hybridEncrypt(creditNoteJson, publicKey);
-
-      return {
-        recipientId: recipient.id,
-        publicKey,
-        encryptedCreditNote: encryptedData,
-        encryptedSymmetricKey: encryptedKey
-      };
-    } catch (error) {
-      if (error instanceof EncryptionError) throw error;
-      throw new EncryptionError(`Failed to encrypt credit note for recipient: ${recipient.id ?? "unknown"}`, {
-        cause: error
-      });
-    }
+  /** Compatibility alias for credit-note-specific callers. */
+  encryptCreditNoteForRecipient(creditNoteJson: string, recipient: MatchedRecipient): EncryptedReceiptPayload {
+    return this.encryptForDevice(creditNoteJson, recipient);
   }
 }

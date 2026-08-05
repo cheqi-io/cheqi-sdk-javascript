@@ -3,40 +3,33 @@ import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
 
 import {
-  canonicalizeJson,
-  canonicalizeXml,
-  CardDetails,
   CheqiApiError,
   CheqiSDK,
   CheqiSDKConfig,
-  Company,
-  CompanyAddress,
+  CreditNoteInitiationRequest,
   CreditNoteService,
-  DefaultCheqiApiClient,
   DecryptionService,
-  DeliveryStatus,
+  DownloadService,
   EncryptionService,
   Environment,
-  IdentificationDetails,
-  Identifier as ReceiptIdentifier,
+  FiscalizationData,
+  FiscalizationStatus,
   MatchingService,
   NoopLogger,
+  PaymentType,
   Product,
-  ReceiptProcessor,
-  ReceiptResult,
+  JurisdictionalData,
+  ReceiptPayload,
   ReceiptService,
-  ReceiptTemplateRequest,
-  RetryHandler,
-  VerificationService
+  StoreService,
+  ReturnReasonCode,
+  ReturnLineItem,
+  Tax,
+  UnitCode,
+  VerificationService,
+  parseDownloadUrl,
+  validateCreditNoteInitiationRequest
 } from "../dist/index.js";
-import {
-  Identifier,
-  MonetaryTotal,
-  Party,
-  PaymentMeans,
-  PurchaseReceipt,
-  PurchaseReceiptLine
-} from "../dist/entity/index.js";
 
 const NOOP = { logger: new NoopLogger() };
 
@@ -48,57 +41,31 @@ function rsaKeyPair() {
   };
 }
 
-// ───────────────────────────── Config ─────────────────────────────
+function receiptPayload() {
+  return ReceiptPayload.builder()
+    .documentNumber("R-100")
+    .issueDate(new Date("2026-07-29T10:00:00Z"))
+    .currency("EUR")
+    .receiptSubtotal("10.10")
+    .totalBeforeTax("10.10")
+    .totalTaxAmount("2.24")
+    .totalAmount("12.34")
+    .taxesApplied(true)
+    .addProduct(
+      Product.builder()
+        .name("Coffee")
+        .identifier("COFFEE-1")
+        .quantity(1)
+        .unitCode(UnitCode.C62)
+        .unitPrice("10.10")
+        .subtotal("10.10")
+        .total("12.34")
+        .build()
+    )
+    .build();
+}
 
-test("config: requires endpoint", () => {
-  assert.throws(() => new CheqiSDKConfig(NOOP), /environment.*customApiEndpoint/);
-});
-
-test("config: rejects negative timeout", () => {
-  assert.throws(
-    () => new CheqiSDKConfig({ environment: "https://x", timeoutSeconds: -1, ...NOOP }),
-    /Timeout must be positive/
-  );
-});
-
-test("config: rejects zero timeout", () => {
-  assert.throws(
-    () => new CheqiSDKConfig({ environment: "https://x", timeoutSeconds: 0, ...NOOP }),
-    /Timeout must be positive/
-  );
-});
-
-test("config: rejects negative retries", () => {
-  assert.throws(
-    () => new CheqiSDKConfig({ environment: "https://x", maxRetries: -1, ...NOOP }),
-    /cannot be negative/
-  );
-});
-
-test("config: accepts valid config", () => {
-  const config = new CheqiSDKConfig({
-    environment: Environment.SANDBOX,
-    apiKey: "sk_test_abc",
-    timeoutSeconds: 60,
-    maxRetries: 5,
-    ...NOOP
-  });
-  assert.equal(config.apiEndpoint, "https://sandbox.api.cheqi.io");
-  assert.equal(config.apiKey, "sk_test_abc");
-  assert.equal(config.timeoutSeconds, 60);
-  assert.equal(config.maxRetries, 5);
-});
-
-test("config: customApiEndpoint overrides environment", () => {
-  const config = new CheqiSDKConfig({
-    environment: Environment.PRODUCTION,
-    customApiEndpoint: "https://custom.example.com",
-    ...NOOP
-  });
-  assert.equal(config.apiEndpoint, "https://custom.example.com");
-});
-
-test("config: standard environments select fixed receipt origins", () => {
+test("config aligns standard API and receipt environments", () => {
   assert.equal(
     new CheqiSDKConfig({ environment: Environment.PRODUCTION, ...NOOP }).receiptDownloadBaseUrl,
     "https://receipt.cheqi.io"
@@ -107,1309 +74,749 @@ test("config: standard environments select fixed receipt origins", () => {
     new CheqiSDKConfig({ environment: Environment.SANDBOX, ...NOOP }).receiptDownloadBaseUrl,
     "https://sandbox.receipt.cheqi.io"
   );
-});
-
-test("config: custom receipt origin supports localhost", () => {
-  const config = new CheqiSDKConfig({
-    customApiEndpoint: "http://localhost:8080",
-    receiptDownloadBaseUrl: "http://localhost:5190",
-    ...NOOP
-  });
-  assert.equal(config.receiptDownloadBaseUrl, "http://localhost:5190");
-});
-
-// ───────────────────────────── Matching ────────────────────────────
-
-test("matching: allows anonymous identification details", async () => {
-  let received;
-  const matching = new MatchingService({
-    async matchCustomer(req) {
-      received = req;
-      return { customerFound: false };
-    }
-  });
-  const result = await matching.matchCustomer({});
-  assert.deepEqual(received, {});
-  assert.equal(result.customerFound, false);
-});
-
-test("matching: rejects null identification details", async () => {
-  const matching = new MatchingService({ matchCustomer() { throw new Error("unreachable"); } });
-  await assert.rejects(() => matching.matchCustomer(null), /Identification details cannot be null/);
-});
-
-test("matching: accepts card PAN", async () => {
-  let received;
-  const matching = new MatchingService({
-    async matchCustomer(req) {
-      received = req;
-      return { customerFound: false };
-    }
-  });
-  await matching.matchCustomer({
-    paymentType: "CARD_PAYMENT",
-    cardDetails: { paymentAccountNumber: "1234567890" }
-  });
-  assert.equal(received.cardDetails.paymentAccountNumber, "1234567890");
-});
-
-test("matching: accepts card PAR", async () => {
-  const matching = new MatchingService({
-    async matchCustomer() { return { customerFound: false }; }
-  });
-  const result = await matching.matchCustomer({
-    paymentType: "CARD_PAYMENT",
-    cardDetails: { paymentAccountReference: "PAR-123" }
-  });
-  assert.equal(result.customerFound, false);
-});
-
-test("matching: accepts email identifier", async () => {
-  const matching = new MatchingService({
-    async matchCustomer() { return { customerFound: true, matchId: "m1" }; }
-  });
-  const result = await matching.matchCustomer({
-    paymentType: "CARD_PAYMENT",
-    recipientEmail: "user@example.com"
-  });
-  assert.equal(result.customerFound, true);
-});
-
-test("matching: accepts pairingCode", async () => {
-  const matching = new MatchingService({
-    async matchCustomer() { return { customerFound: true, matchId: "m1" }; }
-  });
-  const result = await matching.matchCustomer({
-    paymentType: "CARD_PAYMENT",
-    pairingCode: "123456"
-  });
-  assert.equal(result.customerFound, true);
-});
-
-test("matching: accepts cheqiReceiptId", async () => {
-  const matching = new MatchingService({
-    async matchCustomer() { return { customerFound: true, matchId: "m1" }; }
-  });
-  const result = await matching.matchCustomer({
-    paymentType: "CARD_PAYMENT",
-    cheqiReceiptId: "receipt-123"
-  });
-  assert.equal(result.customerFound, true);
-});
-
-test("matching: wraps unknown errors in CheqiApiError", async () => {
-  const matching = new MatchingService({
-    async matchCustomer() { throw new Error("network boom"); }
-  });
-  await assert.rejects(
-    () => matching.matchCustomer({ paymentType: "CARD_PAYMENT", recipientEmail: "a@b.com" }),
-    (err) => err.errorCode === "UNKNOWN_ERROR" && err.message.includes("network boom")
+  assert.equal(
+    new CheqiSDKConfig({ environment: Environment.TEST, ...NOOP }).receiptDownloadBaseUrl,
+    "https://test.receipt.cheqi.io"
   );
 });
 
-// ──────────────────────── Encryption/Decryption ───────────────────
-
-test("encryption: round trip for receipts", () => {
-  const { privateKeyB64, publicKeyB64 } = rsaKeyPair();
-  const encryption = new EncryptionService();
-  const decryption = new DecryptionService();
-  const payload = JSON.stringify({ documentNumber: "INV-001", totalAmount: 121 });
-  const encrypted = encryption.encryptReceiptForRecipient(payload, {
-    id: "device-123",
-    publicKey: publicKeyB64
-  });
-
-  assert.ok(encrypted.encryptedReceipt);
-  assert.ok(encrypted.encryptedSymmetricKey);
-  assert.equal(encrypted.recipientId, "device-123");
-  assert.equal(encrypted.publicKey, publicKeyB64);
-
-  const decrypted = decryption.decryptReceipt(encrypted, privateKeyB64);
-  assert.deepEqual(JSON.parse(decrypted.receiptContent), JSON.parse(payload));
-  assert.equal(decrypted.customerDetails, null);
-});
-
-
-test("encryption: round trip for credit notes", () => {
-  const { privateKeyB64, publicKeyB64 } = rsaKeyPair();
-  const encryption = new EncryptionService();
-  const decryption = new DecryptionService();
-  const payload = JSON.stringify({ documentNumber: "CN-001", totalAmount: -50 });
-  const encrypted = encryption.encryptCreditNoteForRecipient(payload, {
-    id: "device-456",
-    publicKey: publicKeyB64
-  });
-  const decrypted = decryption.decryptCreditNote({
-    encryptedCreditNoteInitiationRequest: encrypted.encryptedCreditNote,
-    encryptedSymmetricKey: encrypted.encryptedSymmetricKey
-  }, privateKeyB64);
-  assert.deepEqual(JSON.parse(decrypted.content), JSON.parse(payload));
-});
-
-test("encryption: throws on missing public key", () => {
-  const encryption = new EncryptionService();
+test("config validates endpoint, timeout, and retries", () => {
+  assert.throws(() => new CheqiSDKConfig(NOOP), /environment.*customApiEndpoint/);
   assert.throws(
-    () => encryption.encryptReceiptForRecipient("{}", { id: "r1", publicKey: "" }),
-    /Public key is required/
+    () => new CheqiSDKConfig({ environment: Environment.TEST, timeoutSeconds: 0, ...NOOP }),
+    /Timeout must be positive/
   );
-});
-
-test("encryption: throws on null recipient", () => {
-  const encryption = new EncryptionService();
   assert.throws(
-    () => encryption.encryptReceiptForRecipient("{}", null),
-    /Recipient is required/
+    () => new CheqiSDKConfig({ environment: Environment.TEST, maxRetries: -1, ...NOOP }),
+    /cannot be negative/
   );
 });
 
-test("decryption: throws on null encrypted receipt", () => {
-  const decryption = new DecryptionService();
+test("SDK exposes the same primary services as Java v2.1", () => {
+  const sdk = CheqiSDK.builder()
+    .apiEndpoint(Environment.SANDBOX)
+    .apiKey("sk_test_example")
+    .logger(new NoopLogger())
+    .build();
+  assert.ok(sdk.getReceiptService());
+  assert.ok(sdk.getCreditNoteService());
+  assert.ok(sdk.getEncryptionService());
+  assert.ok(sdk.getDecryptionService());
+  assert.ok(sdk.getDownloadService());
+  assert.ok(sdk.getMatchingService());
+  assert.ok(sdk.getStoreService());
+  assert.ok(sdk.getVerificationService());
+});
+
+test("definitive payload builders preserve caller-supplied decimal values", () => {
+  const payload = receiptPayload();
+  assert.equal(payload.receiptSubtotal, 10.1);
+  assert.equal(payload.totalAmount, 12.34);
+  assert.equal(payload.products[0].unitCode, "C62");
+  assert.deepEqual(payload.products[0].taxes, []);
   assert.throws(
-    () => decryption.decryptReceipt(null, "key"),
-    /cannot be null/
+    () => ReceiptPayload.builder().documentNumber("missing-fields").build(),
+    /issueDate is required/
   );
+  const tax = Tax.builder()
+    .rate(21)
+    .type("VAT")
+    .taxableAmount("10.00")
+    .amount("2.10")
+    .build();
+  assert.equal(tax.amount, 2.1);
+  const jurisdiction = JurisdictionalData.builder()
+    .countryCode("NL")
+    .fiscalization(FiscalizationData.of("NL-FISCAL", FiscalizationStatus.FISCALIZED)
+      .addField("authorityId", "AUTH-1", "Authority"))
+    .addLegalText("RETURN_NOTICE", "Returns within 30 days", "en")
+    .build();
+  assert.equal(jurisdiction.fiscalization.additionalFields[0].code, "authorityId");
 });
 
-test("decryption: throws on empty private key", () => {
-  const decryption = new DecryptionService();
+test("financial builders reject non-finite and unsafe numeric values", () => {
   assert.throws(
-    () => decryption.decryptReceipt({ encryptedReceipt: "abc", encryptedSymmetricKey: "def" }, ""),
-    /Private key is required/
+    () => ReceiptPayload.builder().receiptSubtotal("not-a-number"),
+    /receiptSubtotal must be a finite number/
   );
-});
-
-test("decryption: throws on empty encrypted key", () => {
-  const decryption = new DecryptionService();
   assert.throws(
-    () => decryption.decryptReceipt({ encryptedReceipt: "abc", encryptedSymmetricKey: "" }, "somekey"),
-    /Encrypted key cannot be empty/
+    () => Product.builder().unitPrice(Number.POSITIVE_INFINITY),
+    /Product unitPrice must be a finite number/
   );
-});
-
-test("decryption: throws on corrupted data", () => {
-  const { privateKeyB64 } = rsaKeyPair();
-  const decryption = new DecryptionService();
   assert.throws(
-    () => decryption.decryptReceipt({
-      encryptedReceipt: "abc",
-      encryptedSymmetricKey: "not-valid-base64-encrypted-key"
-    }, privateKeyB64),
-    /Failed to decrypt/
+    () => Product.builder().total("9007199254740993"),
+    /safe integer range/
   );
 });
 
-// ──────────────────── Receipt Service ─────────────────────────────
-
-test("receipt: match → template → encrypt → send", async () => {
+test("encryption produces the current per-device payload shape", () => {
   const { publicKeyB64 } = rsaKeyPair();
-  const calls = [];
+  const encrypted = new EncryptionService().encryptForDevice("{\"hello\":\"world\"}", {
+    id: "device-1",
+    publicKey: publicKeyB64
+  });
+  assert.equal(encrypted.deviceRecipientId, "device-1");
+  assert.ok(encrypted.encryptedContent);
+  assert.ok(encrypted.encryptedAesKey);
+  assert.equal("recipientId" in encrypted, false);
+  assert.equal("publicKey" in encrypted, false);
+});
+
+test("encryption rejects incomplete temporary recipients", () => {
+  const encryption = new EncryptionService();
+  assert.throws(() => encryption.encryptForDevice("{}", null), /recipient cannot be null/);
+  assert.throws(() => encryption.encryptForDevice("{}", { id: "", publicKey: "key" }), /recipient.id/);
+  assert.throws(() => encryption.encryptForDevice("{}", { id: "device", publicKey: "" }), /recipient.publicKey/);
+  assert.throws(() => encryption.encryptForDevice("", { id: "device", publicKey: "key" }), /plaintextJson/);
+});
+
+test("receipt issuance sends one unchanged definitive payload per owner device", async () => {
+  const plaintexts = [];
+  const recipients = [
+    { id: "device-1", publicKey: "key-1" },
+    { id: "device-2", publicKey: "key-2" }
+  ];
+  let submitted;
   const apiClient = {
     async matchCustomer() {
-      calls.push("match");
+      return { routeFound: true, matchId: "match-123", recipients };
+    },
+    async submitEncryptedReceipt(envelope) {
+      submitted = envelope;
       return {
-        customerFound: true,
+        cheqiReceiptId: "CHQ-123",
+        matchId: "match-123",
+        status: "PENDING",
+        createdAt: new Date("2026-07-29T10:15:30Z")
+      };
+    },
+    async uploadEncryptedDownloadReceipt() { throw new Error("unreachable"); }
+  };
+  const encryption = {
+    encryptReceiptForRecipient(plaintext, recipient) {
+      plaintexts.push(plaintext);
+      return {
+        deviceRecipientId: recipient.id,
+        encryptedContent: `cipher-${recipient.id}`,
+        encryptedAesKey: `key-${recipient.id}`
+      };
+    }
+  };
+  const service = new ReceiptService(
+    apiClient,
+    encryption,
+    new MatchingService(apiClient)
+  );
+  const storeId = "706920f8-63a7-4d9d-a92a-5889545562ce";
+  const result = await service.issueReceipt(
+    { recipientEmail: "buyer@example.com" },
+    receiptPayload(),
+    storeId
+  );
+
+  assert.equal(result.isAccepted(), true);
+  assert.equal(result.getCheqiReceiptId(), "CHQ-123");
+  assert.equal(result.getDeliveryRouteType(), "DIGITAL");
+  assert.equal(plaintexts.length, 2);
+  assert.equal(plaintexts[0], plaintexts[1]);
+  assert.equal(JSON.parse(plaintexts[0]).documentNumber, "R-100");
+  assert.equal("receiptTemplateRequest" in JSON.parse(plaintexts[0]), false);
+  assert.equal(submitted.storeId, storeId);
+  assert.equal(submitted.deviceDeliveries.length, 2);
+});
+
+test("receipt issuance forwards a three-argument OAuth token", async () => {
+  let matchedToken;
+  let submittedToken;
+  const apiClient = {
+    async matchCustomer(_request, token) {
+      matchedToken = token;
+      return {
         routeFound: true,
         deliveryRouteType: "DIGITAL",
-        matchId: "match-1",
-        recipients: [{ id: "r1", publicKey: publicKeyB64, acceptedFormats: ["CHEQI"] }],
-        buyerCountryCode: "NL",
-        buyerType: "CONSUMER"
+        matchId: "match-token",
+        recipients: [{ id: "device-1", publicKey: rsaKeyPair().publicKeyB64 }]
       };
     },
-    async generateReceiptTemplate() {
-      calls.push("template");
-      return { cheqi: { documentNumber: "INV-001", totalAmount: 121 } };
+    async submitEncryptedReceipt(_envelope, token) {
+      submittedToken = token;
+      return { cheqiReceiptId: "CHQ-TOKEN", matchId: "match-token", status: "PENDING" };
     },
-    async sendEncryptedReceipts(matchId, encryptedReceipts, templateHash) {
-      calls.push("send");
-      assert.equal(matchId, "match-1");
-      assert.equal(encryptedReceipts.length, 1);
-      assert.ok(templateHash);
-      return { receiptCount: 1 };
-    }
+    async uploadEncryptedDownloadReceipt() { throw new Error("unreachable"); }
   };
   const service = new ReceiptService(apiClient, new EncryptionService(), new MatchingService(apiClient));
-  const result = await service.processCompleteReceipt(
-    { paymentType: "CARD_PAYMENT", recipientEmail: "customer@example.com" },
-    { documentNumber: "INV-001", totalAmount: 121 }
-  );
-  assert.equal(result.isSuccess(), true);
-  assert.equal(result.deliveryMethod, "APP");
-  assert.deepEqual(calls, ["match", "template", "send"]);
+  await service.issueReceipt({ recipientEmail: "buyer@example.com" }, receiptPayload(), "oauth-access-token");
+  assert.equal(matchedToken, "oauth-access-token");
+  assert.equal(submittedToken, "oauth-access-token");
 });
 
-test("receipt: anonymous identification details can resolve to download fallback", async () => {
-  let matchedRequest;
-  let uploadedRequest;
+test("receipt issuance rejects a missing route instead of synthesizing customer-not-found", async () => {
   const apiClient = {
-    async matchCustomer(req) {
-      matchedRequest = req;
-      return {
-        routeFound: true,
-        customerFound: true,
-        deliveryRouteType: "DOWNLOAD_FALLBACK",
-        matchId: "match-download",
-        recipients: [{ id: "r1", publicKey: "unused", acceptedFormats: ["CHEQI"] }]
-      };
-    },
-    async generateReceiptTemplate() {
-      return { cheqi: { documentNumber: "INV-001", totalAmount: 121 } };
-    },
-    async uploadClientEncryptedReceipt(request) {
-      uploadedRequest = request;
-      return { cheqiReceiptId: "receipt-1" };
-    }
-  };
-  const service = new ReceiptService(
-    apiClient,
-    new EncryptionService(),
-    new MatchingService(apiClient),
-    "https://receipt.cheqi.io"
-  );
-  const result = await service.processCompleteReceipt(
-    {},
-    { documentNumber: "INV-001", totalAmount: 121 }
-  );
-
-  assert.deepEqual(matchedRequest, {});
-  assert.equal(result.deliveryMethod, "DOWNLOAD");
-  assert.match(result.getDownloadUrl(), /^https:\/\/receipt\.cheqi\.io\/[A-Za-z0-9_-]{22}#[A-Za-z0-9_-]{43}$/);
-  assert.match(uploadedRequest.downloadId, /^[A-Za-z0-9_-]{22}$/);
-  assert.ok(uploadedRequest.ciphertext);
-  assert.ok(uploadedRequest.templateHash);
-});
-
-test("receipt: transient matching failure returns pending template URL", async () => {
-  const apiClient = {
-    async matchCustomer() {
-      throw new CheqiApiError("backend unavailable", { errorCode: "NETWORK_ERROR" });
-    }
-  };
-  const service = new ReceiptService(
-    apiClient,
-    new EncryptionService(),
-    new MatchingService(apiClient),
-    "http://localhost:5190"
-  );
-  const result = await service.processCompleteReceipt(
-    { paymentType: "CARD_PAYMENT", cardDetails: { paymentAccountReference: "PAR-1" } },
-    { documentNumber: "INV-PENDING" }
-  );
-
-  assert.equal(result.getDeliveryStatus(), DeliveryStatus.PENDING_DOWNLOAD_TEMPLATE);
-  assert.match(result.getDownloadUrl(), /^http:\/\/localhost:5190\//);
-  assert.equal(result.getDownloadCiphertext(), null);
-});
-
-test("receipt: transient template failure returns pending template URL", async () => {
-  const apiClient = {
-    async matchCustomer() {
-      return { routeFound: true, deliveryRouteType: "DIGITAL", matchId: "m1", recipients: [] };
-    },
-    async generateReceiptTemplate() {
-      throw new CheqiApiError("template unavailable", { httpStatusCode: 503, errorCode: "SERVER_ERROR" });
-    }
-  };
-  const service = new ReceiptService(
-    apiClient,
-    new EncryptionService(),
-    new MatchingService(apiClient),
-    "http://localhost:5190"
-  );
-  const result = await service.processCompleteReceipt({}, { documentNumber: "INV-PENDING" });
-  assert.equal(result.getDeliveryStatus(), DeliveryStatus.PENDING_DOWNLOAD_TEMPLATE);
-});
-
-test("receipt: ambiguous download upload returns exact ciphertext", async () => {
-  let attemptedCiphertext;
-  const apiClient = {
-    async matchCustomer() {
-      return {
-        routeFound: true,
-        deliveryRouteType: "DOWNLOAD_FALLBACK",
-        matchId: "m1",
-        recipients: [{ id: "download", acceptedFormats: ["CHEQI"] }]
-      };
-    },
-    async generateReceiptTemplate() {
-      return { cheqi: { documentNumber: "INV-UPLOAD" } };
-    },
-    async uploadClientEncryptedReceipt(request) {
-      attemptedCiphertext = request.ciphertext;
-      throw new CheqiApiError("upload timed out", { httpStatusCode: 408, errorCode: "TIMEOUT_ERROR" });
-    }
-  };
-  const service = new ReceiptService(
-    apiClient,
-    new EncryptionService(),
-    new MatchingService(apiClient),
-    "http://localhost:5190"
-  );
-  const result = await service.processCompleteReceipt({}, { documentNumber: "INV-UPLOAD" });
-
-  assert.equal(result.getDeliveryStatus(), DeliveryStatus.PENDING_DOWNLOAD_UPLOAD);
-  assert.equal(result.getDownloadCiphertext(), attemptedCiphertext);
-  assert.ok(result.getTemplateHash());
-  assert.equal(result.getCanonicalJson(), '{"documentNumber":"INV-UPLOAD"}');
-});
-
-test("receipt: online routeFound false does not bypass disabled download fallback", async () => {
-  let templateCalled = false;
-  let uploadCalled = false;
-  const apiClient = {
-    async matchCustomer() { return { routeFound: false, recipients: [] }; },
-    async generateReceiptTemplate() { templateCalled = true; return {}; },
-    async uploadClientEncryptedReceipt() { uploadCalled = true; return {}; }
-  };
-  const service = new ReceiptService(
-    apiClient,
-    new EncryptionService(),
-    new MatchingService(apiClient),
-    "http://localhost:5190"
-  );
-  const result = await service.processCompleteReceipt({}, { documentNumber: "INV-NO-ROUTE" });
-  assert.equal(result.getDeliveryStatus(), DeliveryStatus.CUSTOMER_NOT_FOUND);
-  assert.equal(templateCalled, false);
-  assert.equal(uploadCalled, false);
-  assert.equal(result.getDownloadUrl(), null);
-});
-
-test("receipt: routeFound response without deliveryRouteType is rejected", async () => {
-  const apiClient = {
-    async matchCustomer() { return { routeFound: true, matchId: "m1", recipients: [] }; }
+    async matchCustomer() { return { routeFound: false }; },
+    async submitEncryptedReceipt() { throw new Error("unreachable"); },
+    async uploadEncryptedDownloadReceipt() { throw new Error("unreachable"); }
   };
   const service = new ReceiptService(apiClient, new EncryptionService(), new MatchingService(apiClient));
   await assert.rejects(
-    () => service.processCompleteReceipt({}, { documentNumber: "INV-OLD-BACKEND" }),
-    /did not include deliveryRouteType/
+    () => service.issueReceipt({ recipientEmail: "buyer@example.com" }, receiptPayload()),
+    (error) => error.errorCode === "CUSTOMER_NOT_FOUND" && error.httpStatusCode === 404
   );
 });
 
-test("receipt: encrypted submission uses backend field name", async () => {
-  const bodies = [];
-  const fetchImpl = async (_url, init) => {
-    bodies.push(JSON.parse(init.body));
-    return new Response(JSON.stringify({ cheqiReceiptId: "receipt-1", templateHash: "hash-1" }), {
+test("email fallback is explicit and performs no encryption or email delivery", async () => {
+  let encrypted = false;
+  const apiClient = {
+    async matchCustomer() {
+      return {
+        routeFound: true,
+        deliveryRouteType: "EMAIL_FALLBACK",
+        matchId: "match-email",
+        expiresAt: new Date("2026-08-05T00:00:00Z")
+      };
+    },
+    async submitEncryptedReceipt() { throw new Error("unreachable"); },
+    async uploadEncryptedDownloadReceipt() { throw new Error("unreachable"); }
+  };
+  const service = new ReceiptService(
+    apiClient,
+    { encryptReceiptForRecipient() { encrypted = true; } },
+    new MatchingService(apiClient)
+  );
+  const result = await service.issueReceipt({ recipientEmail: "buyer@example.com" }, receiptPayload());
+  assert.equal(result.isAccepted(), false);
+  assert.equal(result.isEmailReceiptRequired(), true);
+  assert.equal(result.getDeliveryRouteType(), "EMAIL_FALLBACK");
+  assert.equal(encrypted, false);
+});
+
+test("download fallback with payment context is completed client-side", async () => {
+  let upload;
+  const apiClient = {
+    async matchCustomer() {
+      return { routeFound: true, deliveryRouteType: "DOWNLOAD_FALLBACK", matchId: "match-download" };
+    },
+    async submitEncryptedReceipt() { throw new Error("unreachable"); },
+    async uploadEncryptedDownloadReceipt(request) {
+      upload = request;
+      return { cheqiReceiptId: "CHQ-DL", createdAt: new Date() };
+    }
+  };
+  const service = new ReceiptService(
+    apiClient,
+    new EncryptionService(),
+    new MatchingService(apiClient),
+    "https://receipt.example"
+  );
+  const identification = {
+    paymentType: PaymentType.CARD_PAYMENT,
+    cardDetails: {
+      cardProvider: "VISA",
+      paymentAccountReference: "PAR-123",
+      lastFourDigits: "4242"
+    }
+  };
+  const result = await service.issueReceipt(identification, receiptPayload());
+  assert.equal(result.isAccepted(), true);
+  assert.equal(result.getDeliveryRouteType(), "DOWNLOAD_FALLBACK");
+  assert.ok(upload.templateHash);
+
+  const downloadService = new DownloadService();
+  const { contentKey } = parseDownloadUrl(result.getDownloadUrl());
+  const envelope = await downloadService.decryptDownloadEnvelope(upload.ciphertext, contentKey);
+  const document = JSON.parse(envelope.documents.CHEQI.content);
+  assert.equal(document.documentNumber, "R-100");
+  assert.equal(document.identificationDetails.cardDetails.paymentAccountReference, "PAR-123");
+  assert.equal(document.identificationDetails.cardDetails.lastFourDigits, "4242");
+});
+
+test("download fallback without payment type requests a final envelope", async () => {
+  const apiClient = {
+    async matchCustomer() {
+      return { routeFound: true, deliveryRouteType: "DOWNLOAD_FALLBACK", matchId: "match-manual" };
+    },
+    async submitEncryptedReceipt() { throw new Error("unreachable"); },
+    async uploadEncryptedDownloadReceipt() { throw new Error("unreachable"); }
+  };
+  const service = new ReceiptService(apiClient, new EncryptionService(), new MatchingService(apiClient));
+  const result = await service.issueReceipt({ recipientEmail: "buyer@example.com" }, receiptPayload());
+  assert.equal(result.isDownloadEnvelopeRequired(), true);
+  assert.equal(result.getMatchId(), "match-manual");
+});
+
+test("explicit cash download skips recipient matching", async () => {
+  let matches = 0;
+  const apiClient = {
+    async matchCustomer() { matches += 1; throw new Error("must not match"); },
+    async submitEncryptedReceipt() { throw new Error("unreachable"); },
+    async uploadEncryptedDownloadReceipt() { return { cheqiReceiptId: "CHQ-CASH" }; }
+  };
+  const service = new ReceiptService(
+    apiClient,
+    new EncryptionService(),
+    new MatchingService(apiClient),
+    "https://receipt.example"
+  );
+  const result = await service.issueDownloadReceipt({ paymentType: PaymentType.CASH }, receiptPayload());
+  assert.equal(result.isAccepted(), true);
+  assert.equal(matches, 0);
+});
+
+test("credit notes use their own generated envelope and preserve plaintext", async () => {
+  let submitted;
+  let plaintext;
+  const recipient = { id: "device-1", publicKey: "key" };
+  const apiClient = {
+    async matchCustomer() {
+      return { routeFound: true, matchId: "match-credit", recipients: [recipient] };
+    },
+    async submitEncryptedCreditNote(envelope) {
+      submitted = envelope;
+      return { cheqiReceiptId: "CHQ-CN-1", matchId: "match-credit", status: "PENDING" };
+    }
+  };
+  const encryption = {
+    encryptCreditNoteForRecipient(value) {
+      plaintext = value;
+      return { deviceRecipientId: "device-1", encryptedContent: "cipher", encryptedAesKey: "key" };
+    }
+  };
+  const service = new CreditNoteService(apiClient, encryption, new MatchingService(apiClient));
+  const result = await service.issueCreditNote(
+    { cheqiReceiptId: "CHQ-PARENT" },
+    "CHQ-PARENT",
+    { documentNumber: "CN-1", totalAmount: 5 }
+  );
+  assert.equal(result.isAccepted(), true);
+  assert.equal(result.getParentCheqiReceiptId(), "CHQ-PARENT");
+  assert.equal(JSON.parse(plaintext).documentNumber, "CN-1");
+  assert.equal(submitted.parentCheqiReceiptId, "CHQ-PARENT");
+  assert.equal(submitted.deviceDeliveries.length, 1);
+});
+
+test("queued and webhook receipt envelopes decrypt to the complete ReceiptEnvelope", () => {
+  const { privateKeyB64, publicKeyB64 } = rsaKeyPair();
+  const expected = {
+    cheqiReceiptId: "CHQ-20260730-000001",
+    documents: { CHEQI: { mediaType: "application/json", content: "{\"ok\":true}" } },
+    envelopeVersion: 1,
+    receiptGeneratorVersion: "2.1.0",
+    receiptUuid: "706920f8-63a7-4d9d-a92a-5889545562ce"
+  };
+  const encrypted = new EncryptionService().encryptForDevice(JSON.stringify(expected), {
+    id: "device-1",
+    publicKey: publicKeyB64
+  });
+  const queued = {
+    encryptedEnvelope: encrypted.encryptedContent,
+    encryptedEnvelopeKey: encrypted.encryptedAesKey
+  };
+  const webhook = {
+    companyId: "company-1",
+    encryptedEnvelope: encrypted.encryptedContent,
+    encryptedEnvelopeKey: encrypted.encryptedAesKey
+  };
+  const decryption = new DecryptionService();
+  assert.deepEqual(decryption.decryptReceipt(queued, privateKeyB64), expected);
+  assert.deepEqual(decryption.decryptReceipt(webhook, privateKeyB64), expected);
+});
+
+test("queued and webhook credit-note initiation requests decrypt and validate", () => {
+  const { privateKeyB64, publicKeyB64 } = rsaKeyPair();
+  const expected = {
+    cheqiReceiptId: "CHQ-20260730-000001",
+    receiptId: "merchant-receipt-1",
+    lineItems: [{ productId: "SKU-1", quantity: 1, reasonCode: ReturnReasonCode.DAMAGED }],
+    refundPreference: "ORIGINAL_PAYMENT_METHOD"
+  };
+  const encrypted = new EncryptionService().encryptForDevice(JSON.stringify(expected), {
+    id: "device-1",
+    publicKey: publicKeyB64
+  });
+  const queued = {
+    encryptedCreditNoteInitiationRequest: encrypted.encryptedContent,
+    encryptedSymmetricKey: encrypted.encryptedAesKey
+  };
+  const webhook = { companyId: "company-1", ...queued };
+  const decryption = new DecryptionService();
+  assert.deepEqual(decryption.decryptCreditNoteInitiationRequest(queued, privateKeyB64), expected);
+  assert.deepEqual(decryption.decryptCreditNoteInitiationRequest(webhook, privateKeyB64), expected);
+});
+
+test("credit-note initiation validation matches Java merchant-side rules", () => {
+  const built = CreditNoteInitiationRequest.builder()
+    .cheqiReceiptId("CHQ-1")
+    .receiptId("R-1")
+    .lineItems([new ReturnLineItem("SKU", 1, ReturnReasonCode.DAMAGED, "Seal broken")])
+    .refundPreference("ORIGINAL_PAYMENT_METHOD")
+    .build();
+  assert.equal(built.lineItems[0].productId, "SKU");
+  assert.throws(
+    () => validateCreditNoteInitiationRequest({
+      cheqiReceiptId: "CHQ-1",
+      receiptId: "R-1",
+      lineItems: [{ productId: "SKU", quantity: 0, reasonCode: "DAMAGED" }],
+      refundPreference: "ORIGINAL_PAYMENT_METHOD"
+    }),
+    /quantity must be greater than zero/
+  );
+  assert.throws(
+    () => validateCreditNoteInitiationRequest({
+      cheqiReceiptId: "CHQ-1",
+      receiptId: "R-1",
+      lineItems: [{ productId: "SKU", quantity: 1, reasonCode: "DAMAGED" }],
+      refundPreference: "BANK_TRANSFER"
+    }),
+    /refundBankAccount is required/
+  );
+  assert.throws(
+    () => validateCreditNoteInitiationRequest({
+      cheqiReceiptId: "CHQ-1",
+      receiptId: "R-1",
+      lineItems: [{ productId: "SKU", quantity: 1, reasonCode: "NOT_A_REASON" }],
+      refundPreference: "ORIGINAL_PAYMENT_METHOD"
+    }),
+    /reasonCode is invalid/
+  );
+  assert.throws(
+    () => validateCreditNoteInitiationRequest({
+      cheqiReceiptId: "CHQ-1",
+      receiptId: "R-1",
+      lineItems: [{ productId: "SKU", quantity: 1, reasonCode: "DAMAGED" }],
+      refundPreference: "NOT_A_REFUND_METHOD"
+    }),
+    /refundPreference is invalid/
+  );
+  assert.throws(
+    () => CreditNoteInitiationRequest.builder()
+      .cheqiReceiptId("CHQ-1")
+      .receiptId("R-1")
+      .lineItems([{ productId: "SKU", quantity: 1, reasonCode: "NOT_A_REASON" }])
+      .refundPreference("ORIGINAL_PAYMENT_METHOD")
+      .build(),
+    /reasonCode is invalid/
+  );
+});
+
+test("download service round-trips current receipt envelopes", async () => {
+  const downloads = new DownloadService();
+  const link = downloads.generateDownloadLink("https://receipt.example/");
+  assert.equal(link.downloadId.length, 22);
+  assert.equal(link.url.includes("#"), true);
+  const envelope = {
+    cheqiReceiptId: "CHQ-1",
+    documents: {},
+    envelopeVersion: 1,
+    receiptGeneratorVersion: "2.1.0",
+    receiptUuid: "706920f8-63a7-4d9d-a92a-5889545562ce"
+  };
+  const encrypted = await downloads.encryptDownloadEnvelope(envelope, link.contentKey);
+  assert.deepEqual(await downloads.decryptDownloadEnvelope(encrypted, link.contentKey), envelope);
+  assert.equal(
+    downloads.generateDownloadLink(Environment.PRODUCTION).url.startsWith("https://receipt.cheqi.io/"),
+    true
+  );
+  assert.equal(
+    downloads.generateDownloadLink(Environment.SANDBOX).url.startsWith("https://sandbox.receipt.cheqi.io/"),
+    true
+  );
+  assert.throws(() => downloads.generateDownloadLink(""), /baseUrl cannot be null or empty/);
+  assert.throws(() => downloads.parseDownloadUrl("https://receipt.example/not-valid#bad"), /downloadId/);
+});
+
+test("verification canonicalizes JSON before hashing", () => {
+  const verification = new VerificationService();
+  assert.equal(
+    verification.calculateCheqiReceiptHash('{"b":2,"a":1}'),
+    verification.calculateCheqiReceiptHash('{"a":1,"b":2}')
+  );
+});
+
+test("default HTTP client posts the v2 encrypted envelope unchanged", async () => {
+  let requestUrl;
+  let requestBody;
+  const fetchImpl = async (url, init) => {
+    requestUrl = String(url);
+    requestBody = JSON.parse(init.body);
+    return new Response(JSON.stringify({
+      cheqiReceiptId: "CHQ-HTTP",
+      status: "PENDING",
+      createdAt: "2026-08-04T10:00:00Z"
+    }), {
       status: 200,
       headers: { "content-type": "application/json" }
     });
   };
+  const sdk = new CheqiSDKConfig({
+    environment: Environment.TEST,
+    apiKey: "sk_test_http",
+    maxRetries: 0,
+    ...NOOP
+  });
+  const { DefaultCheqiApiClient } = await import("../dist/index.js");
+  const client = new DefaultCheqiApiClient(sdk, fetchImpl);
+  const response = await client.submitEncryptedReceipt({
+    matchId: "match-http",
+    deviceDeliveries: [{
+      deviceRecipientId: "device-1",
+      encryptedContent: "cipher",
+      encryptedAesKey: "key"
+    }]
+  });
+  assert.equal(requestUrl, "https://test.api.cheqi.io/receipt/encrypted");
+  assert.equal(requestBody.matchId, "match-http");
+  assert.equal(requestBody.deviceDeliveries[0].deviceRecipientId, "device-1");
+  assert.equal(response.cheqiReceiptId, "CHQ-HTTP");
+  assert.equal(response.createdAt instanceof Date, true);
+});
+
+test("HTTP submission validates required envelope fields before fetch", async () => {
+  const { DefaultCheqiApiClient } = await import("../dist/index.js");
+  const client = new DefaultCheqiApiClient(
+    new CheqiSDKConfig({ environment: Environment.TEST, apiKey: "sk_test_http", ...NOOP }),
+    async () => { throw new Error("fetch should not run"); }
+  );
+  await assert.rejects(
+    () => client.submitEncryptedReceipt({ matchId: "", deviceDeliveries: [] }),
+    (error) => error instanceof CheqiApiError && error.errorCode === "INVALID_REQUEST"
+  );
+});
+
+test("store active-only filtering uses the OpenAPI active query parameter", async () => {
+  const requestUrls = [];
+  const { DefaultCheqiApiClient } = await import("../dist/index.js");
+  const client = new DefaultCheqiApiClient(
+    new CheqiSDKConfig({ environment: Environment.TEST, apiKey: "sk_test_http", ...NOOP }),
+    async (url) => {
+      requestUrls.push(String(url));
+      return new Response("[]", { status: 200 });
+    }
+  );
+
+  await client.getStores("company-1", true);
+  await client.getStores("company-1", false);
+
+  assert.equal(requestUrls[0], "https://test.api.cheqi.io/company/company-1/stores?active=true");
+  assert.equal(requestUrls[1], "https://test.api.cheqi.io/company/company-1/stores");
+});
+
+test("store service validates inputs and delegates every store operation", async () => {
+  const calls = [];
+  const apiClient = {
+    async createStore(...args) { calls.push(["create", ...args]); return { id: "store-1" }; },
+    async getStores(...args) { calls.push(["list", ...args]); return []; },
+    async getStore(...args) { calls.push(["get", ...args]); return { id: "store-1" }; },
+    async updateStore(...args) { calls.push(["update", ...args]); return { id: "store-1" }; },
+    async deleteStore(...args) { calls.push(["delete", ...args]); },
+    async activateStore(...args) { calls.push(["activate", ...args]); },
+    async deactivateStore(...args) { calls.push(["deactivate", ...args]); }
+  };
+  const service = new StoreService(apiClient);
+  const request = {
+    storeName: "Amsterdam",
+    storeCode: "AMS-1",
+    addressDto: {
+      streetName: "Dam 1",
+      cityName: "Amsterdam",
+      postalZone: "1012JS",
+      countryIsoCode: "NL"
+    }
+  };
+
+  await service.createStore("company-1", request, "oauth-token");
+  await service.getStores("company-1", undefined, "oauth-token");
+  await service.getActiveStores("company-1", "oauth-token");
+  await service.getStore("company-1", "store-1", "oauth-token");
+  await service.updateStore("company-1", "store-1", { storeName: "Updated" }, "oauth-token");
+  await service.deleteStore("company-1", "store-1", "oauth-token");
+  await service.activateStore("company-1", "store-1", "oauth-token");
+  await service.deactivateStore("company-1", "store-1", "oauth-token");
+
+  assert.deepEqual(calls.map(([operation]) => operation), [
+    "create", "list", "list", "get", "update", "delete", "activate", "deactivate"
+  ]);
+  assert.equal(calls[2][2], true);
+  assert.throws(() => service.getStores("", undefined, "oauth-token"), /Company ID cannot be null/);
+  assert.throws(() => service.getStore("company-1", "", "oauth-token"), /Store ID cannot be null/);
+  assert.throws(() => service.getStores("company-1", undefined, " "), /Access token cannot be null/);
+  assert.throws(
+    () => service.createStore("company-1", { storeName: "", addressDto: {} }, "oauth-token"),
+    /storeName is required.*streetName is required.*countryIsoCode is required/
+  );
+  assert.throws(
+    () => service.updateStore("company-1", "store-1", null, "oauth-token"),
+    /Store request cannot be null/
+  );
+});
+
+test("non-idempotent POST requests are not automatically retried", async () => {
+  let attempts = 0;
+  const { DefaultCheqiApiClient } = await import("../dist/index.js");
   const client = new DefaultCheqiApiClient(
     new CheqiSDKConfig({
-      environment: "https://api.example.test",
-      apiKey: "sk_test_123",
-      logger: new NoopLogger()
+      environment: Environment.TEST,
+      apiKey: "sk_test_http",
+      maxRetries: 3,
+      ...NOOP
     }),
-    fetchImpl
-  );
-
-  await client.sendEncryptedReceipts(
-    "match-1",
-    [{ recipientId: "r1", encryptedReceipt: "ciphertext", encryptedSymmetricKey: "wrapped-key", publicKey: "public-key" }],
-    "template-hash"
-  );
-
-  assert.equal(bodies.length, 1);
-  assert.equal(bodies[0].matchId, "match-1");
-  assert.equal(bodies[0].templateHash, "template-hash");
-  assert.equal(bodies[0].encryptedReceipts, undefined);
-  assert.deepEqual(bodies[0].encryptedReceiptRequests, [
-    { recipientId: "r1", encryptedReceipt: "ciphertext", encryptedSymmetricKey: "wrapped-key", publicKey: "public-key" }
-  ]);
-});
-
-test("receipt: encrypted envelopes match Java SDK schema", async () => {
-  const encryptedEnvelopes = [];
-  let generationRequest;
-  const apiClient = {
-    async matchCustomer() {
-      return {
-        customerFound: true,
-        routeFound: true,
-        deliveryRouteType: "DIGITAL",
-        matchId: "match-1",
-        recipients: [
-          { id: "ubl", publicKey: "public-key-ubl", acceptedFormats: ["UBL_PURCHASE_RECEIPT"] },
-          { id: "invoice", publicKey: "public-key-invoice", acceptedFormats: ["UBL_INVOICE"] }
-        ],
-        buyerCountryCode: "NL",
-        buyerType: "BUSINESS"
-      };
-    },
-    async generateReceiptTemplate(request) {
-      generationRequest = request;
-      return {
-        cheqi: { documentNumber: "INV-001" },
-        ublPurchaseReceipt: "<Receipt>ok</Receipt>",
-        ublInvoice: "<Invoice>ok</Invoice>",
-        vatMetadata: { buyerType: "BUSINESS", taxesApplied: true }
-      };
-    },
-    async sendEncryptedReceipts(_matchId, encryptedReceipts) {
-      assert.equal(encryptedReceipts.length, 2);
-      return { receiptCount: 2 };
-    }
-  };
-  const encryptionService = {
-    encryptReceiptForRecipient(receiptJson, recipient) {
-      encryptedEnvelopes.push(JSON.parse(receiptJson));
-      return {
-        recipientId: recipient.id,
-        publicKey: recipient.publicKey,
-        encryptedReceipt: `ciphertext-${recipient.id}`,
-        encryptedSymmetricKey: `wrapped-key-${recipient.id}`
-      };
-    }
-  };
-  const service = new ReceiptService(apiClient, encryptionService, new MatchingService(apiClient));
-
-  await service.processCompleteReceipt(
-    {
-      paymentType: "CARD_PAYMENT",
-      cardDetails: { paymentAccountReference: "par-123" }
-    },
-    {
-      documentNumber: "INV-001",
-      issueDate: new Date("2024-01-15T10:30:00Z"),
-      currency: "EUR",
-      receiptSubtotal: 100,
-      totalBeforeTax: 100,
-      totalTaxAmount: 21,
-      totalAmount: 121,
-      products: [],
-      taxes: []
+    async () => {
+      attempts += 1;
+      throw new Error("connection reset after request write");
     }
   );
 
-  assert.equal(generationRequest.buyerCountryCode, "NL");
-  assert.equal(generationRequest.buyerType, "BUSINESS");
-  assert.equal(generationRequest.taxesApplied, true);
-  assert.equal(generationRequest.receiptTemplateRequest.buyerCountryCode, "NL");
-  assert.equal(generationRequest.receiptTemplateRequest.buyerType, "BUSINESS");
-  assert.equal(generationRequest.receiptTemplateRequest.taxesApplied, true);
-  assert.deepEqual(encryptedEnvelopes, [
-    {
-      ublPurchaseReceipt: "<Receipt>ok</Receipt>",
-      vatMetaData: { buyerType: "BUSINESS", taxesApplied: true }
-    },
-    {
-      ublInvoice: "<Invoice>ok</Invoice>",
-      vatMetaData: { buyerType: "BUSINESS", taxesApplied: true }
-    }
-  ]);
-  assert.equal(encryptedEnvelopes.some((envelope) => "cheqiReceipt" in envelope), false);
-  assert.equal(encryptedEnvelopes.some((envelope) => "vatMetadata" in envelope), false);
-});
-
-test("receipt: falls back to email", async () => {
-  const apiClient = {
-    async matchCustomer() {
-      return { customerFound: false, recipients: [] };
-    },
-    async generateReceiptTemplate() {
-      return { cheqi: { documentNumber: "INV-001" } };
-    },
-    async sendReceiptViaEmail(email) {
-      assert.equal(email, "customer@example.com");
-    }
-  };
-  const service = new ReceiptService(apiClient, new EncryptionService(), new MatchingService(apiClient));
-  const result = await service.processCompleteReceipt(
-    { paymentType: "CARD_PAYMENT", recipientEmail: "customer@example.com" },
-    { documentNumber: "INV-001" }
-  );
-  assert.equal(result.deliveryMethod, "EMAIL");
-});
-
-test("receipt: returns customerNotFound when no email and no match", async () => {
-  const apiClient = {
-    async matchCustomer() { return { customerFound: false }; },
-    async generateReceiptTemplate() { return {}; }
-  };
-  const service = new ReceiptService(apiClient, new EncryptionService(), new MatchingService(apiClient));
-  const result = await service.processCompleteReceipt(
-    { paymentType: "CARD_PAYMENT", cardDetails: { paymentAccountNumber: "123" } },
-    { documentNumber: "INV-001" }
-  );
-  assert.equal(result.isSuccess(), false);
-  assert.equal(result.isCustomerNotFound(), true);
-});
-
-test("receipt: rejects null identification details", async () => {
-  const apiClient = { matchCustomer() {}, generateReceiptTemplate() {}, sendEncryptedReceipts() {} };
-  const service = new ReceiptService(apiClient, new EncryptionService(), new MatchingService(apiClient));
   await assert.rejects(
-    () => service.processCompleteReceipt(null, { documentNumber: "INV-001" }),
-    /Identification details cannot be null/
-  );
-});
-
-test("receipt: rejects null receipt request", async () => {
-  const apiClient = { matchCustomer() {}, generateReceiptTemplate() {}, sendEncryptedReceipts() {} };
-  const service = new ReceiptService(apiClient, new EncryptionService(), new MatchingService(apiClient));
-  await assert.rejects(
-    () => service.processCompleteReceipt({ paymentType: "CARD_PAYMENT", recipientEmail: "a@b.com" }, null),
-    /Receipt template request cannot be null/
-  );
-});
-
-test("receipt: rejects invalid email for sendReceiptViaEmail", async () => {
-  const apiClient = { sendReceiptViaEmail() {} };
-  const service = new ReceiptService(apiClient, new EncryptionService(), new MatchingService(apiClient));
-  await assert.rejects(
-    () => service.sendReceiptViaEmail("not-an-email", {}),
-    /Valid customer email/
-  );
-});
-
-// ──────────────────── Credit Note Service ─────────────────────────
-
-test("credit note: match → template → encrypt → send", async () => {
-  const { publicKeyB64 } = rsaKeyPair();
-  const apiClient = {
-    async matchCustomer() {
-      return {
-        customerFound: true,
-        matchId: "match-1",
-        recipients: [{ id: "r1", publicKey: publicKeyB64, acceptedFormats: ["CHEQI"] }],
-        buyerCountryCode: "NL",
-        buyerType: "CONSUMER"
-      };
-    },
-    async generateCreditNoteTemplate(request) {
-      assert.deepEqual(request.formats, ["CHEQI"]);
-      return { cheqi: { documentNumber: "CN-001" } };
-    },
-    async sendEncryptedCreditNotes(matchId, parentCheqiReceiptId, encryptedCreditNotes, templateHash) {
-      assert.equal(matchId, "match-1");
-      assert.equal(parentCheqiReceiptId, "receipt-1");
-      assert.equal(encryptedCreditNotes.length, 1);
-      assert.ok(templateHash);
-      return { creditNoteCount: 1 };
-    }
-  };
-  const service = new CreditNoteService(apiClient, new EncryptionService(), new MatchingService(apiClient));
-  const result = await service.processCompleteCreditNote(
-    { paymentType: "CARD_PAYMENT", cheqiReceiptId: "receipt-1" },
-    { documentNumber: "CN-001" }
-  );
-  assert.equal(result.success, true);
-});
-
-test("credit note: requires cheqiReceiptId", async () => {
-  const apiClient = { matchCustomer() {}, generateCreditNoteTemplate() {}, sendEncryptedCreditNotes() {} };
-  const service = new CreditNoteService(apiClient, new EncryptionService(), new MatchingService(apiClient));
-  await assert.rejects(
-    () => service.processCompleteCreditNote(
-      { paymentType: "CARD_PAYMENT", recipientEmail: "a@b.com" },
-      { documentNumber: "CN-001" }
-    ),
-    /cheqiReceiptId.*required/
-  );
-});
-
-test("credit note: returns customerNotFound", async () => {
-  const apiClient = {
-    async matchCustomer() { return { customerFound: false }; },
-    async generateCreditNoteTemplate() { return {}; }
-  };
-  const service = new CreditNoteService(apiClient, new EncryptionService(), new MatchingService(apiClient));
-  const result = await service.processCompleteCreditNote(
-    { paymentType: "CARD_PAYMENT", cheqiReceiptId: "r1" },
-    { documentNumber: "CN-001" }
-  );
-  assert.equal(result.success, false);
-  assert.equal(result.isCustomerNotFound(), true);
-});
-
-// ──────────────────── Retry Handler ───────────────────────────────
-
-test("retry: retries on 500", async () => {
-  let calls = 0;
-  const handler = new RetryHandler({ maxRetries: 2, logger: new NoopLogger() });
-  const result = await handler.executeWithRetry(async () => {
-    calls++;
-    if (calls < 3) return new Response("error", { status: 500 });
-    return new Response("ok", { status: 200 });
-  }, "testOp");
-  assert.equal(result.status, 200);
-  assert.equal(calls, 3);
-});
-
-test("retry: retries on 429 with Retry-After header", async () => {
-  let calls = 0;
-  const handler = new RetryHandler({ maxRetries: 1, logger: new NoopLogger() });
-  const result = await handler.executeWithRetry(async () => {
-    calls++;
-    if (calls === 1) return new Response("rate limited", {
-      status: 429,
-      headers: { "Retry-After": "0" }
-    });
-    return new Response("ok", { status: 200 });
-  }, "testOp");
-  assert.equal(result.status, 200);
-  assert.equal(calls, 2);
-});
-
-test("retry: throws after max retries on network error", async () => {
-  const handler = new RetryHandler({ maxRetries: 1, baseDelayMs: 1, logger: new NoopLogger() });
-  await assert.rejects(
-    () => handler.executeWithRetry(async () => { throw new Error("ECONNRESET"); }, "testOp"),
-    (err) => err.errorCode === "NETWORK_ERROR" && err.message.includes("ECONNRESET")
-  );
-});
-
-test("retry: returns non-retryable error immediately", async () => {
-  let calls = 0;
-  const handler = new RetryHandler({ maxRetries: 3, logger: new NoopLogger() });
-  const result = await handler.executeWithRetry(async () => {
-    calls++;
-    return new Response("not found", { status: 404 });
-  }, "testOp");
-  assert.equal(result.status, 404);
-  assert.equal(calls, 1);
-});
-
-// ──────────────────── Verification ────────────────────────────────
-
-test("RFC8785 canonicalization sorts keys", () => {
-  assert.equal(canonicalizeJson({ z: 1, a: 2, m: 3 }), '{"a":2,"m":3,"z":1}');
-});
-
-test("verification: JSON hash is deterministic", () => {
-  const service = new VerificationService();
-  const receipt = { documentNumber: "INV-001", totalAmount: 121, currency: "EUR" };
-  const hash1 = service.calculateCheqiReceiptHash(receipt);
-  const hash2 = service.calculateCheqiReceiptHash(receipt);
-  assert.equal(hash1, hash2);
-  assert.equal(hash1.length, 64); // SHA-256 hex
-});
-
-test("verification: XML hash ignores formatting", () => {
-  const service = new VerificationService();
-  const compactXml = "<Invoice><AccountingCustomerParty><Party><Name>Cheqi</Name></Party></AccountingCustomerParty></Invoice>";
-  const formattedXml = `
-    <Invoice>
-      <AccountingCustomerParty>
-        <Party>
-          <Name>Cheqi</Name>
-        </Party>
-      </AccountingCustomerParty>
-    </Invoice>
-  `;
-  assert.equal(service.canonicalizeAndHashXml(compactXml), service.canonicalizeAndHashXml(formattedXml));
-  assert.equal(service.canonicalizeUbl(formattedXml), compactXml);
-});
-
-test("verification: verifyJsonHash returns true for matching hash", () => {
-  const service = new VerificationService();
-  const receipt = { documentNumber: "INV-001", totalAmount: 121 };
-  const hash = service.canonicalizeAndHashJson(receipt);
-  assert.equal(service.verifyJsonHash(receipt, hash), true);
-  assert.equal(service.verifyJsonHash(receipt, "wrong"), false);
-});
-
-test("verification: verifyXmlHash returns true for matching hash", () => {
-  const service = new VerificationService();
-  const xml = "<Invoice><ID>1</ID></Invoice>";
-  const hash = service.canonicalizeAndHashXml(xml);
-  assert.equal(service.verifyXmlHash(xml, hash), true);
-  assert.equal(service.verifyXmlHash(xml, "wrong"), false);
-});
-
-// ──────────────────── SDK ─────────────────────────────────────────
-
-test("sdk: wires services together", () => {
-  const sdk = new CheqiSDK({ environment: "https://sandbox.api.cheqi.io", ...NOOP }, {
-    matchCustomer() {},
-    generateReceiptTemplate() {},
-    sendEncryptedReceipts() {}
-  });
-  assert.ok(sdk.receiptService);
-  assert.ok(sdk.creditNoteService);
-  assert.ok(sdk.companyService);
-  assert.ok(sdk.storeService);
-  assert.ok(sdk.verificationService);
-  assert.ok(sdk.encryptionService);
-  assert.ok(sdk.decryptionService);
-  assert.ok(sdk.matchingService);
-  assert.equal(typeof sdk.getReceiptService, "function");
-});
-
-test("sdk: builder mirrors java style", () => {
-  const sdk = CheqiSDK.builder()
-    .apiEndpoint("https://sandbox.api.cheqi.io")
-    .apiKey("sk_test_123")
-    .timeoutSeconds(10)
-    .maxRetries(2)
-    .logger(new NoopLogger())
-    .build();
-  assert.equal(sdk.getConfig().apiEndpoint, "https://sandbox.api.cheqi.io");
-  assert.equal(sdk.getConfig().apiKey, "sk_test_123");
-  assert.equal(sdk.getConfig().timeoutSeconds, 10);
-  assert.equal(sdk.getConfig().maxRetries, 2);
-});
-
-test("sdk: builder accepts custom logger", () => {
-  const messages = [];
-  const sdk = CheqiSDK.builder()
-    .apiEndpoint("https://sandbox.api.cheqi.io")
-    .logger({ debug() {}, info(msg) { messages.push(msg); }, warn() {}, error() {} })
-    .build();
-  assert.ok(messages.some(m => m.includes("SDK configured")));
-});
-
-// ──────────────────── Model Builders ──────────────────────────────
-
-test("model builders: IdentificationDetails", () => {
-  const id = IdentificationDetails.builder()
-    .paymentType("CARD_PAYMENT")
-    .cardDetails(
-      CardDetails.builder()
-        .paymentAccountReference("PAR-123")
-        .cardProvider("VISA")
-        .build()
-    )
-    .recipientEmail("customer@example.com")
-    .build();
-
-  assert.equal(id.getRecipientEmail(), "customer@example.com");
-  assert.equal(id.paymentType, "CARD_PAYMENT");
-  assert.equal(id.cardDetails.paymentAccountReference, "PAR-123");
-});
-
-test("model builders: ReceiptTemplateRequest", () => {
-  const orderReference = ReceiptIdentifier.builder()
-    .type("ORDER_NUMBER")
-    .value("ORDER-123")
-    .build();
-  const req = ReceiptTemplateRequest.builder()
-    .documentNumber("INV-001")
-    .identifiers([orderReference])
-    .currency("EUR")
-    .totalAmount(12.10)
-    .addProduct(
-      Product.builder()
-        .name("Coffee")
-        .quantity(1)
-        .baseQuantity(1)
-        .unitCode("C62")
-        .unitPrice(10.00)
-        .subtotal(10.00)
-        .total(12.10)
-        .build()
-    )
-    .build();
-
-  assert.equal(req.documentNumber, "INV-001");
-  assert.deepEqual(req.identifiers, [{ type: "ORDER_NUMBER", value: "ORDER-123" }]);
-  assert.equal(req.products.length, 1);
-  assert.equal(req.products[0].name, "Coffee");
-});
-
-test("model builders: Company", () => {
-  const company = Company.builder()
-    .companyName("Cheqi")
-    .companyEmail("info@cheqi.io")
-    .address(
-      CompanyAddress.builder()
-        .streetName("Main street 1")
-        .cityName("Amsterdam")
-        .postalZone("1012AB")
-        .countryIsoCode("NL")
-        .build()
-    )
-    .build();
-
-  assert.equal(company.companyName, "Cheqi");
-  assert.equal(company.address.countryIsoCode, "NL");
-});
-
-test("model builders: Company.toCompanyDTO()", () => {
-  const company = Company.builder()
-    .companyName("Test")
-    .companyLegalName("Test BV")
-    .taxNumber("NL123")
-    .companyEmail("a@b.com")
-    .address(CompanyAddress.builder().streetName("S").cityName("C").postalZone("1234").countryIsoCode("NL").build())
-    .build();
-
-  const dto = company.toCompanyDTO();
-  assert.equal(dto.companyName, "Test");
-  assert.equal(dto.address.streetName, "S");
-  assert.equal(dto.address.countryIsoCode, "NL");
-});
-
-// ──────────────────── Entity Builders ─────────────────────────────
-
-test("entity builders: PurchaseReceipt", () => {
-  const id = Identifier.builder("INV-001").schemeID("DOC").build();
-  const supplier = Party.builder([{ registrationName: "Cheqi BV" }], { cityName: "Amsterdam" }).build();
-  const monetaryTotal = MonetaryTotal.builder(
-    { value: "10.00", currencyID: "EUR" },
-    { value: "10.00", currencyID: "EUR" },
-    { value: "12.10", currencyID: "EUR" },
-    { value: "12.10", currencyID: "EUR" }
-  ).build();
-  const paymentMeans = PaymentMeans.builder({ value: "48" }).build();
-  const line = PurchaseReceiptLine.builder(id, { name: "Coffee" })
-    .lineExtensionAmount({ value: "10.00", currencyID: "EUR" })
-    .build();
-  const receipt = PurchaseReceipt.builder(
-    id, "2026-03-16", supplier, "EUR", monetaryTotal, [line]
-  ).paymentMeans([paymentMeans]).receiptUuid("nonce-1").build();
-
-  assert.equal(receipt.id.getValue(), "INV-001");
-  assert.equal(receipt.documentCurrencyCode, "EUR");
-  assert.equal(receipt.purchaseReceiptLines.length, 1);
-  assert.equal(receipt.paymentMeans.length, 1);
-});
-
-// ──────────────────── Company/Store Validation ────────────────────
-
-test("company validation: requires companyEmail", () => {
-  const sdk = new CheqiSDK({ environment: "https://sandbox.api.cheqi.io", ...NOOP }, {
-    provisionCompany() { throw new Error("should not reach"); }
-  });
-  assert.throws(
-    () => sdk.getCompanyService().provisionCompany({ companyName: "Cheqi" }, "admin@example.com"),
-    /companyEmail is required/
-  );
-});
-
-test("company validation: rejects invalid admin email", () => {
-  const sdk = new CheqiSDK({ environment: "https://sandbox.api.cheqi.io", ...NOOP }, {
-    provisionCompany() { throw new Error("should not reach"); }
-  });
-  const company = Company.builder()
-    .companyName("Cheqi")
-    .companyEmail("info@cheqi.io")
-    .address(CompanyAddress.builder().streetName("S").cityName("C").postalZone("1234").countryIsoCode("NL").build())
-    .build();
-  assert.throws(
-    () => sdk.getCompanyService().provisionCompany(company, "not-an-email"),
-    /Admin email must be a valid/
-  );
-});
-
-test("store validation: requires access token", () => {
-  const sdk = new CheqiSDK({ environment: "https://sandbox.api.cheqi.io", ...NOOP }, {
-    createStore() { throw new Error("should not reach"); }
-  });
-  assert.throws(
-    () => sdk.getStoreService().createStore("company-1", {
-      storeName: "Main",
-      storeCode: "MAIN",
-      addressDto: { streetName: "A", cityName: "B", postalZone: "1234", countryIsoCode: "NL" }
+    () => client.submitEncryptedReceipt({
+      matchId: "match-http",
+      deviceDeliveries: [{
+        deviceRecipientId: "device-1",
+        encryptedContent: "cipher",
+        encryptedAesKey: "key"
+      }]
     }),
-    /Access token cannot be null or empty/
+    (error) => error instanceof CheqiApiError && error.errorCode === "NETWORK_ERROR"
   );
+  assert.equal(attempts, 1);
 });
 
-test("store validation: requires storeName", () => {
-  const sdk = new CheqiSDK({ environment: "https://sandbox.api.cheqi.io", ...NOOP }, {
-    createStore() { throw new Error("should not reach"); }
-  });
-  assert.throws(
-    () => sdk.getStoreService().createStore("company-1", {
-      storeCode: "MAIN",
-      addressDto: { streetName: "A", cityName: "B", postalZone: "1234", countryIsoCode: "NL" }
-    }, "token-123"),
-    /storeName is required/
-  );
-});
-
-test("store validation: requires companyId", () => {
-  const sdk = new CheqiSDK({ environment: "https://sandbox.api.cheqi.io", ...NOOP }, {
-    getStores() { throw new Error("should not reach"); }
-  });
-  assert.throws(
-    () => sdk.getStoreService().getStores("", undefined, "token"),
-    /Company ID cannot be null/
-  );
-});
-
-// ──────────────────── Email Validation ────────────────────────────
-
-// ──────────────────── Java parity: number canonicalization ────────────────
-
-test("canonicalization: preserves decimal scale from JSON string", () => {
-  // Matches Java BigDecimal.toPlainString(): trailing zeros and scale preserved.
-  assert.equal(canonicalizeJson('{"a":12.10}'), '{"a":12.10}');
-  assert.equal(canonicalizeJson('{"a":121.00,"b":1}'), '{"a":121.00,"b":1}');
-});
-
-test("canonicalization: expands scientific notation to plain string", () => {
-  assert.equal(canonicalizeJson('{"a":1.5E-3}'), '{"a":0.0015}');
-  assert.equal(canonicalizeJson('{"a":1.230E1}'), '{"a":12.30}');
-});
-
-test("canonicalization: normalizes negative zero and sorts nested keys", () => {
-  assert.equal(canonicalizeJson('{"a":-0}'), '{"a":0}');
-  assert.equal(canonicalizeJson('{"z":1,"a":{"y":2.50,"x":3}}'), '{"a":{"x":3,"y":2.50},"z":1}');
-});
-
-// ──────────────────── Java parity: XML Exclusive C14N ──────────────────────
-
-test("c14n: exclusive namespace placement and attribute sorting", () => {
-  const input = `<?xml version="1.0"?>
-    <cac:Invoice xmlns:cac="urn:cac" xmlns:cbc="urn:cbc">
-      <cbc:ID>1</cbc:ID>
-      <cac:Party b="2" a="1"/>
-    </cac:Invoice>`;
-  // cbc is only used by the child, so exclusive C14N renders it on cbc:ID (not the root);
-  // attributes are sorted (a before b) and empty elements expand to start+end tags.
-  assert.equal(
-    canonicalizeXml(input),
-    '<cac:Invoice xmlns:cac="urn:cac"><cbc:ID xmlns:cbc="urn:cbc">1</cbc:ID><cac:Party a="1" b="2"></cac:Party></cac:Invoice>'
-  );
-});
-
-// ──────────────────── Java parity: key formats ─────────────────────────────
-
-test("encryption: accepts raw PKCS#1 (iOS) public keys", () => {
-  const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
-  const pkcs1Pub = publicKey.export({ type: "pkcs1", format: "der" }).toString("base64");
-  const pkcs8Priv = privateKey.export({ type: "pkcs8", format: "der" }).toString("base64");
-  const encrypted = new EncryptionService().encryptReceiptForRecipient('{"x":1}', { id: "r1", publicKey: pkcs1Pub });
-  const decrypted = new DecryptionService().decryptReceipt(encrypted, pkcs8Priv);
-  assert.equal(decrypted.receiptContent, '{"x":1}');
-});
-
-test("decryption: accepts PEM-wrapped private keys", () => {
-  const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
-  const pemPriv = privateKey.export({ type: "pkcs8", format: "pem" });
-  const spkiPub = publicKey.export({ type: "spki", format: "der" }).toString("base64");
-  const encrypted = new EncryptionService().encryptReceiptForRecipient('{"y":2}', { id: "r2", publicKey: spkiPub });
-  const decrypted = new DecryptionService().decryptReceipt(encrypted, pemPriv);
-  assert.equal(decrypted.receiptContent, '{"y":2}');
-});
-
-// ──────────────────── Java parity: receipt processor merge ─────────────────
-
-test("receipt processor: merges receiving party and payment means", () => {
-  const { privateKeyB64, publicKeyB64 } = rsaKeyPair();
-  const enc = new EncryptionService();
-  const dec = new DecryptionService();
-  const envelope = {
-    cheqi: { documentNumber: "INV-1" },
-    ublPurchaseReceipt: "<Receipt><cac:AccountingCustomerParty/></Receipt>"
-  };
-  const context = {
-    receivingParty: {
-      xmlReceivingParty: "<cac:AccountingCustomerParty>MERGED</cac:AccountingCustomerParty>",
-      receivingParty: { consumerName: "Bob" }
-    },
-    paymentMeans: { xmlPaymentMeans: "<cac:PaymentMeans>PM</cac:PaymentMeans>" }
-  };
-  const encrypted = enc.encryptReceiptForRecipient(JSON.stringify(envelope), { id: "r3", publicKey: publicKeyB64 });
-  const encryptedContext = enc.encryptReceiptForRecipient(JSON.stringify(context), { id: "r3", publicKey: publicKeyB64 });
-  encrypted.encryptedCustomerDetails = encryptedContext.encryptedReceipt;
-  encrypted.encryptedCustomerAesKey = encryptedContext.encryptedSymmetricKey;
-
-  const merged = new ReceiptProcessor(dec).processEncryptedReceipt(encrypted, privateKeyB64);
-  assert.equal(
-    merged.receiptEnvelope.ublPurchaseReceipt,
-    "<Receipt><cac:AccountingCustomerParty>MERGED</cac:AccountingCustomerParty><cac:PaymentMeans>PM</cac:PaymentMeans></Receipt>"
-  );
-  assert.equal(merged.receiptEnvelope.cheqi.receivingParty.consumerName, "Bob");
-});
-
-// ──────────────────── Java parity: credit note request parsing ─────────────
-
-test("credit note: decryptCreditNoteRequest returns a parsed object", () => {
-  const { privateKeyB64, publicKeyB64 } = rsaKeyPair();
-  const enc = new EncryptionService();
-  const dec = new DecryptionService();
-  const request = {
-    cheqiReceiptId: "receipt-9",
-    returnReason: "DEFECTIVE",
-    lineItems: [{ lineItemId: "L1", quantityReturned: 2, condition: "DAMAGED" }],
-    refundPreference: "BANK_TRANSFER",
-    refundBankAccount: { iban: "NL00BANK", accountHolder: "Bob" }
-  };
-  const encrypted = enc.encryptCreditNoteForRecipient(JSON.stringify(request), { id: "r1", publicKey: publicKeyB64 });
-  const service = new CreditNoteService({}, enc, new MatchingService({}), dec);
-  const parsed = service.decryptCreditNoteRequest(
-    { encryptedCreditNoteInitiationRequest: encrypted.encryptedCreditNote, encryptedSymmetricKey: encrypted.encryptedSymmetricKey },
-    privateKeyB64
-  );
-  assert.equal(parsed.cheqiReceiptId, "receipt-9");
-  assert.equal(parsed.refundPreference, "BANK_TRANSFER");
-  assert.equal(parsed.lineItems[0].condition, "DAMAGED");
-  assert.equal(parsed.refundBankAccount.iban, "NL00BANK");
-});
-
-// ──────────────────── Java parity: delivery status ─────────────────────────
-
-test("ReceiptResult: email delivery is not reported as customer-not-found", () => {
-  const emailed = ReceiptResult.deliveredViaEmail("a@b.com");
-  assert.equal(emailed.isSuccess(), true);
-  assert.equal(emailed.isCustomerNotFound(), false);
-  assert.equal(emailed.getDeliveryStatus(), "DELIVERED_EMAIL");
-
-  const notFound = ReceiptResult.customerNotFound();
-  assert.equal(notFound.isCustomerNotFound(), true);
-  assert.equal(notFound.getDeliveryStatus(), "CUSTOMER_NOT_FOUND");
-
-  const failed = ReceiptResult.failed("boom");
-  assert.equal(failed.isSuccess(), false);
-  assert.equal(failed.getDeliveryStatus(), "FAILED");
-});
-
-test("ReceiptResult: download fallback surfaces the public download URL", () => {
-  const downloaded = ReceiptResult.deliveredViaDownload(
-    { cheqiReceiptId: "rcpt_123", downloadUrl: "https://cheqi.io/d/abc" },
-    "{}"
-  );
-  assert.equal(downloaded.isSuccess(), true);
-  assert.equal(downloaded.isCustomerNotFound(), false);
-  assert.equal(downloaded.getDeliveryStatus(), "DELIVERED_DOWNLOAD");
-  assert.equal(downloaded.getDownloadUrl(), "https://cheqi.io/d/abc");
-
-  // The app-delivery path carries no download URL.
-  const app = ReceiptResult.deliveredToApp({ cheqiReceiptId: "rcpt_123" }, "{}");
-  assert.equal(app.getDeliveryStatus(), "DELIVERED_DIGITAL");
-  assert.equal(app.getDownloadUrl(), null);
-});
-
-// ──────────────────── HTTP parity: PATCH verbs ─────────────────────────────
-
-test("client: activate/deactivate store use PATCH", async () => {
-  const methods = [];
-  const fetchImpl = async (_url, init) => {
-    methods.push(init.method);
-    return new Response(null, { status: 204 });
-  };
+test("explicitly idempotent encrypted downloads retain transient retries", async () => {
+  let attempts = 0;
+  const { DefaultCheqiApiClient } = await import("../dist/index.js");
   const client = new DefaultCheqiApiClient(
-    new CheqiSDKConfig({ environment: "https://api.example.test", apiKey: "sk_test_1", logger: new NoopLogger() }),
-    fetchImpl
-  );
-  await client.activateStore("c1", "s1", "token");
-  await client.deactivateStore("c1", "s1", "token");
-  assert.deepEqual(methods, ["PATCH", "PATCH"]);
-});
-
-test("email validation: rejects bare @", () => {
-  const sdk = new CheqiSDK({ environment: "https://sandbox.api.cheqi.io", ...NOOP }, {
-    provisionCompany() { throw new Error("should not reach"); }
-  });
-  assert.throws(
-    () => sdk.getCompanyService().provisionCompany(
-      Company.builder()
-        .companyName("X")
-        .companyEmail("bad@")
-        .address(CompanyAddress.builder().streetName("S").cityName("C").postalZone("1234").countryIsoCode("NL").build())
-        .build(),
-      "admin@example.com"
-    ),
-    /companyEmail must be a valid email/
-  );
-});
-
-// ──────────────────── Download links (offline-first QR route) ──────────────
-
-test("download: generateDownloadLink produces contract-v1 id, key, and URL", async () => {
-  const { generateDownloadLink, parseDownloadUrl } = await import("../dist/download/index.js");
-
-  const link = generateDownloadLink("https://receipt.cheqi.io/");
-  assert.match(link.downloadId, /^[A-Za-z0-9_-]{22}$/);
-  assert.match(link.contentKey, /^[A-Za-z0-9_-]{43}$/);
-  assert.equal(link.url, `https://receipt.cheqi.io/${link.downloadId}#${link.contentKey}`);
-
-  // Round-trips through the parser the download page uses.
-  assert.deepEqual(parseDownloadUrl(link.url), {
-    downloadId: link.downloadId,
-    contentKey: link.contentKey
-  });
-
-  // Fresh entropy per call.
-  const other = generateDownloadLink("https://receipt.cheqi.io");
-  assert.notEqual(other.downloadId, link.downloadId);
-  assert.notEqual(other.contentKey, link.contentKey);
-});
-
-test("download: envelope encrypt/decrypt round-trips the generated ReceiptEnvelope model", async () => {
-  const { generateDownloadLink, encryptDownloadEnvelope, decryptDownloadEnvelope } =
-    await import("../dist/download/index.js");
-
-  const envelope = {
-    cheqi: {
-      documentNumber: "INV-42",
-      identifiers: [{ type: "TRANSACTION_ID", value: "TX-42" }],
-      currency: "EUR",
-      totalAmount: 12.5,
-      sellingParty: { companyName: "Test BV" }
-    },
-    ublPurchaseReceipt: "<PurchaseReceipt/>"
-  };
-  const link = generateDownloadLink("https://receipt.cheqi.io");
-
-  const encrypted = await encryptDownloadEnvelope(envelope, link.contentKey);
-  const decrypted = await decryptDownloadEnvelope(encrypted, link.contentKey);
-
-  assert.equal(decrypted.cheqi.documentNumber, "INV-42");
-  assert.deepEqual(decrypted.cheqi.identifiers, [{ type: "TRANSACTION_ID", value: "TX-42" }]);
-  assert.equal(decrypted.cheqi.totalAmount, 12.5);
-  assert.equal(decrypted.cheqi.sellingParty.companyName, "Test BV");
-  assert.equal(decrypted.ublPurchaseReceipt, "<PurchaseReceipt/>");
-
-  // Encrypt-once semantics: two encryptions of the same envelope differ (fresh IV),
-  // which is exactly why retries must resend stored bytes rather than re-encrypt.
-  const again = await encryptDownloadEnvelope(envelope, link.contentKey);
-  assert.notEqual(again, encrypted);
-});
-
-test("download: wrong key and tampered ciphertext are rejected", async () => {
-  const { generateDownloadLink, encryptDownloadEnvelope, decryptDownloadEnvelope } =
-    await import("../dist/download/index.js");
-  const { DecryptionError } = await import("../dist/errors.js");
-
-  const link = generateDownloadLink("https://receipt.cheqi.io");
-  const encrypted = await encryptDownloadEnvelope({ cheqi: { documentNumber: "X" } }, link.contentKey);
-
-  const wrongKey = generateDownloadLink("https://receipt.cheqi.io").contentKey;
-  await assert.rejects(() => decryptDownloadEnvelope(encrypted, wrongKey), DecryptionError);
-
-  const bytes = Buffer.from(encrypted, "base64");
-  bytes[bytes.length - 1] ^= 0xff;
-  await assert.rejects(
-    () => decryptDownloadEnvelope(bytes.toString("base64"), link.contentKey),
-    DecryptionError
-  );
-
-  await assert.rejects(() => decryptDownloadEnvelope(encrypted, "too-short"), DecryptionError);
-});
-
-test("download: framing is byte-compatible with the SDK's node:crypto hybrid framing", async () => {
-  const { generateDownloadLink, encryptDownloadEnvelope, decryptDownloadEnvelope } =
-    await import("../dist/download/index.js");
-  const { createDecipheriv, createCipheriv, randomBytes } = await import("node:crypto");
-
-  const link = generateDownloadLink("https://receipt.cheqi.io");
-  const keyBytes = Buffer.from(link.contentKey.replaceAll("-", "+").replaceAll("_", "/"), "base64");
-
-  // WebCrypto-encrypted blob decrypts with the exact slicing DecryptionService.aesDecrypt uses.
-  const encrypted = await encryptDownloadEnvelope({ cheqi: { documentNumber: "INTEROP" } }, link.contentKey);
-  const combined = Buffer.from(encrypted, "base64");
-  const iv = combined.subarray(0, 12);
-  const ciphertext = combined.subarray(12, combined.length - 16);
-  const tag = combined.subarray(combined.length - 16);
-  const decipher = createDecipheriv("aes-256-gcm", keyBytes, iv);
-  decipher.setAuthTag(tag);
-  const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
-  assert.equal(JSON.parse(plaintext).cheqi.documentNumber, "INTEROP");
-
-  // And the reverse: a node:crypto-encrypted blob decrypts via the WebCrypto module.
-  const iv2 = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", keyBytes, iv2);
-  const body = Buffer.concat([cipher.update(JSON.stringify({ cheqi: { documentNumber: "REVERSE" } }), "utf8"), cipher.final()]);
-  const nodeBlob = Buffer.concat([iv2, body, cipher.getAuthTag()]).toString("base64");
-  const decrypted = await decryptDownloadEnvelope(nodeBlob, link.contentKey);
-  assert.equal(decrypted.cheqi.documentNumber, "REVERSE");
-});
-
-test("client: uploadClientEncryptedReceipt posts the contract body to /receipt/download", async () => {
-  const calls = [];
-  const fetchImpl = async (url, init) => {
-    calls.push({ url: String(url), method: init.method, body: JSON.parse(init.body) });
-    return new Response(
-      JSON.stringify({ cheqiReceiptId: "CHQ-1", createdAt: "2026-07-14T10:00:00Z", expiresAt: "2027-07-14T10:00:00Z" }),
-      { status: 201, headers: { "Content-Type": "application/json" } }
-    );
-  };
-  const client = new DefaultCheqiApiClient(
-    new CheqiSDKConfig({ environment: "https://api.example.test", apiKey: "sk_test_1", logger: new NoopLogger() }),
-    fetchImpl
-  );
-
-  const response = await client.uploadClientEncryptedReceipt({
-    downloadId: "Zk9qYx3vT1KpN8wL2sRd_g",
-    ciphertext: "AAAA",
-    templateHash: "abc123"
-  });
-
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0].method, "POST");
-  assert.ok(calls[0].url.endsWith("/receipt/download"));
-  assert.deepEqual(calls[0].body, {
-    downloadId: "Zk9qYx3vT1KpN8wL2sRd_g",
-    ciphertext: "AAAA",
-    templateHash: "abc123"
-  });
-  assert.equal(response.cheqiReceiptId, "CHQ-1");
-});
-
-test("receipt service: deferred download uses the canonical template response", async () => {
-  const { buildDownloadEnvelope, generateDownloadLink, encryptDownloadEnvelope, decryptDownloadEnvelope } =
-    await import("../dist/download/index.js");
-  const { ReceiptService } = await import("../dist/index.js");
-
-  const link = generateDownloadLink("https://receipt.cheqi.io");
-
-  let uploaded = null;
-  const service = new ReceiptService(
-    {
-      generateReceiptTemplate: async () => ({
-        cheqi: { documentNumber: "DEFERRED-1" },
-        ublPurchaseReceipt: "<PurchaseReceipt/>",
-        ublInvoice: "<Invoice/>",
-        vatMetadata: { vatRegime: "DOMESTIC_B2C" }
-      }),
-      uploadClientEncryptedReceipt: async (request) => {
-        uploaded = request;
-        return { cheqiReceiptId: "CHQ-2" };
+    new CheqiSDKConfig({
+      environment: Environment.TEST,
+      apiKey: "sk_test_http",
+      maxRetries: 1,
+      ...NOOP
+    }),
+    async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        return new Response("temporary", { status: 500, headers: { "Retry-After": "0" } });
       }
-    },
-    null,
-    null
+      return new Response(JSON.stringify({ cheqiReceiptId: "CHQ-DOWNLOAD" }), { status: 201 });
+    }
   );
 
-  // The integration retained its template request and link credentials while offline.
-  // Once it schedules the work, the SDK obtains the canonical server template and only
-  // then builds and encrypts the download envelope.
-  const template = await service.generateReceiptTemplate({
-    receiptTemplateRequest: { documentNumber: "DEFERRED-1" },
-    formats: ["CHEQI", "UBL_PURCHASE_RECEIPT", "UBL_INVOICE"],
-    taxesApplied: true
+  const response = await client.uploadEncryptedDownloadReceipt({
+    downloadId: "Zk9qYx3vT1KpN8wL2sRd_g",
+    ciphertext: "ciphertext"
   });
-  const ciphertext = await encryptDownloadEnvelope(buildDownloadEnvelope(template), link.contentKey);
-  const response = await service.uploadClientEncryptedReceipt({ downloadId: link.downloadId, ciphertext });
-  assert.equal(response.cheqiReceiptId, "CHQ-2");
+  assert.equal(attempts, 2);
+  assert.equal(response.cheqiReceiptId, "CHQ-DOWNLOAD");
+});
 
-  // The exact bytes the service uploaded decrypt with the key from the QR fragment.
-  const decrypted = await decryptDownloadEnvelope(uploaded.ciphertext, link.contentKey);
-  assert.equal(decrypted.cheqi.documentNumber, "DEFERRED-1");
-  assert.equal(decrypted.ublPurchaseReceipt, "<PurchaseReceipt/>");
-  assert.equal(decrypted.ublInvoice, "<Invoice/>");
-  assert.equal(decrypted.vatMetaData.vatRegime, "DOMESTIC_B2C");
-
-  // Validation guards.
-  await assert.rejects(() => service.uploadClientEncryptedReceipt({ downloadId: "nope", ciphertext }), /downloadId/);
-  await assert.rejects(
-    () => service.uploadClientEncryptedReceipt({ downloadId: link.downloadId, ciphertext: "" }),
-    /ciphertext/
+test("default HTTP client covers the remaining service endpoint contracts", async () => {
+  const requests = [];
+  const { DefaultCheqiApiClient } = await import("../dist/index.js");
+  const client = new DefaultCheqiApiClient(
+    new CheqiSDKConfig({ environment: Environment.TEST, apiKey: "sk_test_http", ...NOOP }),
+    async (url, init) => {
+      const path = new URL(url).pathname;
+      requests.push([init.method, path]);
+      if (path === "/recipient/resolve") {
+        return Response.json({ routeFound: true, matchId: "match-1", recipients: [] });
+      }
+      if (path === "/credit-note/encrypted") {
+        return Response.json({ cheqiReceiptId: "CHQ-CREDIT" }, { status: 202 });
+      }
+      if (path === "/receipt/email") {
+        return new Response(null, { status: 201 });
+      }
+      if (path === "/company/company-1/stores" && init.method === "POST") {
+        return Response.json({ id: "store-1" }, { status: 201 });
+      }
+      if (path === "/company/company-1/stores/store-1" && init.method === "GET") {
+        return Response.json({ id: "store-1" });
+      }
+      if (path === "/company/company-1/stores/store-1" && init.method === "PUT") {
+        return Response.json({ id: "store-1", storeName: "Updated" });
+      }
+      return new Response(null, { status: 204 });
+    }
   );
+
+  await client.matchCustomer({ recipientEmail: "buyer@example.com" });
+  await client.submitEncryptedCreditNote({
+    matchId: "match-1",
+    parentCheqiReceiptId: "CHQ-PARENT",
+    deviceDeliveries: [{
+      deviceRecipientId: "device-1",
+      encryptedContent: "cipher",
+      encryptedAesKey: "key"
+    }]
+  });
+  await client.sendReceiptViaEmail("buyer@example.com", { receiptId: "R-1" });
+  await client.createStore("company-1", {
+    storeName: "Amsterdam",
+    storeCode: "AMS-1",
+    addressDto: {
+      streetName: "Dam 1",
+      cityName: "Amsterdam",
+      postalZone: "1012JS",
+      countryIsoCode: "NL"
+    }
+  });
+  await client.getStore("company-1", "store-1");
+  await client.updateStore("company-1", "store-1", { storeName: "Updated" });
+  await client.deleteStore("company-1", "store-1");
+  await client.activateStore("company-1", "store-1");
+  await client.deactivateStore("company-1", "store-1");
+
+  assert.deepEqual(requests, [
+    ["POST", "/recipient/resolve"],
+    ["POST", "/credit-note/encrypted"],
+    ["POST", "/receipt/email"],
+    ["POST", "/company/company-1/stores"],
+    ["GET", "/company/company-1/stores/store-1"],
+    ["PUT", "/company/company-1/stores/store-1"],
+    ["DELETE", "/company/company-1/stores/store-1"],
+    ["PATCH", "/company/company-1/stores/store-1/activate"],
+    ["PATCH", "/company/company-1/stores/store-1/deactivate"]
+  ]);
 });
 
-test("download: buildDownloadEnvelope requires a template response", async () => {
-  const { buildDownloadEnvelope, EncryptionError } = await import("../dist/index.js");
-  assert.throws(() => buildDownloadEnvelope(null), EncryptionError);
-});
-
-test("download: encrypt accepts plain-JSON envelopes with string dates (template responses)", async () => {
-  const { generateDownloadLink, encryptDownloadEnvelope, decryptDownloadEnvelope } =
-    await import("../dist/download/index.js");
-
-  const link = generateDownloadLink("https://receipt.cheqi.io");
-  // Exactly what generateReceiptTemplate returns: parsed JSON, issueDate as a string.
-  const plainJsonEnvelope = {
-    cheqi: { documentNumber: "PLAIN-1", issueDate: "2026-07-14T09:30:00Z", currency: "EUR", totalAmount: 5 }
+test("HTTP errors retain diagnostics without logging response bodies", async () => {
+  const errorLogs = [];
+  const logger = {
+    debug() {},
+    info() {},
+    warn() {},
+    error(message) { errorLogs.push(message); }
   };
+  const { DefaultCheqiApiClient } = await import("../dist/index.js");
+  const client = new DefaultCheqiApiClient(
+    new CheqiSDKConfig({
+      environment: Environment.TEST,
+      apiKey: "sk_test_http",
+      maxRetries: 0,
+      logger
+    }),
+    async () => new Response(JSON.stringify({ message: "private backend detail" }), {
+      status: 400,
+      headers: { "x-correlation-id": "correlation-1" }
+    })
+  );
 
-  const encrypted = await encryptDownloadEnvelope(plainJsonEnvelope, link.contentKey);
-  const decrypted = await decryptDownloadEnvelope(encrypted, link.contentKey);
+  await assert.rejects(
+    () => client.getStore("company-1", "store-1"),
+    (error) => error instanceof CheqiApiError &&
+      error.errorCode === "INVALID_REQUEST" &&
+      error.correlationId === "correlation-1" &&
+      error.message.includes("private backend detail")
+  );
+  assert.equal(errorLogs.length, 1);
+  assert.equal(errorLogs[0].includes("private backend detail"), false);
+});
 
-  assert.equal(decrypted.cheqi.documentNumber, "PLAIN-1");
-  assert.equal(decrypted.cheqi.issueDate.toISOString(), "2026-07-14T09:30:00.000Z");
+test("HTTP client rejects successful non-JSON responses", async () => {
+  const { DefaultCheqiApiClient } = await import("../dist/index.js");
+  const client = new DefaultCheqiApiClient(
+    new CheqiSDKConfig({ environment: Environment.TEST, apiKey: "sk_test_http", ...NOOP }),
+    async () => new Response("not json", { status: 200 })
+  );
+
+  await assert.rejects(
+    () => client.getStore("company-1", "store-1"),
+    (error) => error instanceof CheqiApiError && error.errorCode === "INVALID_RESPONSE"
+  );
 });

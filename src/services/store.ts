@@ -1,5 +1,5 @@
 import { CheqiSDKError, ErrorCodes } from "../errors.js";
-import type { CheqiApiClient, CreateStoreRequest } from "../types.js";
+import type { CheqiApiClient, CreateStoreRequest, StoreDTO, UpdateStoreRequest } from "../types.js";
 import { getCreateStoreRequestValidationErrors } from "../validators.js";
 
 export class StoreService {
@@ -20,7 +20,7 @@ export class StoreService {
     companyId: string,
     request: CreateStoreRequest,
     accessToken: string | null = null
-  ): Promise<Record<string, unknown>> {
+  ): Promise<StoreDTO> {
     this.validateCompanyId(companyId);
     this.validateAccessToken(accessToken);
 
@@ -39,7 +39,7 @@ export class StoreService {
     companyId: string,
     activeOnly: boolean | undefined = undefined,
     accessToken: string | null = null
-  ): Promise<Record<string, unknown>> {
+  ): Promise<StoreDTO[]> {
     this.validateCompanyId(companyId);
     this.validateAccessToken(accessToken);
     return this.apiClient.getStores(companyId, activeOnly, accessToken);
@@ -48,7 +48,7 @@ export class StoreService {
   getActiveStores(
     companyId: string,
     accessToken: string | null = null
-  ): Promise<Record<string, unknown>> {
+  ): Promise<StoreDTO[]> {
     return this.getStores(companyId, true, accessToken);
   }
 
@@ -56,7 +56,7 @@ export class StoreService {
     companyId: string,
     storeId: string,
     accessToken: string | null = null
-  ): Promise<Record<string, unknown>> {
+  ): Promise<StoreDTO> {
     this.validateCompanyId(companyId);
     this.validateStoreId(storeId);
     this.validateAccessToken(accessToken);
@@ -66,9 +66,9 @@ export class StoreService {
   updateStore(
     companyId: string,
     storeId: string,
-    request: CreateStoreRequest | null | undefined,
+    request: UpdateStoreRequest | null | undefined,
     accessToken: string | null = null
-  ): Promise<Record<string, unknown>> {
+  ): Promise<StoreDTO> {
     this.validateCompanyId(companyId);
     this.validateStoreId(storeId);
     this.validateAccessToken(accessToken);

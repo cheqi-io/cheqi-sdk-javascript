@@ -14,6 +14,11 @@ export class MatchingService {
         { errorCode: ErrorCodes.VALIDATION_ERROR, httpStatusCode: 400 }
       );
     }
+    if (!hasValidIdentifiers(identificationDetails)) {
+      throw new TypeError(
+        "Identification details must contain at least one identifier (card details, payment account details, receipt ID, email, pairing code, or payment type)"
+      );
+    }
 
     try {
       return await this.apiClient.matchCustomer(identificationDetails, accessToken);
@@ -27,4 +32,15 @@ export class MatchingService {
       });
     }
   }
+}
+
+function hasValidIdentifiers(details: IdentificationDetails): boolean {
+  return Boolean(
+    details.cardDetails?.paymentAccountReference?.trim() ||
+    details.paymentAccountDetails?.identifier?.trim() ||
+    details.cheqiReceiptId?.trim() ||
+    details.recipientEmail?.trim() ||
+    details.pairingCode?.trim() ||
+    details.paymentType
+  );
 }

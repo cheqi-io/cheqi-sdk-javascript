@@ -50,19 +50,21 @@ export class RetryHandler {
 
   async executeWithRetry(
     operation: () => Promise<Response>,
-    operationName: string
+    operationName: string,
+    allowRetries = true
   ): Promise<Response> {
+    const retryLimit = allowRetries ? this.maxRetries : 0;
     let attempt = 0;
     let lastError: unknown = null;
 
-    while (attempt <= this.maxRetries) {
+    while (attempt <= retryLimit) {
       try {
         const response = await operation();
 
-        if (isRetryableStatus(response.status) && attempt < this.maxRetries) {
+        if (isRetryableStatus(response.status) && attempt < retryLimit) {
           const delay = this.calculateBackoff(attempt, response.status, response.headers.get("Retry-After"));
           this.logger.warn(
-            `${operationName} returned ${response.status}, retrying in ${delay}ms (attempt ${attempt + 1}/${this.maxRetries})`
+            `${operationName} returned ${response.status}, retrying in ${delay}ms (attempt ${attempt + 1}/${retryLimit})`
           );
           await sleep(delay);
           attempt += 1;
@@ -75,12 +77,12 @@ export class RetryHandler {
         return response;
       } catch (error) {
         lastError = error;
-        if (attempt >= this.maxRetries) {
+        if (attempt >= retryLimit) {
           break;
         }
         const delay = this.calculateBackoff(attempt, 0, null);
         this.logger.warn(
-          `${operationName} network error: ${(error as Error).message}, retrying in ${delay}ms (attempt ${attempt + 1}/${this.maxRetries})`
+          `${operationName} network error: ${(error as Error).message}, retrying in ${delay}ms (attempt ${attempt + 1}/${retryLimit})`
         );
         await sleep(delay);
         attempt += 1;

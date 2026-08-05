@@ -1,13 +1,12 @@
 import { CheqiSDKConfig } from "./config.js";
 import { DefaultCheqiApiClient } from "./http/client.js";
 import type { Logger } from "./logger.js";
-import type { CheqiSDKOptions, DecryptedDeliveredCreditNote, DecryptedReceipt, EncryptedCreditNote, EncryptedReceipt } from "./types.js";
-import { CompanyService } from "./services/company.js";
+import type { CheqiSDKOptions } from "./types.js";
 import { CreditNoteService } from "./services/credit-note.js";
 import { DecryptionService } from "./services/decryption.js";
+import { DownloadService } from "./download/index.js";
 import { EncryptionService } from "./services/encryption.js";
 import { MatchingService } from "./services/matching.js";
-import { ReceiptProcessor } from "./services/receipt-processor.js";
 import { ReceiptService } from "./services/receipt.js";
 import { StoreService } from "./services/store.js";
 import { VerificationService } from "./services/verification.js";
@@ -83,9 +82,8 @@ export class CheqiSDKBuilder {
 /**
  * Main entry point for the Cheqi SDK.
  *
- * Provides access to all services: receipt processing, credit-note
- * processing, customer matching, encryption/decryption, company
- * provisioning, and store management.
+ * Provides access to definitive receipt and credit-note issuance, customer
+ * matching, encryption/decryption, encrypted downloads, and store management.
  *
  * @example
  * ```ts
@@ -94,9 +92,9 @@ export class CheqiSDKBuilder {
  *   .apiKey("sk_test_abc123")
  *   .build();
  *
- * const result = await sdk.receiptService.processCompleteReceipt(
+ * const result = await sdk.receiptService.issueReceipt(
  *   identificationDetails,
- *   receiptRequest,
+ *   receiptPayload,
  *   accessToken
  * );
  * ```
@@ -105,12 +103,11 @@ export class CheqiSDK {
   readonly config: CheqiSDKConfig;
   readonly verificationService: VerificationService;
   readonly decryptionService: DecryptionService;
+  readonly downloadService: DownloadService;
   readonly encryptionService: EncryptionService;
-  readonly receiptProcessor: ReceiptProcessor;
   readonly apiClient: DefaultCheqiApiClient;
   readonly matchingService: MatchingService;
   readonly receiptService: ReceiptService;
-  readonly companyService: CompanyService;
   readonly storeService: StoreService;
   readonly creditNoteService: CreditNoteService;
 
@@ -123,8 +120,8 @@ export class CheqiSDK {
     this.config = new CheqiSDKConfig(options);
     this.verificationService = new VerificationService();
     this.decryptionService = new DecryptionService();
+    this.downloadService = new DownloadService();
     this.encryptionService = new EncryptionService();
-    this.receiptProcessor = new ReceiptProcessor(this.decryptionService);
     this.apiClient = apiClient ?? new DefaultCheqiApiClient(this.config);
     this.matchingService = new MatchingService(this.apiClient);
     this.receiptService = new ReceiptService(
@@ -133,39 +130,22 @@ export class CheqiSDK {
       this.matchingService,
       this.config.receiptDownloadBaseUrl
     );
-    this.companyService = new CompanyService(this.apiClient);
     this.storeService = new StoreService(this.apiClient);
     this.creditNoteService = new CreditNoteService(
       this.apiClient,
       this.encryptionService,
-      this.matchingService,
-      this.decryptionService
+      this.matchingService
     );
-  }
-
-  /**
-   * Decrypt an encrypted receipt using the seller's private key and merge the
-   * receipt context (receiving party / payment means) into both receipt formats.
-   * @param encryptedReceipt  The encrypted receipt payload.
-   * @param privateKey        Base64-encoded PKCS#8 DER private key.
-   */
-  processEncryptedReceipt(encryptedReceipt: EncryptedReceipt, privateKey: string): DecryptedReceipt {
-    return this.receiptProcessor.processEncryptedReceipt(encryptedReceipt, privateKey);
-  }
-
-  processEncryptedCreditNote(encryptedCreditNote: EncryptedCreditNote, privateKey: string): DecryptedDeliveredCreditNote {
-    return this.creditNoteService.decryptDeliveredCreditNote(encryptedCreditNote, privateKey);
   }
 
   getConfig(): CheqiSDKConfig { return this.config; }
   getApiClient(): DefaultCheqiApiClient { return this.apiClient; }
   getEncryptionService(): EncryptionService { return this.encryptionService; }
   getDecryptionService(): DecryptionService { return this.decryptionService; }
-  getReceiptProcessor(): ReceiptProcessor { return this.receiptProcessor; }
+  getDownloadService(): DownloadService { return this.downloadService; }
   getMatchingService(): MatchingService { return this.matchingService; }
   getReceiptService(): ReceiptService { return this.receiptService; }
   getCreditNoteService(): CreditNoteService { return this.creditNoteService; }
-  getCompanyService(): CompanyService { return this.companyService; }
   getStoreService(): StoreService { return this.storeService; }
   getVerificationService(): VerificationService { return this.verificationService; }
 }

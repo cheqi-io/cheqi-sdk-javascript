@@ -11,6 +11,7 @@ export const Environment = {
 
 export const ReceiptEnvironment = {
   SANDBOX: "https://sandbox.receipt.cheqi.io",
+  TEST: "https://test.receipt.cheqi.io",
   PRODUCTION: "https://receipt.cheqi.io"
 } as const;
 
@@ -75,6 +76,9 @@ export class CheqiSDKConfig {
     if (apiKey && !isValidApiKeyFormat(apiKey)) {
       this.logger.warn("API key does not match expected format (sk_live_* or sk_test_*)");
     }
+    if (!apiKey) {
+      this.logger.warn("No authentication configured. API calls will fail unless access tokens are provided explicitly.");
+    }
     this.apiKey = apiKey;
 
     // --- private key ---
@@ -90,6 +94,7 @@ export class CheqiSDKConfig {
 function receiptBaseUrlForEnvironment(environment?: string): string | null {
   if (environment === Environment.PRODUCTION) return ReceiptEnvironment.PRODUCTION;
   if (environment === Environment.SANDBOX) return ReceiptEnvironment.SANDBOX;
+  if (environment === Environment.TEST) return ReceiptEnvironment.TEST;
   return null;
 }
 

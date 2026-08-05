@@ -9,13 +9,11 @@ export { Endpoints } from "./http/endpoints.js";
 export { RetryHandler } from "./http/retry.js";
 export type { RetryOptions } from "./http/retry.js";
 export { EncryptionService } from "./services/encryption.js";
-export { DecryptionService } from "./services/decryption.js";
+export { DecryptionService, validateCreditNoteInitiationRequest } from "./services/decryption.js";
 export { MatchingService } from "./services/matching.js";
 export { ReceiptService } from "./services/receipt.js";
-export { ReceiptProcessor } from "./services/receipt-processor.js";
 export { CreditNoteService } from "./services/credit-note.js";
 export { VerificationService } from "./services/verification.js";
-export { CompanyService } from "./services/company.js";
 export { StoreService } from "./services/store.js";
 export * from "./download/index.js";
 export { canonicalizeJson } from "./rfc8785.js";
@@ -23,19 +21,20 @@ export { canonicalizeXml } from "./xml.js";
 export type {
   CheqiApiClient,
   CheqiSDKOptions,
-  CreditNoteEnvelope,
-  CreditNoteInitiationRequest,
-  DecryptedDeliveredCreditNote,
-  DecryptedReceipt,
-  EncryptedReceipt,
+  EncryptedCreditNoteEnvelope,
+  EncryptedCreditNoteInitiationRequest,
+  EncryptedCreditNoteInitiationRequestResponse,
+  EncryptedReceiptDeliveryResponse,
+  EncryptedReceiptEnvelope,
+  EncryptedReceiptPayload,
   FetchLike,
+  IdentificationDetails as IdentificationDetailsShape,
   JsonObject,
   JsonPrimitive,
   JsonValue,
   Nullable,
-  RefundBankAccount,
-  RefundPreference,
-  ReturnCondition,
-  ReturnLineItem,
+  ReceiptEnvelope,
+  ReceiptSubmissionResponse,
+  RecipientResolutionResponse,
   RequestOptions
 } from "./types.js";
