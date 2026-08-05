@@ -43,8 +43,9 @@
     "prebuild": "node ./scripts/clean-dist.mjs",
     "build": "tsc -p tsconfig.build.json",
     "test": "npm run build && node --test test/sdk.test.js",
+    "check:package": "npm run build && node ./scripts/check-package.mjs && npm pack --dry-run",
     "typecheck": "tsc -p tsconfig.json",
-    "prepublishOnly": "npm run build && npm test"
+    "prepublishOnly": "npm test && npm run check:package"
   },
   "engines": {
     "node": ">=20"

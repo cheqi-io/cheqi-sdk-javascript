@@ -2,6 +2,8 @@ import { constants, createDecipheriv, createPrivateKey, privateDecrypt } from "n
 import { AES_KEY_LENGTH, GCM_IV_LENGTH, GCM_TAG_LENGTH } from "../crypto.js";
 import { DecryptionError } from "../errors.js";
 import { ReceiptEnvelopeFromJSON } from "../models/generated/ReceiptEnvelope.js";
+import { instanceOfRefundPreference } from "../models/generated/RefundPreference.js";
+import { instanceOfReturnReasonCode } from "../models/generated/ReturnReasonCode.js";
 import type {
   CreditNoteInitiationRequest,
   EncryptedCreditNoteInitiationRequest,
@@ -154,18 +156,18 @@ export function validateCreditNoteInitiationRequest(request: CreditNoteInitiatio
     if (lineItem.productId.length > 255) {
       throw new TypeError("lineItems.productId must be at most 255 characters");
     }
-    if (lineItem.quantity == null || lineItem.quantity <= 0) {
+    if (lineItem.quantity == null || !Number.isFinite(lineItem.quantity) || lineItem.quantity <= 0) {
       throw new TypeError("lineItems.quantity must be greater than zero");
     }
-    if (!lineItem.reasonCode) {
-      throw new TypeError("lineItems.reasonCode is required");
+    if (!instanceOfReturnReasonCode(lineItem.reasonCode)) {
+      throw new TypeError("lineItems.reasonCode is invalid");
     }
     if (lineItem.reasonDescription != null && lineItem.reasonDescription.length > 1000) {
       throw new TypeError("lineItems.reasonDescription must be at most 1000 characters");
     }
   }
-  if (!request.refundPreference) {
-    throw new TypeError("refundPreference is required");
+  if (!instanceOfRefundPreference(request.refundPreference)) {
+    throw new TypeError("refundPreference is invalid");
   }
   if (request.refundPreference === "BANK_TRANSFER") {
     if (!request.refundBankAccount) {

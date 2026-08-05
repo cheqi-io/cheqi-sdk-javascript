@@ -1,4 +1,5 @@
 import { CheqiSDKConfig } from "../config.js";
+import { createRequire } from "node:module";
 import { CheqiApiError, ErrorCodes } from "../errors.js";
 import type { Logger } from "../logger.js";
 import { NoopLogger } from "../logger.js";
@@ -26,8 +27,8 @@ import { StoreDTOFromJSON } from "../models/generated/StoreDTO.js";
 import { Endpoints } from "./endpoints.js";
 import { RetryHandler } from "./retry.js";
 
-// read version at module load; falls back gracefully
-const SDK_VERSION = "2.1.0";
+const require = createRequire(import.meta.url);
+const SDK_VERSION = (require("../../package.json") as { version: string }).version;
 
 function mapErrorCode(status: number) {
   if (status === 400) return ErrorCodes.INVALID_REQUEST;
@@ -138,7 +139,8 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
     return ClientReceiptDownloadResponseFromJSON(await this.request("POST", Endpoints.CLIENT_RECEIPT_DOWNLOAD_ENDPOINT, {
       body: normalizeValue(request),
       accessToken,
-      operation: "uploadEncryptedDownloadReceipt"
+      operation: "uploadEncryptedDownloadReceipt",
+      retryable: true
     }));
   }
 
@@ -188,7 +190,8 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
 
   async getStores(companyId: string, activeOnly?: boolean, accessToken?: string | null): Promise<StoreDTO[]> {
     const stores = await this.request("GET", Endpoints.COMPANY_STORES_ENDPOINT(companyId), {
-      params: { activeOnly },
+      // `activeOnly=false` means no filter; the API parameter itself is named `active`.
+      params: { active: activeOnly ? true : undefined },
       accessToken,
       operation: "getStores"
     });
@@ -243,7 +246,7 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
   private async request(
     method: string,
     path: string,
-    { body, params, accessToken, operation }: RequestOptions
+    { body, params, accessToken, operation, retryable }: RequestOptions
   ): Promise<any> {
     const url = new URL(path, this.config.apiEndpoint);
     if (params) {
@@ -263,14 +266,15 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
         body: body === undefined ? undefined : typeof body === "string" ? body : serializeJson(body),
         signal: AbortSignal.timeout(this.config.timeoutSeconds * 1000)
       }),
-      operation
+      operation,
+      retryable ?? isIdempotentMethod(method)
     );
 
     if (response.status >= 400) {
       const responseText = await response.text();
       const correlationId = response.headers.get("x-correlation-id");
       this.logger.error(
-        `${operation} failed: status=${response.status}, correlationId=${correlationId ?? "none"}, body=${responseText.slice(0, 500)}`
+        `${operation} failed: status=${response.status}, correlationId=${correlationId ?? "none"}`
       );
       throw new CheqiApiError(buildErrorMessage(operation, response.status, responseText), {
         errorCode: mapErrorCode(response.status),
@@ -299,4 +303,8 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
       });
     }
   }
+}
+
+function isIdempotentMethod(method: string): boolean {
+  return method === "GET" || method === "HEAD" || method === "PUT" || method === "DELETE";
 }

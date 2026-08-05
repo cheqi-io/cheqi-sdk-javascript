@@ -68,3 +68,6 @@ jobs:
 
       - name: Test
         run: npm test
+
+      - name: Check package artifact
+        run: npm run check:package

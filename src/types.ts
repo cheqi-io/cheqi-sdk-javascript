@@ -71,6 +71,8 @@ export interface RequestOptions {
   params?: Record<string, string | number | boolean | null | undefined>;
   accessToken?: string | null;
   operation: string;
+  /** Override whether transient failures may be retried for this operation. */
+  retryable?: boolean;
 }
 
 export type FetchLike = typeof fetch;

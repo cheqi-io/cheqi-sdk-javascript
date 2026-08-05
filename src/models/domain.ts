@@ -26,6 +26,8 @@ import type {
   TaxCategoryCode,
   UnitCode
 } from "./generated/index.js";
+import { instanceOfRefundPreference } from "./generated/RefundPreference.js";
+import { instanceOfReturnReasonCode } from "./generated/ReturnReasonCode.js";
 
 class BuilderBase<T> {
   protected values: Partial<T> = {};
@@ -167,8 +169,8 @@ export class Tax implements TaxShape {
 export class TaxBuilder extends BuilderBase<TaxShape> {
   rate(value: number): this { this.values.rate = value; return this; }
   type(value: string): this { this.values.type = value; return this; }
-  taxableAmount(value: number | string): this { this.values.taxableAmount = Number(value); return this; }
-  amount(value: number | string): this { this.values.amount = Number(value); return this; }
+  taxableAmount(value: number | string): this { this.values.taxableAmount = decimalNumber(value, "Tax taxableAmount"); return this; }
+  amount(value: number | string): this { this.values.amount = decimalNumber(value, "Tax amount"); return this; }
   label(value: string): this { this.values.label = value; return this; }
   category(value: TaxCategoryCode): this { this.values.category = value; return this; }
   exemptionReasonCode(value: string): this { this.values.exemptionReasonCode = value; return this; }
@@ -188,12 +190,12 @@ export class Discount implements DiscountShape {
   constructor(init: Partial<DiscountShape> = {}) { Object.assign(this, init); }
   static builder(): DiscountBuilder { return new DiscountBuilder(); }
   static of(amount: number | string, label?: string, percentage?: number): Discount {
-    return new Discount({ amount: Number(amount), label, percentage });
+    return new Discount({ amount: decimalNumber(amount, "Discount amount"), label, percentage });
   }
 }
 
 export class DiscountBuilder extends BuilderBase<DiscountShape> {
-  amount(value: number | string): this { this.values.amount = Number(value); return this; }
+  amount(value: number | string): this { this.values.amount = decimalNumber(value, "Discount amount"); return this; }
   percentage(value: number): this { this.values.percentage = value; return this; }
   label(value: string): this { this.values.label = value; return this; }
   build(): Discount {
@@ -209,12 +211,12 @@ export class Charge implements ChargeShape {
   constructor(init: Partial<ChargeShape> = {}) { Object.assign(this, init); }
   static builder(): ChargeBuilder { return new ChargeBuilder(); }
   static of(amount: number | string, label?: string, percentage?: number): Charge {
-    return new Charge({ amount: Number(amount), label, percentage });
+    return new Charge({ amount: decimalNumber(amount, "Charge amount"), label, percentage });
   }
 }
 
 export class ChargeBuilder extends BuilderBase<ChargeShape> {
-  amount(value: number | string): this { this.values.amount = Number(value); return this; }
+  amount(value: number | string): this { this.values.amount = decimalNumber(value, "Charge amount"); return this; }
   percentage(value: number): this { this.values.percentage = value; return this; }
   label(value: string): this { this.values.label = value; return this; }
   build(): Charge {
@@ -265,9 +267,9 @@ export class ProductBuilder extends BuilderBase<ProductShape> {
   quantity(value: number): this { this.values.quantity = value; return this; }
   baseQuantity(value: number): this { this.values.baseQuantity = value; return this; }
   unitCode(value: UnitCode): this { this.values.unitCode = value; return this; }
-  unitPrice(value: number | string): this { this.values.unitPrice = Number(value); return this; }
-  subtotal(value: number | string): this { this.values.subtotal = Number(value); return this; }
-  total(value: number | string): this { this.values.total = Number(value); return this; }
+  unitPrice(value: number | string): this { this.values.unitPrice = decimalNumber(value, "Product unitPrice"); return this; }
+  subtotal(value: number | string): this { this.values.subtotal = decimalNumber(value, "Product subtotal"); return this; }
+  total(value: number | string): this { this.values.total = decimalNumber(value, "Product total"); return this; }
   period(value: PeriodShape): this { this.values.period = value; return this; }
   taxes(values: TaxShape[]): this { this.taxItems = [...values]; return this; }
   addTax(value: TaxShape): this;
@@ -465,10 +467,10 @@ export class ReceiptPayloadBuilder extends BuilderBase<ReceiptPayloadShape> {
   documentNumber(value: string): this { this.values.documentNumber = value; return this; }
   issueDate(value: Date): this { this.values.issueDate = value; return this; }
   currency(value: string): this { this.values.currency = value; return this; }
-  receiptSubtotal(value: number | string): this { this.values.receiptSubtotal = Number(value); return this; }
-  totalBeforeTax(value: number | string): this { this.values.totalBeforeTax = Number(value); return this; }
-  totalTaxAmount(value: number | string): this { this.values.totalTaxAmount = Number(value); return this; }
-  totalAmount(value: number | string): this { this.values.totalAmount = Number(value); return this; }
+  receiptSubtotal(value: number | string): this { this.values.receiptSubtotal = decimalNumber(value, "receiptSubtotal"); return this; }
+  totalBeforeTax(value: number | string): this { this.values.totalBeforeTax = decimalNumber(value, "totalBeforeTax"); return this; }
+  totalTaxAmount(value: number | string): this { this.values.totalTaxAmount = decimalNumber(value, "totalTaxAmount"); return this; }
+  totalAmount(value: number | string): this { this.values.totalAmount = decimalNumber(value, "totalAmount"); return this; }
   taxesApplied(value: boolean): this { this.values.taxesApplied = value; return this; }
   transactionDate(value: Date): this { this.values.transactionDate = value; return this; }
   purchaseDate(value: Date): this { this.values.purchaseDate = value; return this; }
@@ -575,6 +577,20 @@ function requireValue(value: unknown, name: string): void {
   }
 }
 
+function decimalNumber(value: number | string, name: string): number {
+  if (typeof value === "string" && !value.trim()) {
+    throw new TypeError(`${name} must be a finite number`);
+  }
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    throw new TypeError(`${name} must be a finite number`);
+  }
+  if (Number.isInteger(parsed) && !Number.isSafeInteger(parsed)) {
+    throw new TypeError(`${name} exceeds JavaScript's safe integer range`);
+  }
+  return parsed;
+}
+
 function validateInitiationRequest(request: CreditNoteInitiationRequestShape): void {
   requireValue(request.cheqiReceiptId, "cheqiReceiptId");
   requireValue(request.receiptId, "receiptId");
@@ -585,13 +601,19 @@ function validateInitiationRequest(request: CreditNoteInitiationRequestShape): v
   for (const lineItem of request.lineItems) {
     requireValue(lineItem.productId, "lineItems.productId");
     if (lineItem.productId.length > 255) throw new TypeError("lineItems.productId must be at most 255 characters");
-    if (lineItem.quantity == null || lineItem.quantity <= 0) throw new TypeError("lineItems.quantity must be greater than zero");
-    requireValue(lineItem.reasonCode, "lineItems.reasonCode");
+    if (lineItem.quantity == null || !Number.isFinite(lineItem.quantity) || lineItem.quantity <= 0) {
+      throw new TypeError("lineItems.quantity must be greater than zero");
+    }
+    if (!instanceOfReturnReasonCode(lineItem.reasonCode)) {
+      throw new TypeError("lineItems.reasonCode is invalid");
+    }
     if (lineItem.reasonDescription != null && lineItem.reasonDescription.length > 1000) {
       throw new TypeError("lineItems.reasonDescription must be at most 1000 characters");
     }
   }
-  requireValue(request.refundPreference, "refundPreference");
+  if (!instanceOfRefundPreference(request.refundPreference)) {
+    throw new TypeError("refundPreference is invalid");
+  }
   if (request.refundPreference === "BANK_TRANSFER") {
     if (!request.refundBankAccount) throw new TypeError("refundBankAccount is required for BANK_TRANSFER");
     requireValue(request.refundBankAccount.iban, "refundBankAccount.iban");
