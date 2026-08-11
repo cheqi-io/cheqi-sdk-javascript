@@ -76,9 +76,6 @@ export class CheqiSDKConfig {
     this.maxRetries = maxRetries;
 
     // --- api key ---
-    if (apiKey && !isValidApiKeyFormat(apiKey)) {
-      this.logger.warn("API key does not match expected format (sk_live_* or sk_test_*)");
-    }
     if (!apiKey) {
       this.logger.warn("No authentication configured. API calls will fail unless access tokens are provided explicitly.");
     }
@@ -106,8 +103,4 @@ function receiptBaseUrlForEnvironment(environment?: string): string | null {
   if (environment === Environment.SANDBOX) return ReceiptEnvironment.SANDBOX;
   if (environment === Environment.TEST) return ReceiptEnvironment.TEST;
   return null;
-}
-
-function isValidApiKeyFormat(key: string): boolean {
-  return key.startsWith("sk_live_") || key.startsWith("sk_test_");
 }

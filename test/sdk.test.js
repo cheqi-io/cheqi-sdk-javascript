@@ -90,6 +90,25 @@ test("config validates endpoint, timeout, and retries", () => {
   );
 });
 
+test("config accepts backend-issued sk_ API keys without a format warning", () => {
+  const warnings = [];
+  const logger = {
+    debug() {},
+    info() {},
+    warn(message) { warnings.push(message); },
+    error() {}
+  };
+
+  const config = new CheqiSDKConfig({
+    apiEndpoint: Environment.TEST,
+    apiKey: "sk_generatedKeyWithoutEnvironmentPrefix",
+    logger
+  });
+
+  assert.equal(config.apiKey, "sk_generatedKeyWithoutEnvironmentPrefix");
+  assert.deepEqual(warnings, []);
+});
+
 test("SDK options support custom endpoints and Fetch transports", async () => {
   const requests = [];
   const customFetch = async (url) => {

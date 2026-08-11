@@ -20,7 +20,7 @@ import { CheqiSDK, Environment } from "@cheqi/sdk";
 
 const sdk = new CheqiSDK({
   apiEndpoint: Environment.SANDBOX,
-  apiKey: "sk_test_..."
+  apiKey: "sk_..."
 });
 ```
 
@@ -50,7 +50,7 @@ import {
 
 const sdk = new CheqiSDK({
   apiEndpoint: Environment.SANDBOX,
-  apiKey: "sk_test_..."
+  apiKey: "sk_..."
 });
 
 const identificationDetails = {
