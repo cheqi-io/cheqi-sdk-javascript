@@ -1,11 +1,12 @@
 # Cheqi JavaScript SDK
 
-JavaScript/TypeScript SDK for resolving receipt recipients and issuing end-to-end encrypted Cheqi receipts and credit notes. Its v2.1 contract and behavior align with the Cheqi Java SDK.
+JavaScript/TypeScript SDK for resolving receipt recipients and issuing end-to-end encrypted Cheqi receipts and credit notes. Its v2.2 contract and behavior align with the Cheqi Java SDK.
 
 ## Requirements
 
 - Node.js 20 or newer
-- An RSA key pair for recipient-side envelope decryption
+- A Cheqi API key or OAuth access token for authenticated API calls
+- An RSA private key only when decrypting recipient envelopes
 
 ## Installation
 
