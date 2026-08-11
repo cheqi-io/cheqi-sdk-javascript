@@ -1,6 +1,6 @@
 /**
  * Logger interface for the Cheqi SDK. Compatible with console, pino, winston, bunyan, etc.
- * Supply your own implementation via {@link CheqiSDKBuilder.logger} or use the built-in
+ * Supply your own implementation through `CheqiSDKOptions.logger` or use the built-in
  * {@link ConsoleLogger} (default) / {@link NoopLogger}.
  */
 export interface Logger {

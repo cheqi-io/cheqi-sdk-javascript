@@ -1,5 +1,6 @@
 export * from "../models.js";
 export * from "./domain.js";
+export type * from "./generated/index.js";
 export { AccountIdentifierType } from "./generated/AccountIdentifierType.js";
 export { BarcodeType } from "./generated/BarcodeType.js";
 export { BuyerType } from "./generated/BuyerType.js";

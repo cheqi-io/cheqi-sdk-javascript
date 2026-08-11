@@ -35,14 +35,26 @@ export class StoreService {
     return this.apiClient.createStore(companyId, request, accessToken);
   }
 
+  getStores(companyId: string, accessToken?: string | null): Promise<StoreDTO[]>;
   getStores(
     companyId: string,
-    activeOnly: boolean | undefined = undefined,
+    activeOnly: boolean | undefined,
+    accessToken?: string | null
+  ): Promise<StoreDTO[]>;
+  getStores(
+    companyId: string,
+    activeOnlyOrAccessToken: boolean | string | null | undefined = undefined,
     accessToken: string | null = null
   ): Promise<StoreDTO[]> {
+    const activeOnly = typeof activeOnlyOrAccessToken === "boolean"
+      ? activeOnlyOrAccessToken
+      : undefined;
+    const resolvedAccessToken = typeof activeOnlyOrAccessToken === "string"
+      ? activeOnlyOrAccessToken
+      : accessToken;
     this.validateCompanyId(companyId);
-    this.validateAccessToken(accessToken);
-    return this.apiClient.getStores(companyId, activeOnly, accessToken);
+    this.validateAccessToken(resolvedAccessToken);
+    return this.apiClient.getStores(companyId, activeOnly, resolvedAccessToken);
   }
 
   getActiveStores(

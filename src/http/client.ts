@@ -176,7 +176,8 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
         cheqiReceipt: normalizeValue(receipt)
       },
       accessToken,
-      operation: "sendReceiptViaEmail"
+      operation: "sendReceiptViaEmail",
+      responseType: "void"
     });
   }
 
@@ -193,7 +194,8 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
       // `activeOnly=false` means no filter; the API parameter itself is named `active`.
       params: { active: activeOnly ? true : undefined },
       accessToken,
-      operation: "getStores"
+      operation: "getStores",
+      responseType: "list"
     });
     return (stores as unknown[]).map(StoreDTOFromJSON);
   }
@@ -214,15 +216,27 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
   }
 
   async deleteStore(companyId: string, storeId: string, accessToken?: string | null): Promise<void> {
-    await this.request("DELETE", Endpoints.COMPANY_STORE_ENDPOINT(companyId, storeId), { accessToken, operation: "deleteStore" });
+    await this.request("DELETE", Endpoints.COMPANY_STORE_ENDPOINT(companyId, storeId), {
+      accessToken,
+      operation: "deleteStore",
+      responseType: "void"
+    });
   }
 
   async activateStore(companyId: string, storeId: string, accessToken?: string | null): Promise<void> {
-    await this.request("PATCH", Endpoints.COMPANY_STORE_ACTIVATE_ENDPOINT(companyId, storeId), { accessToken, operation: "activateStore" });
+    await this.request("PATCH", Endpoints.COMPANY_STORE_ACTIVATE_ENDPOINT(companyId, storeId), {
+      accessToken,
+      operation: "activateStore",
+      responseType: "void"
+    });
   }
 
   async deactivateStore(companyId: string, storeId: string, accessToken?: string | null): Promise<void> {
-    await this.request("PATCH", Endpoints.COMPANY_STORE_DEACTIVATE_ENDPOINT(companyId, storeId), { accessToken, operation: "deactivateStore" });
+    await this.request("PATCH", Endpoints.COMPANY_STORE_DEACTIVATE_ENDPOINT(companyId, storeId), {
+      accessToken,
+      operation: "deactivateStore",
+      responseType: "void"
+    });
   }
 
   // ---------- internals ----------
@@ -246,9 +260,9 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
   private async request(
     method: string,
     path: string,
-    { body, params, accessToken, operation, retryable }: RequestOptions
+    { body, params, accessToken, operation, retryable, responseType = "json" }: RequestOptions
   ): Promise<any> {
-    const url = new URL(path, this.config.apiEndpoint);
+    const url = resolveEndpoint(this.config.apiEndpoint, path);
     if (params) {
       for (const [key, value] of Object.entries(params)) {
         if (value !== undefined && value !== null) {
@@ -285,24 +299,51 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
 
     this.logger.debug(`${operation} completed: status=${response.status}`);
 
-    if (response.status === 204) {
+    if (responseType === "void") {
       return undefined;
     }
 
     const text = await response.text();
     if (!text) {
-      return undefined;
+      if (responseType === "list") return [];
+      throw invalidResponseError(operation, response, "an empty response");
     }
     try {
-      return JSON.parse(text);
+      const parsed = JSON.parse(text);
+      if (parsed == null) {
+        throw invalidResponseError(operation, response, "a null JSON response");
+      }
+      if (responseType === "list" && !Array.isArray(parsed)) {
+        throw invalidResponseError(operation, response, "JSON that is not an array");
+      }
+      return parsed;
     } catch (error) {
+      if (error instanceof CheqiApiError) throw error;
       throw new CheqiApiError(`${operation} returned an invalid (non-JSON) response`, {
         errorCode: ErrorCodes.INVALID_RESPONSE,
         httpStatusCode: response.status,
+        correlationId: response.headers.get("x-correlation-id"),
         cause: error
       });
     }
   }
+}
+
+function invalidResponseError(
+  operation: string,
+  response: Response,
+  detail: string
+): CheqiApiError {
+  return new CheqiApiError(`${operation} returned ${detail}`, {
+    errorCode: ErrorCodes.INVALID_RESPONSE,
+    httpStatusCode: response.status,
+    correlationId: response.headers.get("x-correlation-id")
+  });
+}
+
+function resolveEndpoint(apiEndpoint: string, path: string): URL {
+  const normalizedBase = apiEndpoint.endsWith("/") ? apiEndpoint : `${apiEndpoint}/`;
+  return new URL(path.replace(/^\/+/, ""), normalizedBase);
 }
 
 function isIdempotentMethod(method: string): boolean {
