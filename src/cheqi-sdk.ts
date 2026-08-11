@@ -21,7 +21,7 @@ import { VerificationService } from "./services/verification.js";
  * ```ts
  * const sdk = new CheqiSDK({
  *   apiEndpoint: Environment.SANDBOX,
- *   apiKey: "sk_test_abc123"
+ *   apiKey: "sk_abc123"
  * });
  *
  * const result = await sdk.receiptService.issueReceipt(
