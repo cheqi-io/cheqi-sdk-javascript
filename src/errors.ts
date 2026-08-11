@@ -4,6 +4,8 @@ export const ErrorCodes = {
   INVALID_REQUEST: "INVALID_REQUEST",
   AUTHENTICATION_FAILED: "AUTHENTICATION_FAILED",
   AUTHORIZATION_FAILED: "AUTHORIZATION_FAILED",
+  INVALID_ACCESS_TOKEN: "INVALID_ACCESS_TOKEN",
+  INSUFFICIENT_PERMISSIONS: "INSUFFICIENT_PERMISSIONS",
   CONFIGURATION_ERROR: "CONFIGURATION_ERROR",
   CUSTOMER_NOT_FOUND: "CUSTOMER_NOT_FOUND",
   RECEIPT_NOT_FOUND: "RECEIPT_NOT_FOUND",
@@ -16,7 +18,15 @@ export const ErrorCodes = {
   RATE_LIMITED: "RATE_LIMIT_EXCEEDED",
   SERVER_ERROR: "SERVER_ERROR",
   SERVICE_UNAVAILABLE: "SERVICE_UNAVAILABLE",
-  INVALID_RESPONSE: "INVALID_RESPONSE"
+  INVALID_RESPONSE: "INVALID_RESPONSE",
+  KEY_GENERATION_ERROR: "KEY_GENERATION_ERROR",
+  RECEIPT_GENERATION_ERROR: "RECEIPT_GENERATION_ERROR",
+  TEMPLATE_PROCESSING_ERROR: "TEMPLATE_PROCESSING_ERROR",
+  MISSING_REQUIRED_FIELD: "MISSING_REQUIRED_FIELD",
+  INVALID_FIELD_VALUE: "INVALID_FIELD_VALUE",
+  INVALID_CURRENCY_CODE: "INVALID_CURRENCY_CODE",
+  INVALID_AMOUNT: "INVALID_AMOUNT",
+  INVALID_DATE_FORMAT: "INVALID_DATE_FORMAT"
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];
@@ -60,11 +70,15 @@ export class CheqiSDKError extends Error {
   }
 
   isAuthenticationError(): boolean {
-    return this.httpStatusCode === 401 || this.errorCode === ErrorCodes.AUTHENTICATION_FAILED;
+    return this.httpStatusCode === 401 ||
+      this.errorCode === ErrorCodes.AUTHENTICATION_FAILED ||
+      this.errorCode === ErrorCodes.INVALID_ACCESS_TOKEN;
   }
 
   isAuthorizationError(): boolean {
-    return this.httpStatusCode === 403 || this.errorCode === ErrorCodes.AUTHORIZATION_FAILED;
+    return this.httpStatusCode === 403 ||
+      this.errorCode === ErrorCodes.AUTHORIZATION_FAILED ||
+      this.errorCode === ErrorCodes.INSUFFICIENT_PERMISSIONS;
   }
 
   isRateLimitError(): boolean {

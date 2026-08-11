@@ -6,27 +6,27 @@ import {
   CheqiApiError,
   CheqiSDK,
   CheqiSDKConfig,
-  CreditNoteInitiationRequest,
+  CheqiSDKError,
   CreditNoteService,
   DecryptionService,
   DownloadService,
   EncryptionService,
   Environment,
-  FiscalizationData,
   FiscalizationStatus,
   MatchingService,
   NoopLogger,
   PaymentType,
-  Product,
-  JurisdictionalData,
-  ReceiptPayload,
   ReceiptService,
   StoreService,
   ReturnReasonCode,
-  ReturnLineItem,
-  Tax,
   UnitCode,
   VerificationService,
+  createCreditNoteInitiationRequest,
+  createFiscalizationData,
+  createJurisdictionalData,
+  createProduct,
+  createReceiptPayload,
+  createTax,
   parseDownloadUrl,
   validateCreditNoteInitiationRequest
 } from "../dist/index.js";
@@ -42,109 +42,155 @@ function rsaKeyPair() {
 }
 
 function receiptPayload() {
-  return ReceiptPayload.builder()
-    .documentNumber("R-100")
-    .issueDate(new Date("2026-07-29T10:00:00Z"))
-    .currency("EUR")
-    .receiptSubtotal("10.10")
-    .totalBeforeTax("10.10")
-    .totalTaxAmount("2.24")
-    .totalAmount("12.34")
-    .taxesApplied(true)
-    .addProduct(
-      Product.builder()
-        .name("Coffee")
-        .identifier("COFFEE-1")
-        .quantity(1)
-        .unitCode(UnitCode.C62)
-        .unitPrice("10.10")
-        .subtotal("10.10")
-        .total("12.34")
-        .build()
-    )
-    .build();
+  return createReceiptPayload({
+    documentNumber: "R-100",
+    issueDate: new Date("2026-07-29T10:00:00Z"),
+    currency: "EUR",
+    receiptSubtotal: "10.10",
+    totalBeforeTax: "10.10",
+    totalTaxAmount: "2.24",
+    totalAmount: "12.34",
+    taxesApplied: true,
+    products: [{
+      name: "Coffee",
+      identifier: "COFFEE-1",
+      quantity: 1,
+      unitCode: UnitCode.C62,
+      unitPrice: "10.10",
+      subtotal: "10.10",
+      total: "12.34"
+    }]
+  });
 }
 
 test("config aligns standard API and receipt environments", () => {
   assert.equal(
-    new CheqiSDKConfig({ environment: Environment.PRODUCTION, ...NOOP }).receiptDownloadBaseUrl,
+    new CheqiSDKConfig({ apiEndpoint: Environment.PRODUCTION, ...NOOP }).receiptDownloadBaseUrl,
     "https://receipt.cheqi.io"
   );
   assert.equal(
-    new CheqiSDKConfig({ environment: Environment.SANDBOX, ...NOOP }).receiptDownloadBaseUrl,
+    new CheqiSDKConfig({ apiEndpoint: Environment.SANDBOX, ...NOOP }).receiptDownloadBaseUrl,
     "https://sandbox.receipt.cheqi.io"
   );
   assert.equal(
-    new CheqiSDKConfig({ environment: Environment.TEST, ...NOOP }).receiptDownloadBaseUrl,
+    new CheqiSDKConfig({ apiEndpoint: Environment.TEST, ...NOOP }).receiptDownloadBaseUrl,
     "https://test.receipt.cheqi.io"
   );
 });
 
 test("config validates endpoint, timeout, and retries", () => {
-  assert.throws(() => new CheqiSDKConfig(NOOP), /environment.*customApiEndpoint/);
+  assert.throws(() => new CheqiSDKConfig({ apiEndpoint: "", ...NOOP }), /apiEndpoint.*required/);
   assert.throws(
-    () => new CheqiSDKConfig({ environment: Environment.TEST, timeoutSeconds: 0, ...NOOP }),
+    () => new CheqiSDKConfig({ apiEndpoint: Environment.TEST, timeoutSeconds: 0, ...NOOP }),
     /Timeout must be positive/
   );
   assert.throws(
-    () => new CheqiSDKConfig({ environment: Environment.TEST, maxRetries: -1, ...NOOP }),
+    () => new CheqiSDKConfig({ apiEndpoint: Environment.TEST, maxRetries: -1, ...NOOP }),
     /cannot be negative/
   );
 });
 
-test("SDK exposes the same primary services as Java v2.1", () => {
-  const sdk = CheqiSDK.builder()
-    .apiEndpoint(Environment.SANDBOX)
-    .apiKey("sk_test_example")
-    .logger(new NoopLogger())
-    .build();
-  assert.ok(sdk.getReceiptService());
-  assert.ok(sdk.getCreditNoteService());
-  assert.ok(sdk.getEncryptionService());
-  assert.ok(sdk.getDecryptionService());
-  assert.ok(sdk.getDownloadService());
-  assert.ok(sdk.getMatchingService());
-  assert.ok(sdk.getStoreService());
-  assert.ok(sdk.getVerificationService());
+test("SDK options support custom endpoints and Fetch transports", async () => {
+  const requests = [];
+  const customFetch = async (url) => {
+    requests.push(String(url));
+    return Response.json({ routeFound: false });
+  };
+
+  const custom = new CheqiSDK({
+    apiEndpoint: "https://merchant.example/api",
+    apiKey: "sk_test_example",
+    fetch: customFetch,
+    logger: new NoopLogger()
+  });
+  assert.equal(custom.config.apiEndpoint, "https://merchant.example/api");
+  assert.equal(custom.config.environment, null);
+  assert.equal(custom.config.receiptDownloadBaseUrl, null);
+  await custom.apiClient.matchCustomer({ recipientEmail: "buyer@example.com" });
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0], "https://merchant.example/api/recipient/resolve");
+
+  const standard = new CheqiSDK({
+    apiEndpoint: Environment.TEST,
+    apiKey: "sk_test_example",
+    logger: new NoopLogger()
+  });
+  assert.equal(standard.config.apiEndpoint, Environment.TEST);
+  assert.equal(standard.config.environment, Environment.TEST);
+  assert.equal(standard.config.receiptDownloadBaseUrl, "https://test.receipt.cheqi.io");
 });
 
-test("definitive payload builders preserve caller-supplied decimal values", () => {
+test("Java error-code aliases participate in SDK error classification", () => {
+  assert.equal(
+    new CheqiSDKError("expired", { errorCode: "INVALID_ACCESS_TOKEN" }).isAuthenticationError(),
+    true
+  );
+  assert.equal(
+    new CheqiSDKError("forbidden", { errorCode: "INSUFFICIENT_PERMISSIONS" }).isAuthorizationError(),
+    true
+  );
+});
+
+test("SDK exposes the same primary services as Java v2.1", () => {
+  const sdk = new CheqiSDK({
+    apiEndpoint: Environment.SANDBOX,
+    apiKey: "sk_test_example",
+    logger: new NoopLogger()
+  });
+  assert.ok(sdk.receiptService);
+  assert.ok(sdk.creditNoteService);
+  assert.ok(sdk.encryptionService);
+  assert.ok(sdk.decryptionService);
+  assert.ok(sdk.downloadService);
+  assert.ok(sdk.matchingService);
+  assert.ok(sdk.storeService);
+  assert.ok(sdk.verificationService);
+});
+
+test("public construction API uses JavaScript options and plain objects", async () => {
+  const sdkModule = await import("../dist/index.js");
+  assert.equal("CheqiSDKBuilder" in sdkModule, false);
+  assert.equal("ReceiptPayloadBuilder" in sdkModule, false);
+  assert.equal(Object.getPrototypeOf(receiptPayload()), Object.prototype);
+});
+
+test("payload factories preserve caller-supplied decimal values", () => {
   const payload = receiptPayload();
   assert.equal(payload.receiptSubtotal, 10.1);
   assert.equal(payload.totalAmount, 12.34);
   assert.equal(payload.products[0].unitCode, "C62");
   assert.deepEqual(payload.products[0].taxes, []);
-  assert.throws(
-    () => ReceiptPayload.builder().documentNumber("missing-fields").build(),
-    /issueDate is required/
-  );
-  const tax = Tax.builder()
-    .rate(21)
-    .type("VAT")
-    .taxableAmount("10.00")
-    .amount("2.10")
-    .build();
+  assert.throws(() => createReceiptPayload({ documentNumber: "missing-fields" }), /issueDate is required/);
+  const tax = createTax({
+    rate: 21,
+    type: "VAT",
+    taxableAmount: "10.00",
+    amount: "2.10"
+  });
   assert.equal(tax.amount, 2.1);
-  const jurisdiction = JurisdictionalData.builder()
-    .countryCode("NL")
-    .fiscalization(FiscalizationData.of("NL-FISCAL", FiscalizationStatus.FISCALIZED)
-      .addField("authorityId", "AUTH-1", "Authority"))
-    .addLegalText("RETURN_NOTICE", "Returns within 30 days", "en")
-    .build();
+  const jurisdiction = createJurisdictionalData({
+    countryCode: "NL",
+    fiscalization: createFiscalizationData({
+      system: "NL-FISCAL",
+      status: FiscalizationStatus.FISCALIZED,
+      additionalFields: [{ code: "authorityId", value: "AUTH-1", label: "Authority" }]
+    }),
+    legalTexts: [{ code: "RETURN_NOTICE", text: "Returns within 30 days", languageCode: "en" }]
+  });
   assert.equal(jurisdiction.fiscalization.additionalFields[0].code, "authorityId");
 });
 
-test("financial builders reject non-finite and unsafe numeric values", () => {
+test("payload factories reject non-finite and unsafe numeric values", () => {
   assert.throws(
-    () => ReceiptPayload.builder().receiptSubtotal("not-a-number"),
+    () => createReceiptPayload({ ...receiptPayload(), receiptSubtotal: "not-a-number" }),
     /receiptSubtotal must be a finite number/
   );
   assert.throws(
-    () => Product.builder().unitPrice(Number.POSITIVE_INFINITY),
+    () => createProduct({ ...receiptPayload().products[0], unitPrice: Number.POSITIVE_INFINITY }),
     /Product unitPrice must be a finite number/
   );
   assert.throws(
-    () => Product.builder().total("9007199254740993"),
+    () => createProduct({ ...receiptPayload().products[0], total: "9007199254740993" }),
     /safe integer range/
   );
 });
@@ -443,12 +489,17 @@ test("queued and webhook credit-note initiation requests decrypt and validate", 
 });
 
 test("credit-note initiation validation matches Java merchant-side rules", () => {
-  const built = CreditNoteInitiationRequest.builder()
-    .cheqiReceiptId("CHQ-1")
-    .receiptId("R-1")
-    .lineItems([new ReturnLineItem("SKU", 1, ReturnReasonCode.DAMAGED, "Seal broken")])
-    .refundPreference("ORIGINAL_PAYMENT_METHOD")
-    .build();
+  const built = createCreditNoteInitiationRequest({
+    cheqiReceiptId: "CHQ-1",
+    receiptId: "R-1",
+    lineItems: [{
+      productId: "SKU",
+      quantity: 1,
+      reasonCode: ReturnReasonCode.DAMAGED,
+      reasonDescription: "Seal broken"
+    }],
+    refundPreference: "ORIGINAL_PAYMENT_METHOD"
+  });
   assert.equal(built.lineItems[0].productId, "SKU");
   assert.throws(
     () => validateCreditNoteInitiationRequest({
@@ -487,12 +538,12 @@ test("credit-note initiation validation matches Java merchant-side rules", () =>
     /refundPreference is invalid/
   );
   assert.throws(
-    () => CreditNoteInitiationRequest.builder()
-      .cheqiReceiptId("CHQ-1")
-      .receiptId("R-1")
-      .lineItems([{ productId: "SKU", quantity: 1, reasonCode: "NOT_A_REASON" }])
-      .refundPreference("ORIGINAL_PAYMENT_METHOD")
-      .build(),
+    () => createCreditNoteInitiationRequest({
+      cheqiReceiptId: "CHQ-1",
+      receiptId: "R-1",
+      lineItems: [{ productId: "SKU", quantity: 1, reasonCode: "NOT_A_REASON" }],
+      refundPreference: "ORIGINAL_PAYMENT_METHOD"
+    }),
     /reasonCode is invalid/
   );
 });
@@ -547,7 +598,7 @@ test("default HTTP client posts the v2 encrypted envelope unchanged", async () =
     });
   };
   const sdk = new CheqiSDKConfig({
-    environment: Environment.TEST,
+    apiEndpoint: Environment.TEST,
     apiKey: "sk_test_http",
     maxRetries: 0,
     ...NOOP
@@ -572,7 +623,7 @@ test("default HTTP client posts the v2 encrypted envelope unchanged", async () =
 test("HTTP submission validates required envelope fields before fetch", async () => {
   const { DefaultCheqiApiClient } = await import("../dist/index.js");
   const client = new DefaultCheqiApiClient(
-    new CheqiSDKConfig({ environment: Environment.TEST, apiKey: "sk_test_http", ...NOOP }),
+    new CheqiSDKConfig({ apiEndpoint: Environment.TEST, apiKey: "sk_test_http", ...NOOP }),
     async () => { throw new Error("fetch should not run"); }
   );
   await assert.rejects(
@@ -585,7 +636,7 @@ test("store active-only filtering uses the OpenAPI active query parameter", asyn
   const requestUrls = [];
   const { DefaultCheqiApiClient } = await import("../dist/index.js");
   const client = new DefaultCheqiApiClient(
-    new CheqiSDKConfig({ environment: Environment.TEST, apiKey: "sk_test_http", ...NOOP }),
+    new CheqiSDKConfig({ apiEndpoint: Environment.TEST, apiKey: "sk_test_http", ...NOOP }),
     async (url) => {
       requestUrls.push(String(url));
       return new Response("[]", { status: 200 });
@@ -623,6 +674,7 @@ test("store service validates inputs and delegates every store operation", async
   };
 
   await service.createStore("company-1", request, "oauth-token");
+  await service.getStores("company-1", "oauth-token");
   await service.getStores("company-1", undefined, "oauth-token");
   await service.getActiveStores("company-1", "oauth-token");
   await service.getStore("company-1", "store-1", "oauth-token");
@@ -632,9 +684,9 @@ test("store service validates inputs and delegates every store operation", async
   await service.deactivateStore("company-1", "store-1", "oauth-token");
 
   assert.deepEqual(calls.map(([operation]) => operation), [
-    "create", "list", "list", "get", "update", "delete", "activate", "deactivate"
+    "create", "list", "list", "list", "get", "update", "delete", "activate", "deactivate"
   ]);
-  assert.equal(calls[2][2], true);
+  assert.equal(calls[3][2], true);
   assert.throws(() => service.getStores("", undefined, "oauth-token"), /Company ID cannot be null/);
   assert.throws(() => service.getStore("company-1", "", "oauth-token"), /Store ID cannot be null/);
   assert.throws(() => service.getStores("company-1", undefined, " "), /Access token cannot be null/);
@@ -653,7 +705,7 @@ test("non-idempotent POST requests are not automatically retried", async () => {
   const { DefaultCheqiApiClient } = await import("../dist/index.js");
   const client = new DefaultCheqiApiClient(
     new CheqiSDKConfig({
-      environment: Environment.TEST,
+      apiEndpoint: Environment.TEST,
       apiKey: "sk_test_http",
       maxRetries: 3,
       ...NOOP
@@ -683,7 +735,7 @@ test("explicitly idempotent encrypted downloads retain transient retries", async
   const { DefaultCheqiApiClient } = await import("../dist/index.js");
   const client = new DefaultCheqiApiClient(
     new CheqiSDKConfig({
-      environment: Environment.TEST,
+      apiEndpoint: Environment.TEST,
       apiKey: "sk_test_http",
       maxRetries: 1,
       ...NOOP
@@ -709,7 +761,7 @@ test("default HTTP client covers the remaining service endpoint contracts", asyn
   const requests = [];
   const { DefaultCheqiApiClient } = await import("../dist/index.js");
   const client = new DefaultCheqiApiClient(
-    new CheqiSDKConfig({ environment: Environment.TEST, apiKey: "sk_test_http", ...NOOP }),
+    new CheqiSDKConfig({ apiEndpoint: Environment.TEST, apiKey: "sk_test_http", ...NOOP }),
     async (url, init) => {
       const path = new URL(url).pathname;
       requests.push([init.method, path]);
@@ -786,7 +838,7 @@ test("HTTP errors retain diagnostics without logging response bodies", async () 
   const { DefaultCheqiApiClient } = await import("../dist/index.js");
   const client = new DefaultCheqiApiClient(
     new CheqiSDKConfig({
-      environment: Environment.TEST,
+      apiEndpoint: Environment.TEST,
       apiKey: "sk_test_http",
       maxRetries: 0,
       logger
@@ -811,12 +863,44 @@ test("HTTP errors retain diagnostics without logging response bodies", async () 
 test("HTTP client rejects successful non-JSON responses", async () => {
   const { DefaultCheqiApiClient } = await import("../dist/index.js");
   const client = new DefaultCheqiApiClient(
-    new CheqiSDKConfig({ environment: Environment.TEST, apiKey: "sk_test_http", ...NOOP }),
+    new CheqiSDKConfig({ apiEndpoint: Environment.TEST, apiKey: "sk_test_http", ...NOOP }),
     async () => new Response("not json", { status: 200 })
   );
 
   await assert.rejects(
     () => client.getStore("company-1", "store-1"),
+    (error) => error instanceof CheqiApiError && error.errorCode === "INVALID_RESPONSE"
+  );
+});
+
+test("HTTP client applies Java response-shape semantics", async () => {
+  const { DefaultCheqiApiClient } = await import("../dist/index.js");
+  const config = new CheqiSDKConfig({
+    apiEndpoint: Environment.TEST,
+    apiKey: "sk_test_http",
+    ...NOOP
+  });
+  const emptyClient = new DefaultCheqiApiClient(
+    config,
+    async () => new Response(null, {
+      status: 200,
+      headers: { "x-correlation-id": "empty-response" }
+    })
+  );
+  await assert.rejects(
+    () => emptyClient.getStore("company-1", "store-1"),
+    (error) => error instanceof CheqiApiError &&
+      error.errorCode === "INVALID_RESPONSE" &&
+      error.correlationId === "empty-response"
+  );
+  assert.deepEqual(await emptyClient.getStores("company-1"), []);
+
+  const wrongListClient = new DefaultCheqiApiClient(
+    config,
+    async () => Response.json({ id: "not-a-list" })
+  );
+  await assert.rejects(
+    () => wrongListClient.getStores("company-1"),
     (error) => error instanceof CheqiApiError && error.errorCode === "INVALID_RESPONSE"
   );
 });

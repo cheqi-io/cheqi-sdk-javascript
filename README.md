@@ -18,13 +18,15 @@ npm install @cheqi/sdk
 ```ts
 import { CheqiSDK, Environment } from "@cheqi/sdk";
 
-const sdk = CheqiSDK.builder()
-  .apiEndpoint(Environment.SANDBOX)
-  .apiKey("sk_test_...")
-  .build();
+const sdk = new CheqiSDK({
+  apiEndpoint: Environment.SANDBOX,
+  apiKey: "sk_test_..."
+});
 ```
 
-Standard API environments are `Environment.SANDBOX`, `Environment.TEST`, and `Environment.PRODUCTION`. Use `.customApiEndpoint(url)` and `.receiptDownloadBaseUrl(url)` for a custom deployment.
+Standard API environments are `Environment.SANDBOX`, `Environment.TEST`, and `Environment.PRODUCTION`. For a custom deployment, pass its URL as `apiEndpoint` and set `receiptDownloadBaseUrl` when download fallback is enabled.
+
+A Fetch-compatible transport can be injected for proxying, tracing, or tests with the `fetch` option.
 
 ## Receipt issuance
 
@@ -38,78 +40,73 @@ Standard API environments are `Environment.SANDBOX`, `Environment.TEST`, and `En
 
 ```ts
 import {
-  CardDetails,
   CheqiSDK,
   Environment,
-  IdentificationDetails,
-  PaymentDetails,
   PaymentType,
-  Product,
-  ReceiptPayload,
-  Tax,
-  UnitCode
+  UnitCode,
+  createReceiptPayload,
+  type IdentificationDetails
 } from "@cheqi/sdk";
 
-const sdk = CheqiSDK.builder()
-  .apiEndpoint(Environment.SANDBOX)
-  .apiKey("sk_test_...")
-  .build();
+const sdk = new CheqiSDK({
+  apiEndpoint: Environment.SANDBOX,
+  apiKey: "sk_test_..."
+});
 
-const identificationDetails = IdentificationDetails.builder()
-  .paymentType(PaymentType.CARD_PAYMENT)
-  .cardDetails(CardDetails.builder()
-    .paymentAccountReference("PAR123456789")
-    .cardProvider("VISA")
-    .lastFourDigits("4242")
-    .build())
-  .build();
+const identificationDetails = {
+  paymentType: PaymentType.CARD_PAYMENT,
+  cardDetails: {
+    paymentAccountReference: "PAR123456789",
+    cardProvider: "VISA",
+    lastFourDigits: "4242"
+  }
+} satisfies IdentificationDetails;
 
-const receiptPayload = ReceiptPayload.builder()
-  .documentNumber("POS-2026-0001")
-  .issueDate(new Date())
-  .currency("EUR")
-  .receiptSubtotal("10.00")
-  .totalBeforeTax("10.00")
-  .totalTaxAmount("2.10")
-  .totalAmount("12.10")
-  .taxesApplied(true)
-  .paymentDetails(PaymentDetails.builder()
-    .paymentMeansCode("48")
-    .description("Card payment")
-    .cardProvider("VISA")
-    .cardLastFour("4242")
-    .merchantId("MID-123")
-    .paymentTerminalId("TID-456")
-    .build())
-  .addProduct(Product.builder()
-    .name("Coffee beans")
-    .brandName("Cheqi Coffee")
-    .identifier("SKU-COFFEE-001")
-    .quantity(1)
-    .baseQuantity(1)
-    .unitCode(UnitCode.C62)
-    .unitPrice("10.00")
-    .subtotal("10.00")
-    .total("12.10")
-    .addTax(21, "VAT", "10.00", "2.10")
-    .build())
-  .addTax(Tax.builder()
-    .rate(21)
-    .type("VAT")
-    .taxableAmount("10.00")
-    .amount("2.10")
-    .label("VAT 21%")
-    .build())
-  .build();
+const receiptPayload = createReceiptPayload({
+  documentNumber: "POS-2026-0001",
+  issueDate: new Date(),
+  currency: "EUR",
+  receiptSubtotal: "10.00",
+  totalBeforeTax: "10.00",
+  totalTaxAmount: "2.10",
+  totalAmount: "12.10",
+  taxesApplied: true,
+  paymentDetails: {
+    paymentMeansCode: "48",
+    description: "Card payment",
+    cardProvider: "VISA",
+    cardLastFour: "4242",
+    merchantId: "MID-123",
+    paymentTerminalId: "TID-456"
+  },
+  products: [{
+    name: "Coffee beans",
+    brandName: "Cheqi Coffee",
+    identifier: "SKU-COFFEE-001",
+    quantity: 1,
+    baseQuantity: 1,
+    unitCode: UnitCode.C62,
+    unitPrice: "10.00",
+    subtotal: "10.00",
+    total: "12.10",
+    taxes: [{ rate: 21, type: "VAT", taxableAmount: "10.00", amount: "2.10" }]
+  }],
+  taxes: [{
+    rate: 21,
+    type: "VAT",
+    taxableAmount: "10.00",
+    amount: "2.10",
+    label: "VAT 21%"
+  }]
+});
 
-const result = await sdk.getReceiptService()
-  .issueReceipt(identificationDetails, receiptPayload);
+const result = await sdk.receiptService.issueReceipt(identificationDetails, receiptPayload);
 
-if (result.isAccepted()) {
-  console.log(result.getCheqiReceiptId(), result.getDeliveryRouteType());
-} else if (result.isEmailReceiptRequired()) {
+if (result.cheqiReceiptId) {
+  console.log(result.cheqiReceiptId, result.deliveryRouteType);
+} else if (result.emailReceiptRequired) {
   // Generate and submit the permitted email-fallback receipt explicitly.
-} else if (result.isDownloadEnvelopeRequired()) {
+} else if (result.downloadEnvelopeRequired) {
   // Generate the final ReceiptEnvelope locally, then complete the fallback.
 }
 ```
@@ -117,8 +114,8 @@ if (result.isAccepted()) {
 For OAuth, pass the access token as the third argument. To associate a store and use OAuth, pass both explicitly:
 
 ```ts
-await sdk.getReceiptService().issueReceipt(identificationDetails, receiptPayload, accessToken);
-await sdk.getReceiptService().issueReceipt(identificationDetails, receiptPayload, storeId, accessToken);
+await sdk.receiptService.issueReceipt(identificationDetails, receiptPayload, accessToken);
+await sdk.receiptService.issueReceipt(identificationDetails, receiptPayload, storeId, accessToken);
 ```
 
 `ReceiptPayload` is definitive. Supply `taxesApplied`, totals, line values, payment presentation, and jurisdictional data yourself. The SDK does not infer, calculate, or reconcile them.
@@ -132,12 +129,12 @@ await sdk.getReceiptService().issueReceipt(identificationDetails, receiptPayload
 To create an encrypted download without recipient matching:
 
 ```ts
-const result = await sdk.getReceiptService().issueDownloadReceipt(
+const result = await sdk.receiptService.issueDownloadReceipt(
   { paymentType: PaymentType.CASH },
   receiptPayload,
   accessToken
 );
-console.log(result.getDownloadUrl());
+console.log(result.downloadUrl);
 ```
 
 The content key stays in the URL fragment and is never uploaded to Cheqi. Anyone with the complete URL can decrypt the receipt.
@@ -145,7 +142,7 @@ The content key stays in the URL fragment and is never uploaded to Cheqi. Anyone
 To finish a fallback that requires a caller-generated envelope:
 
 ```ts
-const completed = await sdk.getReceiptService().completeDownloadFallback(
+const completed = await sdk.receiptService.completeDownloadFallback(
   result,
   receiptEnvelope,
   templateHash,
@@ -156,13 +153,14 @@ const completed = await sdk.getReceiptService().completeDownloadFallback(
 ## Lower-level operations
 
 ```ts
-const resolution = await sdk.getMatchingService()
-  .matchCustomer(identificationDetails, accessToken);
+const resolution = await sdk.matchingService.matchCustomer(identificationDetails, accessToken);
 
-const delivery = sdk.getEncryptionService()
-  .encryptReceiptForRecipient(receiptPayloadJson, resolution.recipients[0]);
+const delivery = sdk.encryptionService.encryptReceiptForRecipient(
+  receiptPayloadJson,
+  resolution.recipients[0]
+);
 
-const response = await sdk.getReceiptService().submitEncryptedReceipt({
+const response = await sdk.receiptService.submitEncryptedReceipt({
   matchId: resolution.matchId,
   deviceDeliveries: [delivery]
 }, accessToken);
@@ -175,7 +173,7 @@ The caller must use the selected route and preserve identical definitive plainte
 Credit notes use the same per-device model and a separate generated envelope:
 
 ```ts
-const result = await sdk.getCreditNoteService().issueCreditNote(
+const result = await sdk.creditNoteService.issueCreditNote(
   identificationDetails,
   parentCheqiReceiptId,
   definitiveCreditNotePayload,
@@ -186,7 +184,7 @@ const result = await sdk.getCreditNoteService().issueCreditNote(
 Customer return requests are separate from merchant-issued credit notes. Decrypt, deserialize, and validate polling or webhook requests in one call:
 
 ```ts
-const request = sdk.getDecryptionService().decryptCreditNoteInitiationRequest(
+const request = sdk.decryptionService.decryptCreditNoteInitiationRequest(
   webhook.data.creditNoteInitiationRequest,
   privateKeyBase64
 );
@@ -199,7 +197,7 @@ The validation checks product IDs, positive return quantities, reason codes, not
 `decryptReceipt` accepts either an `EncryptedReceiptDeliveryResponse` from polling or a `WebhookReceiptEnvelope` from `data.encryptedReceipt` / `data.encryptedCreditNote`:
 
 ```ts
-const envelope = sdk.getDecryptionService().decryptReceipt(
+const envelope = sdk.decryptionService.decryptReceipt(
   webhook.data.encryptedReceipt,
   privateKeyBase64
 );
@@ -212,13 +210,14 @@ The plaintext is already a complete `ReceiptEnvelope`; no backend-context merge 
 Store operations require an OAuth token with the relevant store permissions:
 
 ```ts
-const store = await sdk.getStoreService().createStore(companyId, createStoreRequest, accessToken);
-const stores = await sdk.getStoreService().getStores(companyId, undefined, accessToken);
+const store = await sdk.storeService.createStore(companyId, createStoreRequest, accessToken);
+const stores = await sdk.storeService.getStores(companyId, accessToken);
+const activeStores = await sdk.storeService.getActiveStores(companyId, accessToken);
 ```
 
 ## Generated models
 
-The root package exports the common builders and enums. Every OpenAPI-generated model, enum, and serializer is also available under `Generated`:
+The root package exports typed model interfaces, validation factories, and enums. Every OpenAPI-generated model, enum, and serializer is also available under `Generated`:
 
 ```ts
 import { Generated } from "@cheqi/sdk";

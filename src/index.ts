@@ -1,4 +1,4 @@
-export { CheqiSDK, CheqiSDKBuilder } from "./cheqi-sdk.js";
+export { CheqiSDK, createCheqiSDK } from "./cheqi-sdk.js";
 export { Environment, ReceiptEnvironment, CheqiSDKConfig } from "./config.js";
 export * from "./errors.js";
 export type { Logger } from "./logger.js";

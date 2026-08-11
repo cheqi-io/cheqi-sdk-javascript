@@ -56,14 +56,18 @@ export type {
 } from "./models/generated/index.js";
 
 export interface CheqiSDKOptions {
-  environment?: string;
-  customApiEndpoint?: string;
+  /** Cheqi API base URL, usually one of the Environment constants. */
+  apiEndpoint: string;
   receiptDownloadBaseUrl?: string;
   apiKey?: Nullable<string>;
   privateKey?: Nullable<string>;
   timeoutSeconds?: number;
   maxRetries?: number;
   logger?: import("./logger.js").Logger;
+  /** Custom Fetch-compatible transport, useful for instrumentation and testing. */
+  fetch?: FetchLike;
+  /** Fully custom API client. When set, `fetch` is ignored. */
+  apiClient?: CheqiApiClient;
 }
 
 export interface RequestOptions {
@@ -73,6 +77,8 @@ export interface RequestOptions {
   operation: string;
   /** Override whether transient failures may be retried for this operation. */
   retryable?: boolean;
+  /** Expected successful response shape. Defaults to a non-null JSON value. */
+  responseType?: "json" | "list" | "void";
 }
 
 export type FetchLike = typeof fetch;

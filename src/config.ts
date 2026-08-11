@@ -26,6 +26,7 @@ const MAX_RETRIES = 10;
  */
 export class CheqiSDKConfig {
   readonly apiEndpoint: string;
+  readonly environment: Nullable<string>;
   readonly apiKey: Nullable<string>;
   readonly receiptDownloadBaseUrl: Nullable<string>;
   readonly privateKey: Nullable<string>;
@@ -33,10 +34,9 @@ export class CheqiSDKConfig {
   readonly maxRetries: number;
   readonly logger: Logger;
 
-  constructor(options: CheqiSDKOptions = {}) {
+  constructor(options: CheqiSDKOptions) {
     const {
-      environment,
-      customApiEndpoint,
+      apiEndpoint,
       receiptDownloadBaseUrl,
       apiKey = null,
       privateKey = null,
@@ -48,11 +48,14 @@ export class CheqiSDKConfig {
     this.logger = logger;
 
     // --- endpoint ---
-    this.apiEndpoint = customApiEndpoint ?? environment ?? "";
+    this.apiEndpoint = apiEndpoint ?? "";
     if (!this.apiEndpoint) {
-      throw new Error("Either 'environment' or 'customApiEndpoint' must be provided");
+      throw new Error("'apiEndpoint' is required");
     }
-    this.receiptDownloadBaseUrl = receiptDownloadBaseUrl ?? receiptBaseUrlForEnvironment(environment);
+    this.environment = isKnownEnvironment(apiEndpoint) ? apiEndpoint : null;
+    this.receiptDownloadBaseUrl = receiptDownloadBaseUrl ?? receiptBaseUrlForEnvironment(
+      this.environment ?? undefined
+    );
 
     // --- timeout ---
     if (timeoutSeconds <= 0) {
@@ -89,6 +92,13 @@ export class CheqiSDKConfig {
 
     this.logger.info(`SDK configured: endpoint=${this.apiEndpoint}, timeout=${this.timeoutSeconds}s, maxRetries=${this.maxRetries}`);
   }
+
+}
+
+function isKnownEnvironment(value: string): boolean {
+  return value === Environment.PRODUCTION ||
+    value === Environment.SANDBOX ||
+    value === Environment.TEST;
 }
 
 function receiptBaseUrlForEnvironment(environment?: string): string | null {
