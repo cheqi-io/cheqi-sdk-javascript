@@ -22,7 +22,7 @@ import {
 } from './TaxCategoryCode.js';
 
 /**
- * Issuer-supplied receipt-level tax breakdown.
+ * The list of taxes applied to the receipt
  * @export
  * @interface Tax
  */
@@ -64,13 +64,13 @@ export interface Tax {
      */
     category?: TaxCategoryCode;
     /**
-     * Tax exemption reason code. Written to UBL only when category is EXEMPT.
+     * Tax exemption reason code, applicable only when category is EXEMPT
      * @type {string}
      * @memberof Tax
      */
     exemptionReasonCode?: string;
     /**
-     * Tax exemption reason. Written to UBL only when category is EXEMPT.
+     * Tax exemption reason, applicable only when category is EXEMPT
      * @type {string}
      * @memberof Tax
      */

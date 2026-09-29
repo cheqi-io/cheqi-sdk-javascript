@@ -14,7 +14,7 @@
 
 import { mapValues } from './runtime.js';
 /**
- * Issuer-supplied receipt-level discounts.
+ * The list of discounts applied to the receipt on total receipt level. Example: discount on total receipt level, 20% discount on complete order, etc.
  * @export
  * @interface Discount
  */

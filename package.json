@@ -52,7 +52,8 @@
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "yaml": "^2.9.1"
   },
   "dependencies": {
     "@xmldom/xmldom": "^0.9.10"

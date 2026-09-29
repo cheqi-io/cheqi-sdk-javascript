@@ -25,17 +25,7 @@ fetch-spec:
 	@echo "Spec updated. Run 'make generate' to regenerate models."
 
 spec-check:
-	@curl -fsSL $(SPEC_URL) -o openapi.yaml.tmp
-	@if diff -q openapi.yaml openapi.yaml.tmp > /dev/null 2>&1; then \
-		echo "openapi.yaml matches $(SPEC_URL)"; \
-	else \
-		echo "ERROR: Local openapi.yaml differs from $(SPEC_URL)"; \
-		echo "Run 'make fetch-spec && make generate' to update."; \
-		diff openapi.yaml openapi.yaml.tmp || true; \
-		rm openapi.yaml.tmp; \
-		exit 1; \
-	fi
-	@rm -f openapi.yaml.tmp
+	node scripts/check-spec.mjs "$(SPEC_URL)"
 
 generate:
 	rm -rf /tmp/cheqi-js-gen

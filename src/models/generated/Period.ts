@@ -14,7 +14,7 @@
 
 import { mapValues } from './runtime.js';
 /**
- * Optional billing or service period covered by the receipt.
+ * The billing or service period covered by this receipt. Use this when the purchase covers a specific time range rather than a single point in time.
  * @export
  * @interface Period
  */
@@ -26,7 +26,7 @@ export interface Period {
      */
     startDate: Date;
     /**
-     * The end date of the periodo
+     * The end date of the period
      * @type {Date}
      * @memberof Period
      */

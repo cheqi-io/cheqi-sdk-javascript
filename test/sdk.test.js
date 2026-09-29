@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
+import { specsMatch } from "../scripts/check-spec.mjs";
 
 import {
   CheqiApiError,
@@ -17,6 +18,10 @@ import {
   NoopLogger,
   PaymentType,
   ReceiptService,
+  ReceiptIssueState,
+  SubmissionInProgressError,
+  DefaultCheqiApiClient,
+  ErrorCodes,
   StoreService,
   ReturnReasonCode,
   UnitCode,
@@ -464,6 +469,7 @@ test("queued and webhook receipt envelopes decrypt to the complete ReceiptEnvelo
     cheqiReceiptId: "CHQ-20260730-000001",
     documents: { CHEQI: { mediaType: "application/json", content: "{\"ok\":true}" } },
     envelopeVersion: 1,
+    expenseSubmission: undefined,
     receiptGeneratorVersion: "2.1.0",
     receiptUuid: "706920f8-63a7-4d9d-a92a-5889545562ce"
   };
@@ -576,6 +582,7 @@ test("download service round-trips current receipt envelopes", async () => {
     cheqiReceiptId: "CHQ-1",
     documents: {},
     envelopeVersion: 1,
+    expenseSubmission: undefined,
     receiptGeneratorVersion: "2.1.0",
     receiptUuid: "706920f8-63a7-4d9d-a92a-5889545562ce"
   };
@@ -609,6 +616,7 @@ test("default HTTP client posts the v2 encrypted envelope unchanged", async () =
     requestBody = JSON.parse(init.body);
     return new Response(JSON.stringify({
       cheqiReceiptId: "CHQ-HTTP",
+      matchId: "match-http",
       status: "PENDING",
       createdAt: "2026-08-04T10:00:00Z"
     }), {
@@ -788,7 +796,7 @@ test("default HTTP client covers the remaining service endpoint contracts", asyn
         return Response.json({ routeFound: true, matchId: "match-1", recipients: [] });
       }
       if (path === "/credit-note/encrypted") {
-        return Response.json({ cheqiReceiptId: "CHQ-CREDIT" }, { status: 202 });
+        return Response.json({ cheqiReceiptId: "CHQ-CREDIT", matchId: "match-1" }, { status: 202 });
       }
       if (path === "/receipt/email") {
         return new Response(null, { status: 201 });
@@ -922,4 +930,342 @@ test("HTTP client applies Java response-shape semantics", async () => {
     () => wrongListClient.getStores("company-1"),
     (error) => error instanceof CheqiApiError && error.errorCode === "INVALID_RESPONSE"
   );
+});
+
+function recoveryService(overrides = {}) {
+  const calls = { matches: 0, snapshots: [], submissions: [], uploads: [], plaintext: [] };
+  const api = {
+    async matchCustomer() {
+      calls.matches++;
+      return { routeFound: true, matchId: "original-match", deliveryRouteType: "DIGITAL",
+        recipients: [{ id: "original-device", publicKey: "key" }] };
+    },
+    async getMatch(id, token) {
+      calls.snapshots.push({ id, token });
+      return { matchId: id, state: "MATCHED", route: "DIGITAL",
+        recipients: [{ id: "original-device", publicKey: "key" }] };
+    },
+    async submitEncryptedReceipt(envelope, token) {
+      calls.submissions.push({ envelope, token });
+      return { cheqiReceiptId: "CHQ-ORIGINAL", matchId: envelope.matchId, status: "PENDING" };
+    },
+    async uploadEncryptedDownloadReceipt(request, token) {
+      calls.uploads.push({ request: { ...request }, token });
+      return { cheqiReceiptId: "CHQ-DOWNLOAD" };
+    },
+    ...overrides
+  };
+  const encryption = {
+    encryptReceiptForRecipient(plaintext, recipient) {
+      calls.plaintext.push(plaintext);
+      return { deviceRecipientId: recipient.id, encryptedContent: "cipher", encryptedAesKey: "key" };
+    }
+  };
+  return { calls, service: new ReceiptService(api, encryption, new MatchingService(api)) };
+}
+
+for (const failure of [
+  new CheqiApiError("offline", { errorCode: ErrorCodes.NETWORK_ERROR }),
+  new CheqiApiError("timeout", { errorCode: ErrorCodes.TIMEOUT_ERROR }),
+  new CheqiApiError("busy", { httpStatusCode: 503 }),
+  new CheqiApiError("rate limit", { httpStatusCode: 429 }),
+  new CheqiApiError("invalid JSON", { errorCode: ErrorCodes.INVALID_RESPONSE, httpStatusCode: 202 }),
+  new SubmissionInProgressError(7)
+]) {
+  test(`ambiguous submission ${failure.errorCode}/${failure.httpStatusCode} prepares a durable download`, async () => {
+    const { service, calls } = recoveryService({ async submitEncryptedReceipt() { throw failure; } });
+    const payload = receiptPayload();
+    const result = await service.issueReceipt({ recipientEmail: "private@example.com" }, payload);
+    assert.equal(result.state, ReceiptIssueState.DIGITAL_PENDING);
+    assert.equal(result.matchId, "original-match");
+    assert.equal(result.retryable, true);
+    assert.equal(result.isAccepted(), false);
+    assert.equal(result.retryAfterSeconds, failure instanceof SubmissionInProgressError ? 7 : null);
+    assert.equal(calls.uploads.length, 0);
+    const persisted = JSON.parse(JSON.stringify(result.preparedDownload));
+    assert.equal(persisted.downloadUrl, result.downloadUrl);
+    const { contentKey, downloadId } = parseDownloadUrl(persisted.downloadUrl);
+    assert.equal(downloadId, persisted.uploadRequest.downloadId);
+    assert.equal(JSON.stringify(persisted.uploadRequest).includes(contentKey), false);
+    const envelope = await new DownloadService().decryptDownloadEnvelope(persisted.uploadRequest.ciphertext, contentKey);
+    assert.deepEqual(JSON.parse(envelope.documents.CHEQI.content), JSON.parse(JSON.stringify(payload)));
+    assert.equal(envelope.documents.CHEQI.content.includes("private@example.com"), false);
+    await service.uploadPreparedDownload(persisted, "company-token");
+    await service.uploadPreparedDownload(persisted, "company-token");
+    assert.deepEqual(calls.uploads[0], calls.uploads[1]);
+    assert.deepEqual(calls.uploads[0].request, persisted.uploadRequest);
+    assert.equal(calls.uploads[0].token, "company-token");
+    assert.equal(calls.matches, 1);
+  });
+}
+
+test("unreachable matching prepares a payload-only download without submission or upload", async () => {
+  const { service, calls } = recoveryService({ async matchCustomer() {
+    throw new CheqiApiError("offline", { errorCode: ErrorCodes.NETWORK_ERROR });
+  } });
+  const result = await service.issueReceipt({ recipientEmail: "private@example.com" }, receiptPayload());
+  assert.equal(result.state, ReceiptIssueState.DOWNLOAD_FALLBACK);
+  assert.equal(result.matchId, null);
+  assert.equal(result.retryable, true);
+  assert.equal(result.isAccepted(), false);
+  assert.ok(result.preparedDownload);
+  assert.equal(calls.submissions.length, 0);
+  assert.equal(calls.uploads.length, 0);
+});
+
+test("download upload failure retains its original ciphertext and payment context", async () => {
+  let failedUpload;
+  const { service } = recoveryService({ async uploadEncryptedDownloadReceipt(request) {
+    failedUpload = { ...request };
+    throw new CheqiApiError("offline", { errorCode: ErrorCodes.NETWORK_ERROR });
+  } });
+  const identification = { paymentType: PaymentType.CASH };
+  const result = await service.issueDownloadReceipt(identification, receiptPayload());
+  assert.equal(result.state, ReceiptIssueState.DOWNLOAD_FALLBACK);
+  assert.deepEqual(result.preparedDownload.uploadRequest, failedUpload);
+  const { contentKey } = parseDownloadUrl(result.downloadUrl);
+  const envelope = await new DownloadService().decryptDownloadEnvelope(failedUpload.ciphertext, contentKey);
+  assert.deepEqual(JSON.parse(envelope.documents.CHEQI.content).identificationDetails, identification);
+});
+
+test("resume returns the original submission without matching, encryption or uploads", async () => {
+  const submission = { cheqiReceiptId: "CHQ-ORIGINAL", matchId: "original-match", status: "COMPLETED" };
+  const { service, calls } = recoveryService({ async getMatch() {
+    return { matchId: "original-match", state: "SUBMITTED", submission };
+  } });
+  const result = await service.resumeReceipt("original-match", receiptPayload());
+  assert.equal(result.state, ReceiptIssueState.DIGITAL_SUBMITTED);
+  assert.equal(result.submission, submission);
+  assert.equal(result.isAccepted(), true);
+  assert.equal(calls.matches + calls.submissions.length + calls.uploads.length + calls.plaintext.length, 0);
+});
+
+test("resume MATCHED uses the original device snapshot and JavaScript options", async () => {
+  const { service, calls } = recoveryService();
+  const payload = receiptPayload();
+  const result = await service.resumeReceipt("original-match", payload, { storeId: "store", accessToken: "oauth" });
+  assert.equal(result.state, ReceiptIssueState.DIGITAL_SUBMITTED);
+  assert.equal(calls.matches, 0);
+  assert.deepEqual(calls.snapshots, [{ id: "original-match", token: "oauth" }]);
+  assert.equal(calls.submissions[0].token, "oauth");
+  assert.equal(calls.submissions[0].envelope.storeId, "store");
+  assert.equal(calls.submissions[0].envelope.deviceDeliveries[0].deviceRecipientId, "original-device");
+  assert.deepEqual(JSON.parse(calls.plaintext[0]), JSON.parse(JSON.stringify(payload)));
+  assert.equal(result.preparedDownload, null);
+});
+
+for (const state of ["IN_PROGRESS", "EXPIRED"]) {
+  test(`resume ${state} performs no encryption or upload`, async () => {
+    const { service, calls } = recoveryService({ async getMatch() {
+      return { matchId: "original-match", state, retryAfterSeconds: 5 };
+    } });
+    const result = await service.resumeReceipt("original-match", receiptPayload());
+    assert.equal(result.state, state === "EXPIRED" ? ReceiptIssueState.DIGITAL_EXPIRED : ReceiptIssueState.DIGITAL_PENDING);
+    assert.equal(result.retryable, state !== "EXPIRED");
+    assert.equal(result.retryAfterSeconds, state === "EXPIRED" ? null : 5);
+    assert.equal(result.preparedDownload, null);
+    assert.equal(result.downloadUrl, null);
+    assert.equal(calls.matches + calls.submissions.length + calls.plaintext.length + calls.uploads.length, 0);
+  });
+}
+
+test("submission expiry and recovery network failure produce typed states", async () => {
+  const expired = recoveryService({ async submitEncryptedReceipt() {
+    throw new CheqiApiError("expired", { httpStatusCode: 410 });
+  } });
+  const result = await expired.service.issueReceipt({ paymentType: PaymentType.CARD_PAYMENT }, receiptPayload());
+  assert.equal(result.state, ReceiptIssueState.DIGITAL_EXPIRED);
+  assert.equal(result.retryable, false);
+  assert.equal(result.preparedDownload, null);
+  const offline = recoveryService({ async getMatch() {
+    throw new CheqiApiError("offline", { errorCode: ErrorCodes.NETWORK_ERROR });
+  } });
+  assert.equal((await offline.service.resumeReceipt("id", receiptPayload())).state, ReceiptIssueState.DIGITAL_PENDING);
+});
+
+for (const status of [400, 401, 403, 404, 409]) {
+  test(`permanent ${status} errors preserve diagnostics and do not prepare fallback`, async () => {
+    const failure = new CheqiApiError("failed", { httpStatusCode: status, correlationId: "trace" });
+    for (const operation of ["matchCustomer", "submitEncryptedReceipt", "getMatch"]) {
+      const { service, calls } = recoveryService({ async [operation]() { throw failure; } });
+      await assert.rejects(() => operation === "getMatch"
+        ? service.resumeReceipt("original-match", receiptPayload())
+        : service.issueReceipt({ paymentType: PaymentType.CASH }, receiptPayload()),
+      (error) => error instanceof CheqiSDKError && error.httpStatusCode === status && error.correlationId === "trace");
+      assert.equal(calls.uploads.length, 0);
+    }
+  });
+}
+
+test("invalid payloads fail before matching and malformed snapshots fail before encryption", async () => {
+  const { service, calls } = recoveryService();
+  for (const payload of [null, {}, { ...receiptPayload(), products: [null] }, { ...receiptPayload(), taxesApplied: null }]) {
+    await assert.rejects(() => service.issueReceipt({ paymentType: PaymentType.CASH }, payload), /receiptPayload/);
+    await assert.rejects(() => service.resumeReceipt("id", payload), /receiptPayload/);
+  }
+  assert.equal(calls.matches + calls.snapshots.length, 0);
+  for (const match of [null, {}, { matchId: "wrong", state: "EXPIRED" },
+    { matchId: "id", state: "SUBMITTED", submission: { cheqiReceiptId: "receipt", matchId: "wrong" } },
+    { matchId: "id", state: "MATCHED", route: "DOWNLOAD_FALLBACK", recipients: [{}] },
+    { matchId: "id", state: "MATCHED", route: "DIGITAL", recipients: [null] }]) {
+    const invalid = recoveryService({ async getMatch() { return match; } });
+    await assert.rejects(() => invalid.service.resumeReceipt("id", receiptPayload()), (error) => error.errorCode === ErrorCodes.VALIDATION_ERROR);
+    assert.equal(invalid.calls.plaintext.length, 0);
+  }
+});
+
+test("envelope generation accepts both generated match types without HTTP", () => {
+  const { service, calls } = recoveryService();
+  const recipients = [{ id: "device", publicKey: "key" }];
+  for (const match of [
+    { routeFound: true, deliveryRouteType: "DIGITAL", matchId: "id", recipients },
+    { state: "MATCHED", route: "DIGITAL", matchId: "id", recipients }
+  ]) {
+    const envelope = service.generateEncryptedReceiptEnvelope(match, receiptPayload(), "store");
+    assert.equal(envelope.matchId, "id");
+    assert.equal(envelope.storeId, "store");
+    assert.equal(envelope.deviceDeliveries[0].deviceRecipientId, "device");
+  }
+  assert.throws(() => service.generateEncryptedReceiptEnvelope({ state: "SUBMITTED", route: "DIGITAL" }, receiptPayload()), /MATCHED/);
+  assert.equal(calls.matches + calls.snapshots.length + calls.submissions.length, 0);
+});
+
+test("HTTP match retrieval encodes the opaque id, authenticates and hydrates generated dates", async () => {
+  let request;
+  const client = new DefaultCheqiApiClient(new CheqiSDKConfig({ apiEndpoint: Environment.TEST, apiKey: "api-key", maxRetries: 0, ...NOOP }),
+    async (url, init) => {
+      request = { url: String(url), ...init };
+      return Response.json({ matchId: "id /?", state: "SUBMITTED", expiresAt: "2026-09-29T10:00:00Z",
+        submission: { cheqiReceiptId: "receipt", matchId: "id /?", createdAt: "2026-09-29T09:00:00Z" } });
+    });
+  const match = await client.getMatch("id /?", "oauth-token");
+  assert.equal(request.url, "https://test.api.cheqi.io/recipient/matches/id%20%2F%3F");
+  assert.equal(request.headers.Authorization, "Bearer oauth-token");
+  assert.equal(request.method, "GET");
+  assert.equal(request.body, undefined);
+  assert.ok(match.expiresAt instanceof Date);
+  assert.ok(match.submission.createdAt instanceof Date);
+  await assert.rejects(() => client.getMatch(" "), (error) => error.errorCode === ErrorCodes.INVALID_REQUEST);
+});
+
+test("both HTTP submission endpoints handle IN_PROGRESS before receipt deserialization", async () => {
+  let count = 0;
+  const client = new DefaultCheqiApiClient(new CheqiSDKConfig({ apiEndpoint: Environment.TEST, apiKey: "api-key", ...NOOP }),
+    async () => { count++; return Response.json({ state: "IN_PROGRESS", retryAfterSeconds: 9 }, { status: 202 }); });
+  const envelope = { matchId: "id", parentCheqiReceiptId: "parent", deviceDeliveries: [{}] };
+  for (const method of ["submitEncryptedReceipt", "submitEncryptedCreditNote"]) {
+    await assert.rejects(() => client[method](envelope), (error) => error instanceof SubmissionInProgressError && error.retryAfterSeconds === 9 && error.isRetryable);
+  }
+  assert.equal(count, 2);
+});
+
+test("successful malformed HTTP submissions return pending without a second POST", async () => {
+  for (const body of ["not json", "null", "[]", "{}", JSON.stringify({ cheqiReceiptId: "receipt", matchId: "wrong" })]) {
+    let submissions = 0;
+    const sdk = new CheqiSDK({ apiEndpoint: Environment.TEST, apiKey: "key", ...NOOP,
+      fetch: async (url) => {
+        if (new URL(url).pathname === "/recipient/resolve") {
+          return Response.json({ routeFound: true, deliveryRouteType: "DIGITAL", matchId: "id", recipients: [{ id: "device", publicKey: "key" }] });
+        }
+        submissions++;
+        return new Response(body, { status: 202 });
+      }
+    });
+    sdk.encryptionService.encryptReceiptForRecipient = () => ({ deviceRecipientId: "device", encryptedContent: "cipher", encryptedAesKey: "key" });
+    const result = await sdk.receiptService.issueReceipt({ paymentType: PaymentType.CASH }, receiptPayload());
+    assert.equal(result.state, ReceiptIssueState.DIGITAL_PENDING);
+    assert.equal(result.matchId, "id");
+    assert.equal(submissions, 1);
+  }
+});
+
+test("missing authentication fails before fetch and is not treated as an outage", async () => {
+  let requests = 0;
+  const sdk = new CheqiSDK({ apiEndpoint: Environment.TEST, ...NOOP,
+    fetch: async () => { requests++; throw new Error("unreachable"); } });
+  await assert.rejects(() => sdk.receiptService.issueReceipt({ paymentType: PaymentType.CASH }, receiptPayload()),
+    (error) => error.errorCode === ErrorCodes.AUTHENTICATION_FAILED && error.httpStatusCode === 401);
+  assert.equal(requests, 0);
+});
+
+test("an interrupted submission response returns pending with an encrypted fallback", async () => {
+  const sdk = new CheqiSDK({ apiEndpoint: Environment.TEST, apiKey: "key", ...NOOP,
+    fetch: async (url) => {
+      if (new URL(url).pathname === "/recipient/resolve") {
+        return Response.json({ routeFound: true, deliveryRouteType: "DIGITAL", matchId: "id", recipients: [{ id: "device", publicKey: "key" }] });
+      }
+      return new Response(new ReadableStream({ start(controller) { controller.error(new Error("connection closed")); } }), { status: 202 });
+    }
+  });
+  sdk.encryptionService.encryptReceiptForRecipient = () => ({ deviceRecipientId: "device", encryptedContent: "cipher", encryptedAesKey: "key" });
+  const result = await sdk.receiptService.issueReceipt({ paymentType: PaymentType.CASH }, receiptPayload());
+  assert.equal(result.state, ReceiptIssueState.DIGITAL_PENDING);
+  assert.ok(result.preparedDownload);
+});
+
+test("generated expense metadata survives wallet and download decryption", async () => {
+  const { privateKeyB64, publicKeyB64 } = rsaKeyPair();
+  const envelope = {
+    cheqiReceiptId: "receipt", envelopeVersion: 1, receiptGeneratorVersion: "v1",
+    receiptUuid: "706920f8-63a7-4d9d-a92a-5889545562ce", documents: {},
+    expenseSubmission: {
+      expenseSubmissionId: "expense", targetCompanyId: "company", submittedByUserId: "user",
+      submittedAt: new Date("2026-09-29T10:00:00Z"), reason: "Business lunch"
+    }
+  };
+  const encrypted = new EncryptionService().encryptForDevice(JSON.stringify(envelope), { id: "device", publicKey: publicKeyB64 });
+  const decrypted = new DecryptionService().decryptReceipt({
+    encryptedEnvelope: encrypted.encryptedContent, encryptedEnvelopeKey: encrypted.encryptedAesKey
+  }, privateKeyB64);
+  assert.deepEqual(decrypted, envelope);
+  const downloads = new DownloadService();
+  const link = downloads.generateDownloadLink(Environment.TEST);
+  const ciphertext = await downloads.encryptDownloadEnvelope(envelope, link.contentKey);
+  assert.deepEqual(await downloads.decryptDownloadEnvelope(ciphertext, link.contentKey), envelope);
+});
+
+test("issuance accepts an options object without guessing whether a token is a UUID", async () => {
+  const { service, calls } = recoveryService();
+  const accessToken = "706920f8-63a7-4d9d-a92a-5889545562ce";
+  await service.issueReceipt({ paymentType: PaymentType.CASH }, receiptPayload(), { storeId: "store", accessToken });
+  assert.equal(calls.submissions[0].token, accessToken);
+  assert.equal(calls.submissions[0].envelope.storeId, "store");
+});
+
+test("credit-note issuance accepts the shared JavaScript options object", async () => {
+  let submission;
+  const api = {
+    async matchCustomer(_request, token) {
+      assert.equal(token, "oauth");
+      return { routeFound: true, matchId: "match", recipients: [{ id: "device", publicKey: "key" }] };
+    },
+    async submitEncryptedCreditNote(envelope, token) {
+      submission = { envelope, token };
+      return { cheqiReceiptId: "credit", matchId: "match" };
+    }
+  };
+  const service = new CreditNoteService(api, {
+    encryptCreditNoteForRecipient() { return { deviceRecipientId: "device", encryptedContent: "cipher", encryptedAesKey: "key" }; }
+  }, new MatchingService(api));
+  const result = await service.issueCreditNote({ paymentType: PaymentType.CASH }, "parent", { refund: 10 }, { storeId: "store", accessToken: "oauth" });
+  assert.equal(result.isAccepted(), true);
+  assert.equal(submission.token, "oauth");
+  assert.equal(submission.envelope.storeId, "store");
+});
+
+test("an unreadable permanent HTTP error retains its status instead of preparing fallback", async () => {
+  const sdk = new CheqiSDK({ apiEndpoint: Environment.TEST, apiKey: "key", ...NOOP,
+    fetch: async () => new Response(new ReadableStream({ start(controller) { controller.error(new Error("closed")); } }), { status: 401 })
+  });
+  await assert.rejects(() => sdk.receiptService.issueReceipt({ paymentType: PaymentType.CASH }, receiptPayload()),
+    (error) => error.httpStatusCode === 401 && error.errorCode === ErrorCodes.AUTHENTICATION_FAILED);
+});
+
+test("OpenAPI drift comparison ignores mapping order but rejects contract changes", () => {
+  const local = 'openapi: 3.0.1\ninfo: {title: Cheqi, version: v1}\ncomponents:\n  schemas:\n    Receipt:\n      type: object\n      required: [id]\n';
+  const reordered = 'components:\n  schemas:\n    Receipt: {required: [id], type: object}\ninfo: {version: v1, title: Cheqi}\nopenapi: 3.0.1\n';
+  assert.equal(specsMatch(local, reordered), true);
+  assert.equal(specsMatch(local, reordered.replace('[id]', '[id, matchId]')), false);
+  assert.equal(specsMatch(local, reordered.replace('type: object', 'type: string')), false);
+  assert.equal(specsMatch(local, reordered.replace('Receipt:', 'OtherReceipt:')), false);
 });

@@ -1,9 +1,26 @@
 import type {
   ClientReceiptDownloadResponse,
+  ClientReceiptDownloadRequest,
   ReceiptSubmissionResponse,
   ReceiptSubmissionResponseStatusEnum
 } from "./models/generated/index.js";
 import type { RecipientResolutionResponseDeliveryRouteTypeEnum } from "./models/generated/RecipientResolutionResponse.js";
+
+/** Checkout state, distinct from backend device-processing status. */
+export const ReceiptIssueState = {
+  DIGITAL_SUBMITTED: "DIGITAL_SUBMITTED",
+  DIGITAL_PENDING: "DIGITAL_PENDING",
+  DIGITAL_EXPIRED: "DIGITAL_EXPIRED",
+  DOWNLOAD_FALLBACK: "DOWNLOAD_FALLBACK",
+  EMAIL_FALLBACK: "EMAIL_FALLBACK"
+} as const;
+export type ReceiptIssueState = typeof ReceiptIssueState[keyof typeof ReceiptIssueState];
+
+/** Persist this object before displaying its URL, which includes the secret fragment key. */
+export interface PreparedReceiptDownload {
+  readonly downloadUrl: string;
+  readonly uploadRequest: Readonly<ClientReceiptDownloadRequest>;
+}
 
 /** Outcome of receipt routing and submission. */
 export class ReceiptResult {
@@ -16,7 +33,13 @@ export class ReceiptResult {
     readonly expiresAt: Date | null,
     readonly downloadUrl: string | null,
     readonly downloadEnvelopeRequired: boolean,
-    readonly emailReceiptRequired: boolean
+    readonly emailReceiptRequired: boolean,
+    readonly state: ReceiptIssueState = deliveryRouteType === "DIGITAL"
+      ? ReceiptIssueState.DIGITAL_SUBMITTED : deliveryRouteType,
+    readonly submission: ReceiptSubmissionResponse | null = null,
+    readonly preparedDownload: PreparedReceiptDownload | null = null,
+    readonly retryable: boolean = false,
+    readonly retryAfterSeconds: number | null = null
   ) {}
 
   static accepted(
@@ -33,7 +56,9 @@ export class ReceiptResult {
       null,
       null,
       false,
-      false
+      false,
+      ReceiptIssueState.DIGITAL_SUBMITTED,
+      response
     );
   }
 
@@ -85,6 +110,24 @@ export class ReceiptResult {
       false,
       false
     );
+  }
+
+  static digitalPending(matchId: string, download: PreparedReceiptDownload | null = null,
+    retryAfterSeconds: number | null = null): ReceiptResult {
+    return new ReceiptResult(null, matchId, "DIGITAL", null, null, null,
+      download?.downloadUrl ?? null, false, false, ReceiptIssueState.DIGITAL_PENDING,
+      null, download, true, retryAfterSeconds);
+  }
+
+  static digitalExpired(matchId: string): ReceiptResult {
+    return new ReceiptResult(null, matchId, "DIGITAL", null, null, null, null,
+      false, false, ReceiptIssueState.DIGITAL_EXPIRED);
+  }
+
+  static downloadPrepared(download: PreparedReceiptDownload): ReceiptResult {
+    return new ReceiptResult(null, null, "DOWNLOAD_FALLBACK", null, null, null,
+      download.downloadUrl, false, false, ReceiptIssueState.DOWNLOAD_FALLBACK,
+      null, download, true);
   }
 
   isAccepted(): boolean { return Boolean(this.cheqiReceiptId?.trim()); }

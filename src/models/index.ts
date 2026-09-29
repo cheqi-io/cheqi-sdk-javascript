@@ -7,6 +7,8 @@ export { BuyerType } from "./generated/BuyerType.js";
 export { DocumentType } from "./generated/DocumentType.js";
 export { FiscalizationStatus } from "./generated/FiscalizationStatus.js";
 export { PaymentType } from "./generated/PaymentType.js";
+export { MatchState } from "./generated/MatchState.js";
+export { CompanyRole } from "./generated/CompanyRole.js";
 export { ReceiptFormat } from "./generated/ReceiptFormat.js";
 export { RefundPreference } from "./generated/RefundPreference.js";
 export { ReturnReasonCode } from "./generated/ReturnReasonCode.js";

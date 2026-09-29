@@ -1,17 +1,19 @@
 import { randomUUID } from "node:crypto";
-import { CheqiApiError, CheqiSDKError, ErrorCodes } from "../errors.js";
+import { CheqiApiError, CheqiSDKError, ErrorCodes, SubmissionInProgressError } from "../errors.js";
 import {
   encryptDownloadEnvelope,
   generateDownloadLink,
-  type DownloadLink
 } from "../download/index.js";
-import { ReceiptResult } from "../models.js";
+import { ReceiptResult, type PreparedReceiptDownload } from "../models.js";
 import type {
   CheqiApiClient,
+  ReceiptIssueOptions,
   EncryptedReceiptEnvelope,
   EncryptedReceiptPayload,
   IdentificationDetails,
   MatchedRecipient,
+  MatchStatusResponse,
+  ClientReceiptDownloadResponse,
   ReceiptEnvelope,
   ReceiptPayload,
   ReceiptSubmissionResponse,
@@ -33,7 +35,7 @@ export class ReceiptService {
   constructor(
     private readonly apiClient: Pick<
       CheqiApiClient,
-      "submitEncryptedReceipt" | "uploadEncryptedDownloadReceipt"
+      "getMatch" | "submitEncryptedReceipt" | "uploadEncryptedDownloadReceipt"
     >,
     private readonly encryptionService: EncryptionService,
     private readonly matchingService: MatchingService,
@@ -46,22 +48,29 @@ export class ReceiptService {
 
   /**
    * Resolves a route, then encrypts the exact supplied payload independently for
-   * every matched owner device. With three arguments, a UUID is treated as a
-   * storeId and any other non-empty string as an access token.
+   * every matched owner device. Pass an options object for storeId and accessToken.
+   * Legacy positional arguments remain supported: a third-argument UUID is a
+   * storeId and any other non-empty string is an access token.
    */
   async issueReceipt(
     identificationDetails: IdentificationDetails,
     receiptPayload: ReceiptPayload,
-    storeIdOrAccessToken: string | null = null,
+    storeIdOrAccessToken: ReceiptIssueOptions | string | null = null,
     accessToken?: string | null
   ): Promise<ReceiptResult> {
     requireNonNull(identificationDetails, "identificationDetails");
-    requireNonNull(receiptPayload, "receiptPayload");
+    validatePayload(receiptPayload);
     const { storeId, token } = resolveReceiptArguments(storeIdOrAccessToken, accessToken);
     validateOptionalAccessToken(token);
 
     try {
-      const resolution = await this.matchingService.matchCustomer(identificationDetails, token);
+      let resolution: RecipientResolutionResponse;
+      try {
+        resolution = await this.matchingService.matchCustomer(identificationDetails, token);
+      } catch (error) {
+        if (!isRecoverable(error)) throw error;
+        return ReceiptResult.downloadPrepared(await this.prepareDownload(receiptPayload));
+      }
       validateResolvedRoute(resolution);
       const route = resolveRoute(resolution);
 
@@ -87,19 +96,122 @@ export class ReceiptService {
       }
 
       validateDeviceRecipients(resolution);
-      const plaintextJson = serializeJson(receiptPayload);
-      const envelope: EncryptedReceiptEnvelope = {
-        matchId: resolution.matchId!,
-        storeId: storeId ?? undefined,
-        deviceDeliveries: this.encryptForDevices(plaintextJson, resolution.recipients!)
-      };
-      const response = await this.apiClient.submitEncryptedReceipt(envelope, token);
-      return ReceiptResult.accepted(response, route);
+      try {
+        return ReceiptResult.accepted(await this.submitPayload(
+          resolution.matchId!, resolution.recipients!, receiptPayload, storeId, token
+        ));
+      } catch (error) {
+        if (error instanceof CheqiApiError && error.httpStatusCode === 410) {
+          return ReceiptResult.digitalExpired(resolution.matchId!);
+        }
+        if (!isAmbiguousSubmission(error)) throw error;
+        return ReceiptResult.digitalPending(resolution.matchId!, await this.prepareDownload(receiptPayload),
+          retryAfter(error));
+      }
     } catch (error) {
       if (error instanceof CheqiApiError) throw wrapApiError("Receipt submission failed", error);
       if (error instanceof CheqiSDKError) throw error;
       throw new CheqiSDKError(`Receipt processing failed: ${errorMessage(error)}`, { cause: error });
     }
+  }
+
+  /** Retrieves the original device snapshot without matching again. */
+  async getMatch(matchId: string, accessToken: string | null = null): Promise<MatchStatusResponse> {
+    validateRetryArguments(matchId, accessToken);
+    try {
+      return await this.apiClient.getMatch(matchId, accessToken);
+    } catch (error) {
+      if (error instanceof CheqiApiError) throw wrapApiError("Match retrieval failed", error);
+      throw error;
+    }
+  }
+
+  /** Makes one recovery attempt. Retain the original prepared download and URL. */
+  async resumeReceipt(matchId: string, receiptPayload: ReceiptPayload,
+    storeIdOrAccessToken: ReceiptIssueOptions | string | null = null, accessToken?: string | null): Promise<ReceiptResult> {
+    const { storeId, token } = resolveReceiptArguments(storeIdOrAccessToken, accessToken);
+    validateRetryArguments(matchId, token);
+    validatePayload(receiptPayload);
+    try {
+      const match = await this.apiClient.getMatch(matchId, token);
+      if (!match?.state || match.matchId !== matchId) throw validationError("Invalid match status response");
+      switch (match.state) {
+        case "SUBMITTED":
+          if (!match.submission?.cheqiReceiptId?.trim() || match.submission.matchId !== matchId) {
+            throw validationError("Match status did not include the original submission");
+          }
+          return ReceiptResult.accepted(match.submission);
+        case "IN_PROGRESS":
+          return ReceiptResult.digitalPending(matchId, null, match.retryAfterSeconds ?? null);
+        case "EXPIRED":
+          return ReceiptResult.digitalExpired(matchId);
+        case "MATCHED":
+          if (match.route !== "DIGITAL" || !match.recipients?.length) {
+            throw validationError("Match does not contain a digital owner-device route");
+          }
+          return ReceiptResult.accepted(await this.submitPayload(matchId, match.recipients,
+            receiptPayload, storeId, token));
+        default:
+          throw validationError("Unknown match state");
+      }
+    } catch (error) {
+      if (error instanceof CheqiApiError && error.httpStatusCode === 410) return ReceiptResult.digitalExpired(matchId);
+      if (isAmbiguousSubmission(error)) return ReceiptResult.digitalPending(matchId, null, retryAfter(error));
+      if (error instanceof CheqiApiError) throw wrapApiError("Receipt recovery failed", error);
+      if (error instanceof CheqiSDKError) throw error;
+      throw new CheqiSDKError("Receipt recovery failed", { cause: error });
+    }
+  }
+
+  /** Uploads a persisted generated request without changing its download id or ciphertext. */
+  async uploadPreparedDownload(download: PreparedReceiptDownload,
+    accessToken: string | null = null): Promise<ClientReceiptDownloadResponse> {
+    requireNonNull(download, "download");
+    validateOptionalAccessToken(accessToken);
+    try {
+      return await this.apiClient.uploadEncryptedDownloadReceipt({ ...download.uploadRequest }, accessToken);
+    } catch (error) {
+      if (error instanceof CheqiApiError) throw wrapApiError("Download upload failed", error);
+      throw error;
+    }
+  }
+
+  /** Encrypts locally for a resolved route or a retrieved MATCHED digital snapshot. */
+  generateEncryptedReceiptEnvelope(match: RecipientResolutionResponse | MatchStatusResponse,
+    receiptPayload: ReceiptPayload, storeId: string | null = null): EncryptedReceiptEnvelope {
+    requireNonNull(match, "match");
+    if ("state" in match) {
+      if (match.state !== "MATCHED" || match.route !== "DIGITAL") {
+        throw validationError("Match must be MATCHED with a digital owner-device route");
+      }
+    } else {
+      validateResolvedRoute(match as RecipientResolutionResponse);
+      if (resolveRoute(match as RecipientResolutionResponse) !== "DIGITAL") {
+        throw validationError("Match does not contain a digital owner-device route");
+      }
+    }
+    return this.generateEnvelope(match.matchId!, match.recipients!, receiptPayload, storeId);
+  }
+
+  private generateEnvelope(matchId: string, recipients: MatchedRecipient[],
+    payload: ReceiptPayload, storeId: string | null): EncryptedReceiptEnvelope {
+    validateRetryArguments(matchId, null);
+    validatePayload(payload);
+    if (!recipients?.length || recipients.some((recipient) => recipient == null)) {
+      throw validationError("Match must contain owner devices");
+    }
+    return { matchId, storeId: storeId ?? undefined,
+      deviceDeliveries: this.encryptForDevices(serializeJson(payload), recipients) };
+  }
+
+  private async submitPayload(matchId: string, recipients: MatchedRecipient[], payload: ReceiptPayload,
+    storeId: string | null, token: string | null): Promise<ReceiptSubmissionResponse> {
+    const response = await this.apiClient.submitEncryptedReceipt(
+      this.generateEnvelope(matchId, recipients, payload, storeId), token);
+    if (!response?.cheqiReceiptId?.trim() || response.matchId !== matchId) {
+      throw new CheqiApiError("Invalid receipt submission response", { errorCode: ErrorCodes.INVALID_RESPONSE });
+    }
+    return response;
   }
 
   /** Creates a client-encrypted download receipt without attempting matching. */
@@ -109,7 +221,7 @@ export class ReceiptService {
     accessToken: string | null = null
   ): Promise<ReceiptResult> {
     requireNonNull(identificationDetails, "identificationDetails");
-    requireNonNull(receiptPayload, "receiptPayload");
+    validatePayload(receiptPayload);
     if (!identificationDetails.paymentType) {
       throw validationError("identificationDetails.paymentType is required");
     }
@@ -207,24 +319,36 @@ export class ReceiptService {
     receiptPayload: ReceiptPayload,
     accessToken: string | null
   ): Promise<ReceiptResult> {
+    const prepared = await this.prepareDownload(receiptPayload, identificationDetails);
+    try {
+      const response = await this.apiClient.uploadEncryptedDownloadReceipt({ ...prepared.uploadRequest }, accessToken);
+      return ReceiptResult.downloadAccepted(matchId, response, prepared.downloadUrl);
+    } catch (error) {
+      if (!isRecoverable(error)) throw error;
+      return ReceiptResult.downloadPrepared(prepared);
+    }
+  }
+
+  private async prepareDownload(receiptPayload: ReceiptPayload,
+    identificationDetails?: IdentificationDetails): Promise<PreparedReceiptDownload> {
     const link = generateDownloadLink(requireDownloadBaseUrl(this.receiptDownloadBaseUrl));
-    const cheqiDocument = this.buildDownloadCheqiDocument(receiptPayload, identificationDetails);
+    const cheqiDocument = identificationDetails == null ? serializeJson(receiptPayload)
+      : this.buildDownloadCheqiDocument(receiptPayload, identificationDetails);
     const envelope: ReceiptEnvelope = {
       cheqiReceiptId: link.downloadId,
       envelopeVersion: 1,
       receiptGeneratorVersion: PAYLOAD_DOCUMENT_VERSION,
       receiptUuid: randomUUID(),
-      documents: {
-        CHEQI: { mediaType: "application/json", content: cheqiDocument }
+      documents: { CHEQI: { mediaType: "application/json", content: cheqiDocument } }
+    };
+    return {
+      downloadUrl: link.url,
+      uploadRequest: {
+        downloadId: link.downloadId,
+        ciphertext: await encryptDownloadEnvelope(envelope, link.contentKey),
+        templateHash: this.verificationService.calculateCheqiReceiptHash(cheqiDocument)
       }
     };
-    const ciphertext = await encryptDownloadEnvelope(envelope, link.contentKey);
-    const templateHash = this.verificationService.calculateCheqiReceiptHash(cheqiDocument);
-    const response = await this.apiClient.uploadEncryptedDownloadReceipt(
-      { downloadId: link.downloadId, ciphertext, templateHash },
-      accessToken
-    );
-    return ReceiptResult.downloadAccepted(matchId, response, link.url);
   }
 
   /** Builds the browser-download CHEQI JSON without modifying the supplied payload values. */
@@ -263,9 +387,12 @@ function validateDeviceRecipients(resolution: RecipientResolutionResponse): void
 }
 
 function resolveReceiptArguments(
-  storeIdOrAccessToken: string | null,
+  storeIdOrAccessToken: ReceiptIssueOptions | string | null,
   explicitAccessToken: string | null | undefined
 ): { storeId: string | null; token: string | null } {
+  if (typeof storeIdOrAccessToken === "object" && storeIdOrAccessToken !== null) {
+    return { storeId: storeIdOrAccessToken.storeId ?? null, token: storeIdOrAccessToken.accessToken ?? null };
+  }
   if (explicitAccessToken !== undefined) {
     return { storeId: storeIdOrAccessToken, token: explicitAccessToken };
   }
@@ -310,4 +437,34 @@ function wrapApiError(prefix: string, error: CheqiApiError): CheqiSDKError {
     httpStatusCode: error.httpStatusCode,
     correlationId: error.correlationId
   });
+}
+
+function validateRetryArguments(matchId: string, accessToken: string | null): void {
+  if (!matchId?.trim()) throw validationError("matchId is required");
+  validateOptionalAccessToken(accessToken);
+}
+
+function validatePayload(payload: ReceiptPayload): void {
+  requireNonNull(payload, "receiptPayload");
+  if (!payload.documentNumber?.trim() || !payload.currency?.trim() || payload.issueDate == null ||
+      !payload.products?.length || payload.products.some((product) => product == null) ||
+      payload.receiptSubtotal == null || payload.totalBeforeTax == null || payload.totalTaxAmount == null ||
+      payload.totalAmount == null || payload.taxesApplied == null) {
+    throw validationError("receiptPayload must contain the required receipt fields and products");
+  }
+}
+
+function isRecoverable(error: unknown): error is CheqiApiError {
+  return error instanceof CheqiApiError && (error.isRetryable ||
+    (error.httpStatusCode === 0 && error.isNetworkError()));
+}
+
+function isAmbiguousSubmission(error: unknown): error is CheqiApiError {
+  return isRecoverable(error) || (error instanceof CheqiApiError &&
+    error.errorCode === ErrorCodes.INVALID_RESPONSE &&
+    (error.httpStatusCode === 0 || (error.httpStatusCode >= 200 && error.httpStatusCode < 300)));
+}
+
+function retryAfter(error: unknown): number | null {
+  return error instanceof SubmissionInProgressError ? error.retryAfterSeconds : null;
 }

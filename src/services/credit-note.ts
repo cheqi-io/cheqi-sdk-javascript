@@ -2,6 +2,7 @@ import { CheqiApiError, CheqiSDKError, ErrorCodes } from "../errors.js";
 import { CreditNoteResult } from "../models.js";
 import type {
   CheqiApiClient,
+  ReceiptIssueOptions,
   EncryptedCreditNoteEnvelope,
   EncryptedReceiptPayload,
   IdentificationDetails,
@@ -32,7 +33,7 @@ export class CreditNoteService {
     identificationDetails: IdentificationDetails,
     parentCheqiReceiptId: string,
     creditNotePayload: unknown,
-    storeIdOrAccessToken: string | null = null,
+    storeIdOrAccessToken: ReceiptIssueOptions | string | null = null,
     accessToken?: string | null
   ): Promise<CreditNoteResult> {
     requireNonNull(identificationDetails, "identificationDetails");
@@ -107,9 +108,12 @@ function validateDeviceRoute(resolution: RecipientResolutionResponse): void {
 }
 
 function resolveArguments(
-  storeIdOrAccessToken: string | null,
+  storeIdOrAccessToken: ReceiptIssueOptions | string | null,
   explicitAccessToken: string | null | undefined
 ): { storeId: string | null; token: string | null } {
+  if (typeof storeIdOrAccessToken === "object" && storeIdOrAccessToken !== null) {
+    return { storeId: storeIdOrAccessToken.storeId ?? null, token: storeIdOrAccessToken.accessToken ?? null };
+  }
   if (explicitAccessToken !== undefined) {
     return { storeId: storeIdOrAccessToken, token: explicitAccessToken };
   }
