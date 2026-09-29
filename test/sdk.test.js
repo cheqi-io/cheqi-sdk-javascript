@@ -388,10 +388,13 @@ test("download fallback with payment context is completed client-side", async ()
   const downloadService = new DownloadService();
   const { contentKey } = parseDownloadUrl(result.getDownloadUrl());
   const envelope = await downloadService.decryptDownloadEnvelope(upload.ciphertext, contentKey);
-  const document = JSON.parse(envelope.documents.CHEQI.content);
+  assert.equal(envelope.envelopeVersion, 2);
+  const document = JSON.parse(envelope.documents.RECEIPT_PAYLOAD.content);
+  const identificationDetails = JSON.parse(envelope.documents.IDENTIFICATION_DETAILS.content);
   assert.equal(document.documentNumber, "R-100");
-  assert.equal(document.identificationDetails.cardDetails.paymentAccountReference, "PAR-123");
-  assert.equal(document.identificationDetails.cardDetails.lastFourDigits, "4242");
+  assert.equal(document.identificationDetails, undefined);
+  assert.equal(identificationDetails.cardDetails.paymentAccountReference, "PAR-123");
+  assert.equal(identificationDetails.cardDetails.lastFourDigits, "4242");
 });
 
 test("download fallback without payment type requests a final envelope", async () => {

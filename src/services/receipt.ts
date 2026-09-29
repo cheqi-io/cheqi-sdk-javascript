@@ -208,18 +208,21 @@ export class ReceiptService {
     accessToken: string | null
   ): Promise<ReceiptResult> {
     const link = generateDownloadLink(requireDownloadBaseUrl(this.receiptDownloadBaseUrl));
-    const cheqiDocument = this.buildDownloadCheqiDocument(receiptPayload, identificationDetails);
+    const payloadDocument = serializeJson(receiptPayload);
     const envelope: ReceiptEnvelope = {
       cheqiReceiptId: link.downloadId,
-      envelopeVersion: 1,
+      envelopeVersion: 2,
       receiptGeneratorVersion: PAYLOAD_DOCUMENT_VERSION,
       receiptUuid: randomUUID(),
       documents: {
-        CHEQI: { mediaType: "application/json", content: cheqiDocument }
+        RECEIPT_PAYLOAD: { mediaType: "application/json", content: payloadDocument },
+        IDENTIFICATION_DETAILS: {
+          mediaType: "application/json", content: serializeJson(identificationDetails)
+        }
       }
     };
     const ciphertext = await encryptDownloadEnvelope(envelope, link.contentKey);
-    const templateHash = this.verificationService.calculateCheqiReceiptHash(cheqiDocument);
+    const templateHash = this.verificationService.calculateCheqiReceiptHash(payloadDocument);
     const response = await this.apiClient.uploadEncryptedDownloadReceipt(
       { downloadId: link.downloadId, ciphertext, templateHash },
       accessToken
@@ -227,7 +230,7 @@ export class ReceiptService {
     return ReceiptResult.downloadAccepted(matchId, response, link.url);
   }
 
-  /** Builds the browser-download CHEQI JSON without modifying the supplied payload values. */
+  /** Builds legacy version 1 browser JSON; version 2 downloads carry the payload separately. */
   buildDownloadCheqiDocument(
     receiptPayload: ReceiptPayload,
     identificationDetails: IdentificationDetails
