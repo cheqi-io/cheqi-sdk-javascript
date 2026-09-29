@@ -1,5 +1,6 @@
 export const Endpoints = {
   CUSTOMER_MATCH_ENDPOINT: "/recipient/resolve",
+  MATCH_STATUS_ENDPOINT: (matchId: string): string => `/recipient/matches/${encodeURIComponent(matchId)}`,
   ENCRYPTED_RECEIPT_ENDPOINT: "/receipt/encrypted",
   CLIENT_RECEIPT_DOWNLOAD_ENDPOINT: "/receipt/download",
   ENCRYPTED_CREDIT_NOTE_ENDPOINT: "/credit-note/encrypted",

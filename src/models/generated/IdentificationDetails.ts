@@ -36,7 +36,7 @@ import {
 } from './CardDetails.js';
 
 /**
- * Identification and payment details used to resolve the receipt recipient. paymentType is optional when pairingCode is supplied because the pairing code carries the customer-selected payment method. A customer locator (cardDetails, paymentAccountDetails, recipientEmail or pairingCode) is optional: when none is supplied the request is treated as an anonymous "no customer" receipt, which resolves to the QR-code download fallback route (when downloadFallbackEnabled). The mutual-exclusion rules below still apply so a locator is never paired with an incompatible payment type.
+ * Identification and payment details used to resolve the receipt recipient. Multiple compatible identifiers may be supplied to improve matching: strategies are tried in order (cheqiReceiptId, pairingCode, paymentAccountDetails, cardDetails, recipientEmail), stopping at the first customer match. Remaining identifiers are not resolved or compared. paymentType is optional when pairingCode is supplied because the pairing code carries the customer-selected payment method. A customer locator (cardDetails, paymentAccountDetails, recipientEmail or pairingCode) is optional: when none is supplied the request is treated as an anonymous "no customer" receipt, which resolves to the QR-code download fallback route (when downloadFallbackEnabled). The mutual-exclusion rules below still apply so a locator is never paired with an incompatible payment type.
  * @export
  * @interface IdentificationDetails
  */
@@ -66,7 +66,7 @@ export interface IdentificationDetails {
      */
     paymentIds?: Array<string>;
     /**
-     * Recipient email used as a fallback customer identifier.
+     * Recipient email used as a fallback customer identifier, only resolved when no earlier strategy matches.
      * @type {string}
      * @memberof IdentificationDetails
      */

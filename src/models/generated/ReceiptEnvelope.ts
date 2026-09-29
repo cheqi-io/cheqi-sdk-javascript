@@ -13,6 +13,13 @@
  */
 
 import { mapValues } from './runtime.js';
+import type { ExpenseSubmissionEnvelope } from './ExpenseSubmissionEnvelope.js';
+import {
+    ExpenseSubmissionEnvelopeFromJSON,
+    ExpenseSubmissionEnvelopeFromJSONTyped,
+    ExpenseSubmissionEnvelopeToJSON,
+    ExpenseSubmissionEnvelopeToJSONTyped,
+} from './ExpenseSubmissionEnvelope.js';
 import type { ReceiptEnvelopeDocument } from './ReceiptEnvelopeDocument.js';
 import {
     ReceiptEnvelopeDocumentFromJSON,
@@ -45,6 +52,12 @@ export interface ReceiptEnvelope {
      * @memberof ReceiptEnvelope
      */
     envelopeVersion: number;
+    /**
+     *
+     * @type {ExpenseSubmissionEnvelope}
+     * @memberof ReceiptEnvelope
+     */
+    expenseSubmission?: ExpenseSubmissionEnvelope | null;
     /**
      * Version of the Rust receipt-template engine that generated the documents.
      * @type {string}
@@ -84,6 +97,7 @@ export function ReceiptEnvelopeFromJSONTyped(json: any, ignoreDiscriminator: boo
         'cheqiReceiptId': json['cheqiReceiptId'],
         'documents': (mapValues(json['documents'], ReceiptEnvelopeDocumentFromJSON)),
         'envelopeVersion': json['envelopeVersion'],
+        'expenseSubmission': json['expenseSubmission'] == null ? undefined : ExpenseSubmissionEnvelopeFromJSON(json['expenseSubmission']),
         'receiptGeneratorVersion': json['receiptGeneratorVersion'],
         'receiptUuid': json['receiptUuid'],
     };
@@ -103,6 +117,7 @@ export function ReceiptEnvelopeToJSONTyped(value?: ReceiptEnvelope | null, ignor
         'cheqiReceiptId': value['cheqiReceiptId'],
         'documents': (mapValues(value['documents'], ReceiptEnvelopeDocumentToJSON)),
         'envelopeVersion': value['envelopeVersion'],
+        'expenseSubmission': ExpenseSubmissionEnvelopeToJSON(value['expenseSubmission']),
         'receiptGeneratorVersion': value['receiptGeneratorVersion'],
         'receiptUuid': value['receiptUuid'],
     };

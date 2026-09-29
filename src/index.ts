@@ -36,5 +36,6 @@ export type {
   ReceiptEnvelope,
   ReceiptSubmissionResponse,
   RecipientResolutionResponse,
-  RequestOptions
+  RequestOptions,
+  ReceiptIssueOptions
 } from "./types.js";

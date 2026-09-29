@@ -1,6 +1,6 @@
 import { CheqiSDKConfig } from "../config.js";
 import { createRequire } from "node:module";
-import { CheqiApiError, ErrorCodes } from "../errors.js";
+import { CheqiApiError, ErrorCodes, SubmissionInProgressError } from "../errors.js";
 import type { Logger } from "../logger.js";
 import { NoopLogger } from "../logger.js";
 import type {
@@ -23,6 +23,8 @@ import { normalizeValue, serializeJson } from "../utils.js";
 import { ClientReceiptDownloadResponseFromJSON } from "../models/generated/ClientReceiptDownloadResponse.js";
 import { RecipientResolutionResponseFromJSON } from "../models/generated/RecipientResolutionResponse.js";
 import { ReceiptSubmissionResponseFromJSON } from "../models/generated/ReceiptSubmissionResponse.js";
+import { MatchStatusResponseFromJSON } from "../models/generated/MatchStatusResponse.js";
+import type { MatchStatusResponse } from "../models/generated/MatchStatusResponse.js";
 import { StoreDTOFromJSON } from "../models/generated/StoreDTO.js";
 import { Endpoints } from "./endpoints.js";
 import { RetryHandler } from "./retry.js";
@@ -92,6 +94,17 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
     this.userAgent = `CheqiSDK-TypeScript/${SDK_VERSION}`;
   }
 
+  async getMatch(matchId: string, accessToken?: string | null): Promise<MatchStatusResponse> {
+    if (!matchId?.trim()) {
+      throw new CheqiApiError("matchId is required", {
+        errorCode: ErrorCodes.INVALID_REQUEST, httpStatusCode: 400
+      });
+    }
+    return MatchStatusResponseFromJSON(await this.request("GET", Endpoints.MATCH_STATUS_ENDPOINT(matchId), {
+      accessToken, operation: "getMatch"
+    }));
+  }
+
   async matchCustomer(
     request: IdentificationDetails,
     accessToken?: string | null
@@ -113,11 +126,11 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
         httpStatusCode: 400
       });
     }
-    return ReceiptSubmissionResponseFromJSON(await this.request("POST", Endpoints.ENCRYPTED_RECEIPT_ENDPOINT, {
+    return this.submission("POST", Endpoints.ENCRYPTED_RECEIPT_ENDPOINT, {
       body: normalizeValue(envelope),
       accessToken,
       operation: "submitEncryptedReceipt"
-    }));
+    });
   }
 
   async uploadEncryptedDownloadReceipt(
@@ -158,11 +171,11 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
         { errorCode: ErrorCodes.INVALID_REQUEST, httpStatusCode: 400 }
       );
     }
-    return ReceiptSubmissionResponseFromJSON(await this.request("POST", Endpoints.ENCRYPTED_CREDIT_NOTE_ENDPOINT, {
+    return this.submission("POST", Endpoints.ENCRYPTED_CREDIT_NOTE_ENDPOINT, {
       body: normalizeValue(envelope),
       accessToken,
       operation: "submitEncryptedCreditNote"
-    }));
+    });
   }
 
   async sendReceiptViaEmail(
@@ -239,11 +252,25 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
     });
   }
 
+  private async submission(method: string, path: string, options: RequestOptions): Promise<ReceiptSubmissionResponse> {
+    const body = await this.request(method, path, options);
+    if (body?.state === "IN_PROGRESS") {
+      const seconds = Number.isInteger(body.retryAfterSeconds) ? body.retryAfterSeconds : 2;
+      throw new SubmissionInProgressError(Math.max(1, seconds));
+    }
+    if (typeof body !== "object" || Array.isArray(body) ||
+        typeof body.cheqiReceiptId !== "string" || !body.cheqiReceiptId.trim() ||
+        typeof body.matchId !== "string" || !body.matchId.trim()) {
+      throw new CheqiApiError("Invalid receipt submission response", { errorCode: ErrorCodes.INVALID_RESPONSE });
+    }
+    return ReceiptSubmissionResponseFromJSON(body);
+  }
+
   // ---------- internals ----------
 
   private authHeaders(accessToken?: string | null): Record<string, string> {
     const token = accessToken ?? this.config.apiKey;
-    if (!token) {
+    if (!token?.trim()) {
       throw new CheqiApiError("No authentication token available", {
         errorCode: ErrorCodes.AUTHENTICATION_FAILED,
         httpStatusCode: 401
@@ -273,10 +300,11 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
 
     this.logger.debug(`${operation} ${method} ${url.pathname}`);
 
+    const headers = this.authHeaders(accessToken);
     const response = await this.retryHandler.executeWithRetry(
       () => this.fetchImpl(url, {
         method,
-        headers: this.authHeaders(accessToken),
+        headers,
         body: body === undefined ? undefined : typeof body === "string" ? body : serializeJson(body),
         signal: AbortSignal.timeout(this.config.timeoutSeconds * 1000)
       }),
@@ -285,7 +313,7 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
     );
 
     if (response.status >= 400) {
-      const responseText = await response.text();
+      const responseText = await readResponseText(response);
       const correlationId = response.headers.get("x-correlation-id");
       this.logger.error(
         `${operation} failed: status=${response.status}, correlationId=${correlationId ?? "none"}`
@@ -303,7 +331,7 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
       return undefined;
     }
 
-    const text = await response.text();
+    const text = await readResponseText(response);
     if (!text) {
       if (responseType === "list") return [];
       throw invalidResponseError(operation, response, "an empty response");
@@ -326,6 +354,19 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
         cause: error
       });
     }
+  }
+}
+
+async function readResponseText(response: Response): Promise<string> {
+  try {
+    return await response.text();
+  } catch (cause) {
+    throw new CheqiApiError("API response could not be read", {
+      errorCode: response.status >= 400 ? mapErrorCode(response.status) : ErrorCodes.NETWORK_ERROR,
+      httpStatusCode: response.status >= 400 ? response.status : 0,
+      correlationId: response.headers.get("x-correlation-id"),
+      cause
+    });
   }
 }
 

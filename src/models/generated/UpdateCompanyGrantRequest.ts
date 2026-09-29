@@ -30,12 +30,6 @@ export interface UpdateCompanyGrantRequest {
      * @type {string}
      * @memberof UpdateCompanyGrantRequest
      */
-    billing_responsibility?: UpdateCompanyGrantRequestBillingResponsibilityEnum;
-    /**
-     *
-     * @type {string}
-     * @memberof UpdateCompanyGrantRequest
-     */
     store_access_mode?: UpdateCompanyGrantRequestStoreAccessModeEnum;
     /**
      *
@@ -51,15 +45,6 @@ export interface UpdateCompanyGrantRequest {
     reason: string;
 }
 
-
-/**
- * @export
- */
-export const UpdateCompanyGrantRequestBillingResponsibilityEnum = {
-    INTEGRATION: 'INTEGRATION',
-    ISSUER_COMPANY: 'ISSUER_COMPANY'
-} as const;
-export type UpdateCompanyGrantRequestBillingResponsibilityEnum = typeof UpdateCompanyGrantRequestBillingResponsibilityEnum[keyof typeof UpdateCompanyGrantRequestBillingResponsibilityEnum];
 
 /**
  * @export
@@ -91,7 +76,6 @@ export function UpdateCompanyGrantRequestFromJSONTyped(json: any, ignoreDiscrimi
     return {
 
         'scopes': new Set(json['scopes']),
-        'billing_responsibility': json['billing_responsibility'] == null ? undefined : json['billing_responsibility'],
         'store_access_mode': json['store_access_mode'] == null ? undefined : json['store_access_mode'],
         'store_ids': json['store_ids'] == null ? undefined : new Set(json['store_ids']),
         'reason': json['reason'],
@@ -110,7 +94,6 @@ export function UpdateCompanyGrantRequestToJSONTyped(value?: UpdateCompanyGrantR
     return {
 
         'scopes': Array.from(value['scopes'] as Set<any>),
-        'billing_responsibility': value['billing_responsibility'],
         'store_access_mode': value['store_access_mode'],
         'store_ids': value['store_ids'] == null ? undefined : Array.from(value['store_ids'] as Set<any>),
         'reason': value['reason'],
