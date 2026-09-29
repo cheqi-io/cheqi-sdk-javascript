@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
+import { specsMatch } from "../scripts/check-spec.mjs";
 
 import {
   CheqiApiError,
@@ -1258,4 +1259,13 @@ test("an unreadable permanent HTTP error retains its status instead of preparing
   });
   await assert.rejects(() => sdk.receiptService.issueReceipt({ paymentType: PaymentType.CASH }, receiptPayload()),
     (error) => error.httpStatusCode === 401 && error.errorCode === ErrorCodes.AUTHENTICATION_FAILED);
+});
+
+test("OpenAPI drift comparison ignores mapping order but rejects contract changes", () => {
+  const local = 'openapi: 3.0.1\ninfo: {title: Cheqi, version: v1}\ncomponents:\n  schemas:\n    Receipt:\n      type: object\n      required: [id]\n';
+  const reordered = 'components:\n  schemas:\n    Receipt: {required: [id], type: object}\ninfo: {version: v1, title: Cheqi}\nopenapi: 3.0.1\n';
+  assert.equal(specsMatch(local, reordered), true);
+  assert.equal(specsMatch(local, reordered.replace('[id]', '[id, matchId]')), false);
+  assert.equal(specsMatch(local, reordered.replace('type: object', 'type: string')), false);
+  assert.equal(specsMatch(local, reordered.replace('Receipt:', 'OtherReceipt:')), false);
 });
