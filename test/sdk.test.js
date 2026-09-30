@@ -393,10 +393,13 @@ test("download fallback with payment context is completed client-side", async ()
   const downloadService = new DownloadService();
   const { contentKey } = parseDownloadUrl(result.getDownloadUrl());
   const envelope = await downloadService.decryptDownloadEnvelope(upload.ciphertext, contentKey);
-  const document = JSON.parse(envelope.documents.CHEQI.content);
+  assert.equal(envelope.envelopeVersion, 2);
+  const document = JSON.parse(envelope.documents.RECEIPT_PAYLOAD.content);
+  const identificationDetails = JSON.parse(envelope.documents.IDENTIFICATION_DETAILS.content);
   assert.equal(document.documentNumber, "R-100");
-  assert.equal(document.identificationDetails.cardDetails.paymentAccountReference, "PAR-123");
-  assert.equal(document.identificationDetails.cardDetails.lastFourDigits, "4242");
+  assert.equal(document.identificationDetails, undefined);
+  assert.equal(identificationDetails.cardDetails.paymentAccountReference, "PAR-123");
+  assert.equal(identificationDetails.cardDetails.lastFourDigits, "4242");
 });
 
 test("download fallback without payment type requests a final envelope", async () => {
@@ -469,7 +472,6 @@ test("queued and webhook receipt envelopes decrypt to the complete ReceiptEnvelo
     cheqiReceiptId: "CHQ-20260730-000001",
     documents: { CHEQI: { mediaType: "application/json", content: "{\"ok\":true}" } },
     envelopeVersion: 1,
-    expenseSubmission: undefined,
     receiptGeneratorVersion: "2.1.0",
     receiptUuid: "706920f8-63a7-4d9d-a92a-5889545562ce"
   };
@@ -487,8 +489,8 @@ test("queued and webhook receipt envelopes decrypt to the complete ReceiptEnvelo
     encryptedEnvelopeKey: encrypted.encryptedAesKey
   };
   const decryption = new DecryptionService();
-  assert.deepEqual(decryption.decryptReceipt(queued, privateKeyB64), expected);
-  assert.deepEqual(decryption.decryptReceipt(webhook, privateKeyB64), expected);
+  assert.deepEqual(JSON.parse(JSON.stringify(decryption.decryptReceipt(queued, privateKeyB64))), expected);
+  assert.deepEqual(JSON.parse(JSON.stringify(decryption.decryptReceipt(webhook, privateKeyB64))), expected);
 });
 
 test("queued and webhook credit-note initiation requests decrypt and validate", () => {
@@ -582,12 +584,11 @@ test("download service round-trips current receipt envelopes", async () => {
     cheqiReceiptId: "CHQ-1",
     documents: {},
     envelopeVersion: 1,
-    expenseSubmission: undefined,
     receiptGeneratorVersion: "2.1.0",
     receiptUuid: "706920f8-63a7-4d9d-a92a-5889545562ce"
   };
   const encrypted = await downloads.encryptDownloadEnvelope(envelope, link.contentKey);
-  assert.deepEqual(await downloads.decryptDownloadEnvelope(encrypted, link.contentKey), envelope);
+  assert.deepEqual(JSON.parse(JSON.stringify(await downloads.decryptDownloadEnvelope(encrypted, link.contentKey))), envelope);
   assert.equal(
     downloads.generateDownloadLink(Environment.PRODUCTION).url.startsWith("https://receipt.cheqi.io/"),
     true
@@ -988,8 +989,10 @@ for (const failure of [
     assert.equal(downloadId, persisted.uploadRequest.downloadId);
     assert.equal(JSON.stringify(persisted.uploadRequest).includes(contentKey), false);
     const envelope = await new DownloadService().decryptDownloadEnvelope(persisted.uploadRequest.ciphertext, contentKey);
-    assert.deepEqual(JSON.parse(envelope.documents.CHEQI.content), JSON.parse(JSON.stringify(payload)));
-    assert.equal(envelope.documents.CHEQI.content.includes("private@example.com"), false);
+    assert.equal(envelope.envelopeVersion, 2);
+    assert.deepEqual(JSON.parse(envelope.documents.RECEIPT_PAYLOAD.content), JSON.parse(JSON.stringify(payload)));
+    assert.equal(envelope.documents.IDENTIFICATION_DETAILS, undefined);
+    assert.equal(envelope.documents.RECEIPT_PAYLOAD.content.includes("private@example.com"), false);
     await service.uploadPreparedDownload(persisted, "company-token");
     await service.uploadPreparedDownload(persisted, "company-token");
     assert.deepEqual(calls.uploads[0], calls.uploads[1]);
@@ -1025,7 +1028,8 @@ test("download upload failure retains its original ciphertext and payment contex
   assert.deepEqual(result.preparedDownload.uploadRequest, failedUpload);
   const { contentKey } = parseDownloadUrl(result.downloadUrl);
   const envelope = await new DownloadService().decryptDownloadEnvelope(failedUpload.ciphertext, contentKey);
-  assert.deepEqual(JSON.parse(envelope.documents.CHEQI.content).identificationDetails, identification);
+  assert.equal(envelope.envelopeVersion, 2);
+  assert.deepEqual(JSON.parse(envelope.documents.IDENTIFICATION_DETAILS.content), identification);
 });
 
 test("resume returns the original submission without matching, encryption or uploads", async () => {
