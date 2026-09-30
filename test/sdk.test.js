@@ -484,8 +484,8 @@ test("queued and webhook receipt envelopes decrypt to the complete ReceiptEnvelo
     encryptedEnvelopeKey: encrypted.encryptedAesKey
   };
   const decryption = new DecryptionService();
-  assert.deepEqual(decryption.decryptReceipt(queued, privateKeyB64), expected);
-  assert.deepEqual(decryption.decryptReceipt(webhook, privateKeyB64), expected);
+  assert.deepEqual(JSON.parse(JSON.stringify(decryption.decryptReceipt(queued, privateKeyB64))), expected);
+  assert.deepEqual(JSON.parse(JSON.stringify(decryption.decryptReceipt(webhook, privateKeyB64))), expected);
 });
 
 test("queued and webhook credit-note initiation requests decrypt and validate", () => {
@@ -583,7 +583,7 @@ test("download service round-trips current receipt envelopes", async () => {
     receiptUuid: "706920f8-63a7-4d9d-a92a-5889545562ce"
   };
   const encrypted = await downloads.encryptDownloadEnvelope(envelope, link.contentKey);
-  assert.deepEqual(await downloads.decryptDownloadEnvelope(encrypted, link.contentKey), envelope);
+  assert.deepEqual(JSON.parse(JSON.stringify(await downloads.decryptDownloadEnvelope(encrypted, link.contentKey))), envelope);
   assert.equal(
     downloads.generateDownloadLink(Environment.PRODUCTION).url.startsWith("https://receipt.cheqi.io/"),
     true

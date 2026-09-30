@@ -53,6 +53,18 @@ export interface ReceivingParty {
      */
     companyIdentifiers?: Array<CompanyIdentifierDTO>;
     /**
+     * The first name of the person who made a B2B purchase on behalf of the receiving company
+     * @type {string}
+     * @memberof ReceivingParty
+     */
+    contactFirstName?: string;
+    /**
+     * The last name of the person who made a B2B purchase on behalf of the receiving company
+     * @type {string}
+     * @memberof ReceivingParty
+     */
+    contactLastName?: string;
+    /**
      * The full name of the consumer (B2C only). Use this for individual recipients.
      * @type {string}
      * @memberof ReceivingParty
@@ -104,6 +116,8 @@ export function ReceivingPartyFromJSONTyped(json: any, ignoreDiscriminator: bool
         'companyLegalName': json['companyLegalName'] == null ? undefined : json['companyLegalName'],
         'taxNumber': json['taxNumber'] == null ? undefined : json['taxNumber'],
         'companyIdentifiers': json['companyIdentifiers'] == null ? undefined : ((json['companyIdentifiers'] as Array<any>).map(CompanyIdentifierDTOFromJSON)),
+        'contactFirstName': json['contactFirstName'] == null ? undefined : json['contactFirstName'],
+        'contactLastName': json['contactLastName'] == null ? undefined : json['contactLastName'],
         'consumerName': json['consumerName'] == null ? undefined : json['consumerName'],
         'email': json['email'] == null ? undefined : json['email'],
         'phone': json['phone'] == null ? undefined : json['phone'],
@@ -126,6 +140,8 @@ export function ReceivingPartyToJSONTyped(value?: ReceivingParty | null, ignoreD
         'companyLegalName': value['companyLegalName'],
         'taxNumber': value['taxNumber'],
         'companyIdentifiers': value['companyIdentifiers'] == null ? undefined : ((value['companyIdentifiers'] as Array<any>).map(CompanyIdentifierDTOToJSON)),
+        'contactFirstName': value['contactFirstName'],
+        'contactLastName': value['contactLastName'],
         'consumerName': value['consumerName'],
         'email': value['email'],
         'phone': value['phone'],

@@ -22,7 +22,7 @@ import {
 } from './AddressDTO.js';
 
 /**
- *
+ * Optional issuing location included by the receipt-template engine.
  * @export
  * @interface StoreDTO
  */

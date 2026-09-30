@@ -60,12 +60,6 @@ export interface CompanyGrantResponse {
      * @type {string}
      * @memberof CompanyGrantResponse
      */
-    billing_responsibility?: CompanyGrantResponseBillingResponsibilityEnum;
-    /**
-     *
-     * @type {string}
-     * @memberof CompanyGrantResponse
-     */
     store_access_mode?: CompanyGrantResponseStoreAccessModeEnum;
     /**
      *
@@ -113,15 +107,6 @@ export type CompanyGrantResponseStatusEnum = typeof CompanyGrantResponseStatusEn
 /**
  * @export
  */
-export const CompanyGrantResponseBillingResponsibilityEnum = {
-    INTEGRATION: 'INTEGRATION',
-    ISSUER_COMPANY: 'ISSUER_COMPANY'
-} as const;
-export type CompanyGrantResponseBillingResponsibilityEnum = typeof CompanyGrantResponseBillingResponsibilityEnum[keyof typeof CompanyGrantResponseBillingResponsibilityEnum];
-
-/**
- * @export
- */
 export const CompanyGrantResponseStoreAccessModeEnum = {
     ALL_STORES: 'ALL_STORES',
     SELECTED_STORES: 'SELECTED_STORES'
@@ -162,7 +147,6 @@ export function CompanyGrantResponseFromJSONTyped(json: any, ignoreDiscriminator
         'status': json['status'] == null ? undefined : json['status'],
         'version': json['version'] == null ? undefined : json['version'],
         'scopes': json['scopes'] == null ? undefined : new Set(json['scopes']),
-        'billing_responsibility': json['billing_responsibility'] == null ? undefined : json['billing_responsibility'],
         'store_access_mode': json['store_access_mode'] == null ? undefined : json['store_access_mode'],
         'store_ids': json['store_ids'] == null ? undefined : new Set(json['store_ids']),
         'origin': json['origin'] == null ? undefined : json['origin'],
@@ -189,7 +173,6 @@ export function CompanyGrantResponseToJSONTyped(value?: CompanyGrantResponse | n
         'status': value['status'],
         'version': value['version'],
         'scopes': value['scopes'] == null ? undefined : Array.from(value['scopes'] as Set<any>),
-        'billing_responsibility': value['billing_responsibility'],
         'store_access_mode': value['store_access_mode'],
         'store_ids': value['store_ids'] == null ? undefined : Array.from(value['store_ids'] as Set<any>),
         'origin': value['origin'],

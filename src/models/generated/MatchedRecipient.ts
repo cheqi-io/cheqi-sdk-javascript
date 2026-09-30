@@ -22,7 +22,7 @@ import {
 } from './ReceiptFormat.js';
 
 /**
- * The list of recipients found for the given recipient
+ *
  * @export
  * @interface MatchedRecipient
  */

@@ -57,7 +57,7 @@ import {
 } from './Tax.js';
 
 /**
- * Issuer-supplied receipt line items.
+ * The list of products included in the receipt. Must contain at least one product.
  * @export
  * @interface Product
  */
@@ -133,7 +133,7 @@ export interface Product {
      * @type {Array<Tax>}
      * @memberof Product
      */
-    taxes: Array<Tax>;
+    taxes?: Array<Tax>;
     /**
      * The line subtotal, before tax. Typically: quantity * unitPrice - discounts + charges (net).
      * @type {number}
@@ -147,7 +147,7 @@ export interface Product {
      */
     total: number;
     /**
-     * Barcodes attached to this line item (e.g. ticket codes, return codes)
+     *
      * @type {Array<Barcode>}
      * @memberof Product
      */
@@ -165,7 +165,6 @@ export function instanceOfProduct(value: object): value is Product {
     if (!('quantity' in value) || value['quantity'] === undefined) return false;
     if (!('unitCode' in value) || value['unitCode'] === undefined) return false;
     if (!('unitPrice' in value) || value['unitPrice'] === undefined) return false;
-    if (!('taxes' in value) || value['taxes'] === undefined) return false;
     if (!('subtotal' in value) || value['subtotal'] === undefined) return false;
     if (!('total' in value) || value['total'] === undefined) return false;
     return true;
@@ -192,7 +191,7 @@ export function ProductFromJSONTyped(json: any, ignoreDiscriminator: boolean): P
         'unitPrice': json['unitPrice'],
         'discounts': json['discounts'] == null ? undefined : ((json['discounts'] as Array<any>).map(DiscountFromJSON)),
         'charges': json['charges'] == null ? undefined : ((json['charges'] as Array<any>).map(ChargeFromJSON)),
-        'taxes': ((json['taxes'] as Array<any>).map(TaxFromJSON)),
+        'taxes': json['taxes'] == null ? undefined : ((json['taxes'] as Array<any>).map(TaxFromJSON)),
         'subtotal': json['subtotal'],
         'total': json['total'],
         'barcodes': json['barcodes'] == null ? undefined : ((json['barcodes'] as Array<any>).map(BarcodeFromJSON)),
@@ -221,7 +220,7 @@ export function ProductToJSONTyped(value?: Product | null, ignoreDiscriminator: 
         'unitPrice': value['unitPrice'],
         'discounts': value['discounts'] == null ? undefined : ((value['discounts'] as Array<any>).map(DiscountToJSON)),
         'charges': value['charges'] == null ? undefined : ((value['charges'] as Array<any>).map(ChargeToJSON)),
-        'taxes': ((value['taxes'] as Array<any>).map(TaxToJSON)),
+        'taxes': value['taxes'] == null ? undefined : ((value['taxes'] as Array<any>).map(TaxToJSON)),
         'subtotal': value['subtotal'],
         'total': value['total'],
         'barcodes': value['barcodes'] == null ? undefined : ((value['barcodes'] as Array<any>).map(BarcodeToJSON)),

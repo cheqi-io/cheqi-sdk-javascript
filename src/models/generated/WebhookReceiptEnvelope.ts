@@ -44,6 +44,24 @@ export interface WebhookReceiptEnvelope {
      * @type {string}
      * @memberof WebhookReceiptEnvelope
      */
+    deliveryPurpose?: WebhookReceiptEnvelopeDeliveryPurposeEnum;
+    /**
+     *
+     * @type {string}
+     * @memberof WebhookReceiptEnvelope
+     */
+    expenseSubmissionId?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof WebhookReceiptEnvelope
+     */
+    submittedByUserId?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof WebhookReceiptEnvelope
+     */
     cheqiReceiptId?: string;
     /**
      *
@@ -107,6 +125,16 @@ export interface WebhookReceiptEnvelope {
     created_at?: Date;
 }
 
+
+/**
+ * @export
+ */
+export const WebhookReceiptEnvelopeDeliveryPurposeEnum = {
+    COMPANY_EXPENSE: 'COMPANY_EXPENSE'
+} as const;
+export type WebhookReceiptEnvelopeDeliveryPurposeEnum = typeof WebhookReceiptEnvelopeDeliveryPurposeEnum[keyof typeof WebhookReceiptEnvelopeDeliveryPurposeEnum];
+
+
 /**
  * Check if a given object implements the WebhookReceiptEnvelope interface.
  */
@@ -126,6 +154,9 @@ export function WebhookReceiptEnvelopeFromJSONTyped(json: any, ignoreDiscriminat
 
         'companyId': json['companyId'] == null ? undefined : json['companyId'],
         'userId': json['userId'] == null ? undefined : json['userId'],
+        'deliveryPurpose': json['deliveryPurpose'] == null ? undefined : json['deliveryPurpose'],
+        'expenseSubmissionId': json['expenseSubmissionId'] == null ? undefined : json['expenseSubmissionId'],
+        'submittedByUserId': json['submittedByUserId'] == null ? undefined : json['submittedByUserId'],
         'cheqiReceiptId': json['cheqiReceiptId'] == null ? undefined : json['cheqiReceiptId'],
         'routingIdentifier': json['routingIdentifier'] == null ? undefined : RoutingIdentifierFromJSON(json['routingIdentifier']),
         'encryptedEnvelope': json['encryptedEnvelope'] == null ? undefined : json['encryptedEnvelope'],
@@ -153,6 +184,9 @@ export function WebhookReceiptEnvelopeToJSONTyped(value?: WebhookReceiptEnvelope
 
         'companyId': value['companyId'],
         'userId': value['userId'],
+        'deliveryPurpose': value['deliveryPurpose'],
+        'expenseSubmissionId': value['expenseSubmissionId'],
+        'submittedByUserId': value['submittedByUserId'],
         'cheqiReceiptId': value['cheqiReceiptId'],
         'routingIdentifier': RoutingIdentifierToJSON(value['routingIdentifier']),
         'encryptedEnvelope': value['encryptedEnvelope'],

@@ -13,6 +13,13 @@
  */
 
 import { mapValues } from './runtime.js';
+import type { ExpenseSubmissionEnvelope } from './ExpenseSubmissionEnvelope.js';
+import {
+    ExpenseSubmissionEnvelopeFromJSON,
+    ExpenseSubmissionEnvelopeFromJSONTyped,
+    ExpenseSubmissionEnvelopeToJSON,
+    ExpenseSubmissionEnvelopeToJSONTyped,
+} from './ExpenseSubmissionEnvelope.js';
 import type { ReceiptEnvelopeDocument } from './ReceiptEnvelopeDocument.js';
 import {
     ReceiptEnvelopeDocumentFromJSON,
@@ -34,19 +41,25 @@ export interface ReceiptEnvelope {
      */
     cheqiReceiptId: string;
     /**
-     * Generated documents keyed by ReceiptFormat name: CHEQI, UBL_PURCHASE_RECEIPT, UBL_INVOICE, or UBL_CREDIT_NOTE. Only formats included for this recipient are present. Each document's content is serialized JSON or XML, not a nested parsed document.
+     * Version 1 holds generated CHEQI/UBL documents. Version 2 download envelopes hold RECEIPT_PAYLOAD generation input and optional IDENTIFICATION_DETAILS. Each document's content is serialized JSON or XML, not a nested parsed document.
      * @type {{ [key: string]: ReceiptEnvelopeDocument; }}
      * @memberof ReceiptEnvelope
      */
     documents: { [key: string]: ReceiptEnvelopeDocument; };
     /**
-     * Schema version of this encrypted plaintext envelope.
+     * Schema version of this encrypted plaintext envelope. Version 2 download envelopes carry RECEIPT_PAYLOAD generation input instead of a generated CHEQI document.
      * @type {number}
      * @memberof ReceiptEnvelope
      */
     envelopeVersion: number;
     /**
-     * Version of the Rust receipt-template engine that generated the documents.
+     *
+     * @type {ExpenseSubmissionEnvelope}
+     * @memberof ReceiptEnvelope
+     */
+    expenseSubmission?: ExpenseSubmissionEnvelope | null;
+    /**
+     * Generated-document engine version for version 1; payload schema marker for version 2 download envelopes.
      * @type {string}
      * @memberof ReceiptEnvelope
      */
@@ -84,6 +97,7 @@ export function ReceiptEnvelopeFromJSONTyped(json: any, ignoreDiscriminator: boo
         'cheqiReceiptId': json['cheqiReceiptId'],
         'documents': (mapValues(json['documents'], ReceiptEnvelopeDocumentFromJSON)),
         'envelopeVersion': json['envelopeVersion'],
+        'expenseSubmission': json['expenseSubmission'] == null ? undefined : ExpenseSubmissionEnvelopeFromJSON(json['expenseSubmission']),
         'receiptGeneratorVersion': json['receiptGeneratorVersion'],
         'receiptUuid': json['receiptUuid'],
     };
@@ -103,6 +117,7 @@ export function ReceiptEnvelopeToJSONTyped(value?: ReceiptEnvelope | null, ignor
         'cheqiReceiptId': value['cheqiReceiptId'],
         'documents': (mapValues(value['documents'], ReceiptEnvelopeDocumentToJSON)),
         'envelopeVersion': value['envelopeVersion'],
+        'expenseSubmission': ExpenseSubmissionEnvelopeToJSON(value['expenseSubmission']),
         'receiptGeneratorVersion': value['receiptGeneratorVersion'],
         'receiptUuid': value['receiptUuid'],
     };

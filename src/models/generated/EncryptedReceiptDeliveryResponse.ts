@@ -92,6 +92,24 @@ export interface EncryptedReceiptDeliveryResponse {
      * @type {string}
      * @memberof EncryptedReceiptDeliveryResponse
      */
+    deliveryPurpose?: EncryptedReceiptDeliveryResponseDeliveryPurposeEnum;
+    /**
+     *
+     * @type {string}
+     * @memberof EncryptedReceiptDeliveryResponse
+     */
+    expenseSubmissionId?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof EncryptedReceiptDeliveryResponse
+     */
+    submittedByUserId?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof EncryptedReceiptDeliveryResponse
+     */
     supplierPartyId?: string;
     /**
      *
@@ -101,6 +119,14 @@ export interface EncryptedReceiptDeliveryResponse {
     creationDate?: Date;
 }
 
+
+/**
+ * @export
+ */
+export const EncryptedReceiptDeliveryResponseDeliveryPurposeEnum = {
+    COMPANY_EXPENSE: 'COMPANY_EXPENSE'
+} as const;
+export type EncryptedReceiptDeliveryResponseDeliveryPurposeEnum = typeof EncryptedReceiptDeliveryResponseDeliveryPurposeEnum[keyof typeof EncryptedReceiptDeliveryResponseDeliveryPurposeEnum];
 
 
 /**
@@ -130,6 +156,9 @@ export function EncryptedReceiptDeliveryResponseFromJSONTyped(json: any, ignoreD
         'receiptGeneratorVersion': json['receiptGeneratorVersion'] == null ? undefined : json['receiptGeneratorVersion'],
         'envelopeVersion': json['envelopeVersion'] == null ? undefined : json['envelopeVersion'],
         'finalHash': json['finalHash'] == null ? undefined : json['finalHash'],
+        'deliveryPurpose': json['deliveryPurpose'] == null ? undefined : json['deliveryPurpose'],
+        'expenseSubmissionId': json['expenseSubmissionId'] == null ? undefined : json['expenseSubmissionId'],
+        'submittedByUserId': json['submittedByUserId'] == null ? undefined : json['submittedByUserId'],
         'supplierPartyId': json['supplierPartyId'] == null ? undefined : json['supplierPartyId'],
         'creationDate': json['creationDate'] == null ? undefined : (new Date(json['creationDate'])),
     };
@@ -156,6 +185,9 @@ export function EncryptedReceiptDeliveryResponseToJSONTyped(value?: EncryptedRec
         'receiptGeneratorVersion': value['receiptGeneratorVersion'],
         'envelopeVersion': value['envelopeVersion'],
         'finalHash': value['finalHash'],
+        'deliveryPurpose': value['deliveryPurpose'],
+        'expenseSubmissionId': value['expenseSubmissionId'],
+        'submittedByUserId': value['submittedByUserId'],
         'supplierPartyId': value['supplierPartyId'],
         'creationDate': value['creationDate'] == null ? undefined : ((value['creationDate']).toISOString()),
     };

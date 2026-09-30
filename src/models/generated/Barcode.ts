@@ -13,32 +13,24 @@
  */
 
 import { mapValues } from './runtime.js';
-import type { BarcodeType } from './BarcodeType.js';
-import {
-    BarcodeTypeFromJSON,
-    BarcodeTypeFromJSONTyped,
-    BarcodeTypeToJSON,
-    BarcodeTypeToJSONTyped,
-} from './BarcodeType.js';
-
 /**
- * Issuer-supplied receipt-level barcodes or QR-code payloads.
+ * Optional list of barcodes or QR codes embedded in the receipt
  * @export
  * @interface Barcode
  */
 export interface Barcode {
     /**
-     *
-     * @type {BarcodeType}
+     * The type of barcode or scannable code
+     * @type {string}
      * @memberof Barcode
      */
-    type: BarcodeType;
+    type?: string;
     /**
      * The data encoded in the barcode
      * @type {string}
      * @memberof Barcode
      */
-    data: string;
+    data?: string;
     /**
      * A human-readable label for the barcode
      * @type {string}
@@ -47,14 +39,10 @@ export interface Barcode {
     label?: string;
 }
 
-
-
 /**
  * Check if a given object implements the Barcode interface.
  */
 export function instanceOfBarcode(value: object): value is Barcode {
-    if (!('type' in value) || value['type'] === undefined) return false;
-    if (!('data' in value) || value['data'] === undefined) return false;
     return true;
 }
 
@@ -68,8 +56,8 @@ export function BarcodeFromJSONTyped(json: any, ignoreDiscriminator: boolean): B
     }
     return {
 
-        'type': BarcodeTypeFromJSON(json['type']),
-        'data': json['data'],
+        'type': json['type'] == null ? undefined : json['type'],
+        'data': json['data'] == null ? undefined : json['data'],
         'label': json['label'] == null ? undefined : json['label'],
     };
 }
@@ -85,7 +73,7 @@ export function BarcodeToJSONTyped(value?: Barcode | null, ignoreDiscriminator: 
 
     return {
 
-        'type': BarcodeTypeToJSON(value['type']),
+        'type': value['type'],
         'data': value['data'],
         'label': value['label'],
     };
