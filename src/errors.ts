@@ -19,6 +19,7 @@ export const ErrorCodes = {
   SERVER_ERROR: "SERVER_ERROR",
   SERVICE_UNAVAILABLE: "SERVICE_UNAVAILABLE",
   INVALID_RESPONSE: "INVALID_RESPONSE",
+  SUBMISSION_IN_PROGRESS: "SUBMISSION_IN_PROGRESS",
   KEY_GENERATION_ERROR: "KEY_GENERATION_ERROR",
   RECEIPT_GENERATION_ERROR: "RECEIPT_GENERATION_ERROR",
   TEMPLATE_PROCESSING_ERROR: "TEMPLATE_PROCESSING_ERROR",
@@ -100,6 +101,18 @@ export class CheqiApiError extends CheqiSDKError {
       this.httpStatusCode === 429 ||
       (this.httpStatusCode >= 500 && this.httpStatusCode < 600);
   }
+}
+
+/** A submission is already running; recover using the original match id. */
+export class SubmissionInProgressError extends CheqiApiError {
+  constructor(readonly retryAfterSeconds: number = 2) {
+    super("Receipt submission is in progress", {
+      errorCode: ErrorCodes.SUBMISSION_IN_PROGRESS,
+      httpStatusCode: 202
+    });
+  }
+
+  override get isRetryable(): boolean { return true; }
 }
 
 export class EncryptionError extends CheqiSDKError {

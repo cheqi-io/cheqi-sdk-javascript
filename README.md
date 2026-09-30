@@ -1,6 +1,6 @@
 # Cheqi JavaScript SDK
 
-JavaScript/TypeScript SDK for resolving receipt recipients and issuing end-to-end encrypted Cheqi receipts and credit notes. Its v2.2 contract and behavior align with the Cheqi Java SDK.
+JavaScript/TypeScript SDK for resolving receipt recipients and issuing end-to-end encrypted Cheqi receipts and credit notes. Its contract and behavior align with the Cheqi Java SDK, including receipt recovery and deferred encrypted downloads.
 
 ## Requirements
 
@@ -28,6 +28,8 @@ const sdk = new CheqiSDK({
 Standard API environments are `Environment.SANDBOX`, `Environment.TEST`, and `Environment.PRODUCTION`. For a custom deployment, pass its URL as `apiEndpoint` and set `receiptDownloadBaseUrl` when download fallback is enabled.
 
 A Fetch-compatible transport can be injected for proxying, tracing, or tests with the `fetch` option.
+
+Custom `apiClient` implementations must implement `getMatch(matchId, accessToken?)` alongside the existing HTTP operations to support receipt recovery.
 
 ## Receipt issuance
 
@@ -112,19 +114,74 @@ if (result.cheqiReceiptId) {
 }
 ```
 
-For OAuth, pass the access token as the third argument. To associate a store and use OAuth, pass both explicitly:
+For OAuth and store association, use a JavaScript options object:
 
 ```ts
-await sdk.receiptService.issueReceipt(identificationDetails, receiptPayload, accessToken);
-await sdk.receiptService.issueReceipt(identificationDetails, receiptPayload, storeId, accessToken);
+await sdk.receiptService.issueReceipt(identificationDetails, receiptPayload, {
+  storeId,
+  accessToken
+});
 ```
+
+The same options work with `resumeReceipt` and `issueCreditNote`. Existing positional token and store arguments remain supported.
 
 `ReceiptPayload` is definitive. Supply `taxesApplied`, totals, line values, payment presentation, and jurisdictional data yourself. The SDK does not infer, calculate, or reconcile them.
 
+## Pending submissions and recovery
+
+Read `result.state` using the exported `ReceiptIssueState` constants:
+
+| State | Meaning |
+| --- | --- |
+| `DIGITAL_SUBMITTED` | Cheqi acknowledged the digital submission; device processing may still be pending. |
+| `DIGITAL_PENDING` | Submission is running or its outcome is uncertain. Recover using the original match ID. |
+| `DIGITAL_EXPIRED` | The match expired before digital submission was accepted; this result is not retryable. |
+| `DOWNLOAD_FALLBACK` | A download was accepted, an encrypted download is prepared for later upload, or a final envelope is required. |
+| `EMAIL_FALLBACK` | The caller must complete explicit email delivery. |
+
+`result.isAccepted()` is true only when Cheqi returns a receipt ID. `result.submission` contains the generated digital submission response. `result.retryable` and `result.retryAfterSeconds` describe recovery eligibility and a server-suggested delay.
+
+On a matching outage, `issueReceipt` returns a locally prepared download. On an uncertain digital submission, it returns `DIGITAL_PENDING` with the original `matchId` and a prepared download. These paths do not upload the fallback during checkout. Permanent API errors still throw with their error code, HTTP status, and correlation ID.
+
+```ts
+import { ReceiptIssueState, type PreparedReceiptDownload } from "@cheqi/sdk";
+
+if (result.preparedDownload) {
+  // Persist this whole object before showing the URL or QR to the customer.
+  const serialized = JSON.stringify(result.preparedDownload);
+  await persistDownload(serialized); // Your integration's durable storage.
+  displayDownloadUrl(result.preparedDownload.downloadUrl);
+}
+
+// Later, in your integration's worker:
+const prepared: PreparedReceiptDownload = JSON.parse(serializedDownload);
+await sdk.receiptService.uploadPreparedDownload(prepared, accessToken);
+
+if (result.state === ReceiptIssueState.DIGITAL_PENDING && result.matchId) {
+  const resumed = await sdk.receiptService.resumeReceipt(result.matchId, receiptPayload, {
+    storeId,
+    accessToken
+  });
+}
+```
+
+A prepared download is a plain object pairing `downloadUrl` with the generated `ClientReceiptDownloadRequest` in `uploadRequest`. Upload retries resend its exact download ID and ciphertext. Recovery downloads contain only the definitive payload and omit the original matching identifiers. The URL includes the secret decryption key, so store it privately. Recovery performs one attempt using the original device snapshot; it never matches again or replaces the original prepared download or QR. Storage, scheduling, and retry policy belong to your integration.
+
+To inspect a match or encrypt locally without submitting:
+
+```ts
+const match = await sdk.receiptService.getMatch(matchId, accessToken);
+// Requires a MATCHED digital snapshot; also accepts RecipientResolutionResponse.
+const encrypted = sdk.receiptService.generateEncryptedReceiptEnvelope(match, receiptPayload, storeId);
+await sdk.receiptService.submitEncryptedReceipt(encrypted, accessToken);
+```
+
+`sdk.apiClient.submitEncryptedReceipt` and `sdk.apiClient.submitEncryptedCreditNote` throw `SubmissionInProgressError` for an `IN_PROGRESS` response. It carries `retryAfterSeconds`; an HTTP 202 with a receipt ID remains an accepted submission. The service submission methods wrap this error in `CheqiSDKError.cause`. Non-idempotent submissions are never automatically retried by the HTTP client.
+
 ## Delivery routes and download fallback
 
-- `DIGITAL`: encrypted once per owner device and submitted immediately.
-- `DOWNLOAD_FALLBACK`: completed automatically when local payment context is available, otherwise `isDownloadEnvelopeRequired()` is returned.
+- `DIGITAL`: encrypted once per owner device and submitted immediately, with recovery for uncertain outcomes.
+- `DOWNLOAD_FALLBACK`: uploaded when local payment context is available; recoverable upload failures retain the prepared download. Without payment context, `isDownloadEnvelopeRequired()` is returned.
 - `EMAIL_FALLBACK`: `isEmailReceiptRequired()` is returned; `issueReceipt` does not send email automatically.
 
 To create an encrypted download without recipient matching:

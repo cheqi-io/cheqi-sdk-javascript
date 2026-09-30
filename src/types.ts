@@ -32,6 +32,7 @@ export type {
   Identifier,
   JurisdictionalData,
   MatchedRecipient,
+  MatchStatusResponse,
   PaymentAccountDetails,
   PaymentDetails,
   Period,
@@ -54,6 +55,12 @@ export type {
   WebhookCreditNoteInitiationRequest,
   WebhookReceiptEnvelope
 } from "./models/generated/index.js";
+
+/** Options shared by receipt issuance, recovery, and credit-note issuance. */
+export interface ReceiptIssueOptions {
+  storeId?: string | null;
+  accessToken?: string | null;
+}
 
 export interface CheqiSDKOptions {
   /** Cheqi API base URL, usually one of the Environment constants. */
@@ -85,6 +92,10 @@ export type FetchLike = typeof fetch;
 
 /** HTTP boundary used by the handwritten SDK services. */
 export interface CheqiApiClient {
+  getMatch(
+    matchId: string,
+    accessToken?: string | null
+  ): Promise<import("./models/generated/index.js").MatchStatusResponse>;
   matchCustomer(
     request: import("./models/generated/index.js").IdentificationDetails,
     accessToken?: string | null
