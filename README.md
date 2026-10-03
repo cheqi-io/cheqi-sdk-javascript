@@ -305,6 +305,7 @@ const route = Generated.RecipientResolutionResponseDeliveryRouteTypeEnum.DIGITAL
 See [runtime support and entry points](docs/runtimes.md), [the v3 migration guide](docs/migration-v3.md), and the [changelog](CHANGELOG.md).
 
 ```bash
+npx playwright install chromium
 npm test
 npm run test:node
 npm run test:browser
