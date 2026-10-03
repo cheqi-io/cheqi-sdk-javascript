@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { base64ToBytes, bytesToArrayBuffer, bytesToUtf8, utf8ToBytes } from "./bytes.js";
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -22,8 +22,9 @@ export function isValidEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
-export function sha256Hex(value: string): string {
-  return createHash("sha256").update(value, "utf8").digest("hex");
+export async function sha256Hex(value: string): Promise<string> {
+  const digest = new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", bytesToArrayBuffer(utf8ToBytes(value))));
+  return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 export function toCamelCase(value: string): string {
@@ -66,11 +67,11 @@ export function serializeJson<T>(value: T): string {
  * Mirrors the Java SDK `PemUtils.decodeKey` so both PEM-wrapped and raw base64
  * keys are accepted interchangeably.
  */
-export function decodeKey(keyString: string): Buffer {
+export function decodeKey(keyString: string): Uint8Array {
   // If the input doesn't contain PEM headers, it may be base64-encoded PEM.
   if (!keyString.includes("-----BEGIN")) {
     try {
-      const decoded = Buffer.from(keyString.replace(/\s+/g, ""), "base64").toString("latin1");
+      const decoded = bytesToUtf8(base64ToBytes(keyString));
       if (decoded.includes("-----BEGIN")) {
         return decodeKey(decoded);
       }
@@ -83,11 +84,11 @@ export function decodeKey(keyString: string): Buffer {
     .replace(/-+BEGIN [A-Z ]+KEY-+/g, "")
     .replace(/-+END [A-Z ]+KEY-+/g, "")
     .replace(/\s+/g, "");
-  return Buffer.from(cleanKey, "base64");
+  return base64ToBytes(cleanKey);
 }
 
 /** @deprecated Use {@link decodeKey}, which also handles PEM-wrapped keys. */
-export function parseBase64Der(base64: string): Buffer {
+export function parseBase64Der(base64: string): Uint8Array {
   return decodeKey(base64);
 }
 

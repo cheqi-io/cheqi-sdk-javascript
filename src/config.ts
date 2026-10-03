@@ -28,6 +28,7 @@ export class CheqiSDKConfig {
   readonly apiEndpoint: string;
   readonly environment: Nullable<string>;
   readonly apiKey: Nullable<string>;
+  readonly accessTokenProvider: (() => string | Promise<string>) | null;
   readonly receiptDownloadBaseUrl: Nullable<string>;
   readonly privateKey: Nullable<string>;
   readonly timeoutSeconds: number;
@@ -39,6 +40,7 @@ export class CheqiSDKConfig {
       apiEndpoint,
       receiptDownloadBaseUrl,
       apiKey = null,
+      accessTokenProvider = null,
       privateKey = null,
       timeoutSeconds = 30,
       maxRetries = 3,
@@ -76,10 +78,11 @@ export class CheqiSDKConfig {
     this.maxRetries = maxRetries;
 
     // --- api key ---
-    if (!apiKey) {
+    if (!apiKey && !accessTokenProvider) {
       this.logger.warn("No authentication configured. API calls will fail unless access tokens are provided explicitly.");
     }
     this.apiKey = apiKey;
+    this.accessTokenProvider = accessTokenProvider;
 
     // --- private key ---
     if (!privateKey) {

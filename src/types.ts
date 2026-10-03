@@ -67,6 +67,8 @@ export interface CheqiSDKOptions {
   apiEndpoint: string;
   receiptDownloadBaseUrl?: string;
   apiKey?: Nullable<string>;
+  /** OAuth or short-lived token, resolved before each API request. */
+  accessTokenProvider?: () => string | Promise<string>;
   privateKey?: Nullable<string>;
   timeoutSeconds?: number;
   maxRetries?: number;

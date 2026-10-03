@@ -1,5 +1,4 @@
 import { CheqiSDKConfig } from "../config.js";
-import { createRequire } from "node:module";
 import { CheqiApiError, ErrorCodes, SubmissionInProgressError } from "../errors.js";
 import type { Logger } from "../logger.js";
 import { NoopLogger } from "../logger.js";
@@ -29,8 +28,7 @@ import { StoreDTOFromJSON } from "../models/generated/StoreDTO.js";
 import { Endpoints } from "./endpoints.js";
 import { RetryHandler } from "./retry.js";
 
-const require = createRequire(import.meta.url);
-const SDK_VERSION = (require("../../package.json") as { version: string }).version;
+const SDK_VERSION = "3.0.0";
 
 function mapErrorCode(status: number) {
   if (status === 400) return ErrorCodes.INVALID_REQUEST;
@@ -268,8 +266,9 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
 
   // ---------- internals ----------
 
-  private authHeaders(accessToken?: string | null): Record<string, string> {
-    const token = accessToken ?? this.config.apiKey;
+  private async authHeaders(accessToken?: string | null): Promise<Record<string, string>> {
+    const token = accessToken ?? (this.config.accessTokenProvider
+      ? await this.config.accessTokenProvider() : this.config.apiKey);
     if (!token?.trim()) {
       throw new CheqiApiError("No authentication token available", {
         errorCode: ErrorCodes.AUTHENTICATION_FAILED,
@@ -300,7 +299,7 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
 
     this.logger.debug(`${operation} ${method} ${url.pathname}`);
 
-    const headers = this.authHeaders(accessToken);
+    const headers = await this.authHeaders(accessToken);
     const response = await this.retryHandler.executeWithRetry(
       () => this.fetchImpl(url, {
         method,

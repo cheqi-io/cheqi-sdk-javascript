@@ -3,7 +3,7 @@ import { sha256Hex } from "../utils.js";
 import { canonicalizeAndHashXml, canonicalizeXml } from "../xml.js";
 
 export class VerificationService {
-  calculateCheqiReceiptHash(cheqiReceipt: string | object): string {
+  calculateCheqiReceiptHash(cheqiReceipt: string | object): Promise<string> {
     return this.canonicalizeAndHashJson(cheqiReceipt);
   }
 
@@ -11,15 +11,15 @@ export class VerificationService {
     return canonicalizeJson(cheqiReceipt);
   }
 
-  canonicalizeAndHashJson(json: string | object): string {
+  canonicalizeAndHashJson(json: string | object): Promise<string> {
     return sha256Hex(canonicalizeJson(json));
   }
 
-  verifyJsonHash(json: string | object, expectedHash: string): boolean {
-    return this.canonicalizeAndHashJson(json) === expectedHash;
+  async verifyJsonHash(json: string | object, expectedHash: string): Promise<boolean> {
+    return await this.canonicalizeAndHashJson(json) === expectedHash;
   }
 
-  calculateUblHash(xml: string): string {
+  calculateUblHash(xml: string): Promise<string> {
     return this.canonicalizeAndHashXml(xml);
   }
 
@@ -27,11 +27,11 @@ export class VerificationService {
     return canonicalizeXml(xml);
   }
 
-  canonicalizeAndHashXml(xml: string): string {
+  canonicalizeAndHashXml(xml: string): Promise<string> {
     return canonicalizeAndHashXml(xml);
   }
 
-  verifyXmlHash(xml: string, expectedHash: string): boolean {
-    return this.canonicalizeAndHashXml(xml) === expectedHash;
+  async verifyXmlHash(xml: string, expectedHash: string): Promise<boolean> {
+    return await this.canonicalizeAndHashXml(xml) === expectedHash;
   }
 }

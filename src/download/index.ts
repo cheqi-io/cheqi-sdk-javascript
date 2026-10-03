@@ -13,11 +13,8 @@
  * server: Cheqi stores ciphertext it can never decrypt, and decryption happens on the
  * customer's device.
  *
- * This module is intentionally separate from {@link ../services/decryption.js | DecryptionService}
- * (the Node-only RSA + AES path for receipts delivered to Cheqi wallets) and is
- * **browser-safe**: it uses only WebCrypto (`globalThis.crypto`), no `node:crypto` and no
- * `Buffer`, so the same code runs on terminals (Node >= 20) and on the public receipt
- * download page.
+ * This module is separate from recipient-envelope decryption, but both paths
+ * use Web Crypto and run in Node.js 20+ and modern browser runtimes.
  *
  * Framing matches the SDK's hybrid encryption: `base64(iv || ciphertext || tag)` in a
  * single opaque blob. The plaintext is a {@link ReceiptEnvelope} — the same envelope model
@@ -25,6 +22,7 @@
  */
 
 import { AES_KEY_LENGTH, GCM_IV_LENGTH, GCM_TAG_LENGTH } from "../crypto.js";
+import { base64ToBytes as fromBase64, bytesToBase64 as toBase64 } from "../bytes.js";
 import { DecryptionError, EncryptionError } from "../errors.js";
 import type { ReceiptEnvelope } from "../models/generated/ReceiptEnvelope.js";
 import { ReceiptEnvelopeFromJSON, ReceiptEnvelopeToJSON } from "../models/generated/ReceiptEnvelope.js";
@@ -60,23 +58,6 @@ function subtle(): SubtleCrypto {
 function randomBytes(length: number): Uint8Array {
   const bytes = new Uint8Array(length);
   webCrypto().getRandomValues(bytes);
-  return bytes;
-}
-
-function toBase64(bytes: Uint8Array): string {
-  let binary = "";
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
-  return btoa(binary);
-}
-
-function fromBase64(value: string): Uint8Array {
-  const binary = atob(value);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) {
-    bytes[i] = binary.charCodeAt(i);
-  }
   return bytes;
 }
 
