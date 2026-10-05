@@ -20,6 +20,13 @@ import {
     WebhookCreditNoteInitiationRequestToJSON,
     WebhookCreditNoteInitiationRequestToJSONTyped,
 } from './WebhookCreditNoteInitiationRequest.js';
+import type { WebhookCompanyInvitationAccepted } from './WebhookCompanyInvitationAccepted.js';
+import {
+    WebhookCompanyInvitationAcceptedFromJSON,
+    WebhookCompanyInvitationAcceptedFromJSONTyped,
+    WebhookCompanyInvitationAcceptedToJSON,
+    WebhookCompanyInvitationAcceptedToJSONTyped,
+} from './WebhookCompanyInvitationAccepted.js';
 import type { WebhookReceiptEnvelope } from './WebhookReceiptEnvelope.js';
 import {
     WebhookReceiptEnvelopeFromJSON,
@@ -34,6 +41,12 @@ import {
  * @interface WebhookData
  */
 export interface WebhookData {
+    /**
+     *
+     * @type {WebhookCompanyInvitationAccepted}
+     * @memberof WebhookData
+     */
+    companyInvitationAccepted?: WebhookCompanyInvitationAccepted;
     /**
      *
      * @type {WebhookReceiptEnvelope}
@@ -71,6 +84,7 @@ export function WebhookDataFromJSONTyped(json: any, ignoreDiscriminator: boolean
     }
     return {
 
+        'companyInvitationAccepted': json['companyInvitationAccepted'] == null ? undefined : WebhookCompanyInvitationAcceptedFromJSON(json['companyInvitationAccepted']),
         'encryptedReceipt': json['encryptedReceipt'] == null ? undefined : WebhookReceiptEnvelopeFromJSON(json['encryptedReceipt']),
         'encryptedCreditNote': json['encryptedCreditNote'] == null ? undefined : WebhookReceiptEnvelopeFromJSON(json['encryptedCreditNote']),
         'creditNoteInitiationRequest': json['creditNoteInitiationRequest'] == null ? undefined : WebhookCreditNoteInitiationRequestFromJSON(json['creditNoteInitiationRequest']),
@@ -88,6 +102,7 @@ export function WebhookDataToJSONTyped(value?: WebhookData | null, ignoreDiscrim
 
     return {
 
+        'companyInvitationAccepted': WebhookCompanyInvitationAcceptedToJSON(value['companyInvitationAccepted']),
         'encryptedReceipt': WebhookReceiptEnvelopeToJSON(value['encryptedReceipt']),
         'encryptedCreditNote': WebhookReceiptEnvelopeToJSON(value['encryptedCreditNote']),
         'creditNoteInitiationRequest': WebhookCreditNoteInitiationRequestToJSON(value['creditNoteInitiationRequest']),

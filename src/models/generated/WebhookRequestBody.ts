@@ -46,7 +46,8 @@ export interface WebhookRequestBody {
 export const WebhookRequestBodyEventsEnum = {
     RECEIPT_CREATED: 'RECEIPT_CREATED',
     RETURN_REQUESTED: 'RETURN_REQUESTED',
-    CREDIT_NOTE_CREATED: 'CREDIT_NOTE_CREATED'
+    CREDIT_NOTE_CREATED: 'CREDIT_NOTE_CREATED',
+    COMPANY_INVITATION_ACCEPTED: 'COMPANY_INVITATION_ACCEPTED'
 } as const;
 export type WebhookRequestBodyEventsEnum = typeof WebhookRequestBodyEventsEnum[keyof typeof WebhookRequestBodyEventsEnum];
 

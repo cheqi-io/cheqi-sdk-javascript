@@ -122,6 +122,7 @@ export interface CheqiApiClient {
     request: import("./models/generated/index.js").CreateStoreRequest,
     accessToken?: string | null
   ): Promise<import("./models/generated/index.js").StoreDTO>;
+  inviteUsers(companyId: string, emails: string[], accessToken?: string | null): Promise<void>;
   getStores(
     companyId: string,
     activeOnly?: boolean,
