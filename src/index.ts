@@ -15,6 +15,7 @@ export { ReceiptService } from "./services/receipt.js";
 export { CreditNoteService } from "./services/credit-note.js";
 export { VerificationService } from "./services/verification.js";
 export { StoreService } from "./services/store.js";
+export { CompanyService } from "./services/company.js";
 export * from "./download/index.js";
 export { canonicalizeJson } from "./rfc8785.js";
 export { canonicalizeXml } from "./xml.js";

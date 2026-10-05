@@ -9,6 +9,7 @@ import { EncryptionService } from "./services/encryption.js";
 import { MatchingService } from "./services/matching.js";
 import { ReceiptService } from "./services/receipt.js";
 import { StoreService } from "./services/store.js";
+import { CompanyService } from "./services/company.js";
 import { VerificationService } from "./services/verification.js";
 
 /**
@@ -41,6 +42,7 @@ export class CheqiSDK {
   readonly matchingService: MatchingService;
   readonly receiptService: ReceiptService;
   readonly storeService: StoreService;
+  readonly companyService: CompanyService;
   readonly creditNoteService: CreditNoteService;
 
   constructor(options: CheqiSDKOptions) {
@@ -58,6 +60,7 @@ export class CheqiSDK {
       this.config.receiptDownloadBaseUrl
     );
     this.storeService = new StoreService(this.apiClient);
+    this.companyService = new CompanyService(this.apiClient);
     this.creditNoteService = new CreditNoteService(
       this.apiClient,
       this.encryptionService,

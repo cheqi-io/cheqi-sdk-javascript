@@ -38,6 +38,23 @@ import {
 
 const NOOP = { logger: new NoopLogger() };
 
+test("inviteUsers posts the email request and accepts an empty 200", async () => {
+  let captured;
+  const sdk = new CheqiSDK({
+    apiEndpoint: Environment.SANDBOX,
+    apiKey: "api-key",
+    fetch: async (url, init) => {
+      captured = { url: String(url), init };
+      return new Response("", { status: 200 });
+    }
+  });
+  assert.equal(await sdk.companyService.inviteUsers("company-1", ["employee@example.com"], "oauth-token"), undefined);
+  assert.equal(captured.url, "https://sandbox.api.cheqi.io/company/company-1/invite/employees");
+  assert.equal(captured.init.method, "POST");
+  assert.equal(captured.init.headers.Authorization, "Bearer oauth-token");
+  assert.deepEqual(JSON.parse(captured.init.body), { emails: ["employee@example.com"] });
+});
+
 function rsaKeyPair() {
   const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
   return {

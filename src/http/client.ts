@@ -202,6 +202,15 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
     }));
   }
 
+  async inviteUsers(companyId: string, emails: string[], accessToken?: string | null): Promise<void> {
+    await this.request("POST", Endpoints.COMPANY_INVITE_EMPLOYEES_ENDPOINT(companyId), {
+      body: { emails },
+      accessToken,
+      operation: "inviteEmployees",
+      responseType: "void"
+    });
+  }
+
   async getStores(companyId: string, activeOnly?: boolean, accessToken?: string | null): Promise<StoreDTO[]> {
     const stores = await this.request("GET", Endpoints.COMPANY_STORES_ENDPOINT(companyId), {
       // `activeOnly=false` means no filter; the API parameter itself is named `active`.

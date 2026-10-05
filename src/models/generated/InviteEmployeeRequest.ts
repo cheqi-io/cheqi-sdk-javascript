@@ -13,16 +13,8 @@
  */
 
 import { mapValues } from './runtime.js';
-import type { CompanyRole } from './CompanyRole.js';
-import {
-    CompanyRoleFromJSON,
-    CompanyRoleFromJSONTyped,
-    CompanyRoleToJSON,
-    CompanyRoleToJSONTyped,
-} from './CompanyRole.js';
-
 /**
- * Invitation request with email addresses and role
+ * Invitation request with email addresses
  * @export
  * @interface InviteEmployeeRequest
  */
@@ -33,34 +25,13 @@ export interface InviteEmployeeRequest {
      * @memberof InviteEmployeeRequest
      */
     emails: Set<string>;
-    /**
-     *
-     * @type {CompanyRole}
-     * @memberof InviteEmployeeRequest
-     */
-    role: CompanyRole;
-    /**
-     *
-     * @type {boolean}
-     * @memberof InviteEmployeeRequest
-     */
-    receiptRecipient?: boolean;
-    /**
-     *
-     * @type {boolean}
-     * @memberof InviteEmployeeRequest
-     */
-    receiptWriter?: boolean;
 }
-
-
 
 /**
  * Check if a given object implements the InviteEmployeeRequest interface.
  */
 export function instanceOfInviteEmployeeRequest(value: object): value is InviteEmployeeRequest {
     if (!('emails' in value) || value['emails'] === undefined) return false;
-    if (!('role' in value) || value['role'] === undefined) return false;
     return true;
 }
 
@@ -75,9 +46,6 @@ export function InviteEmployeeRequestFromJSONTyped(json: any, ignoreDiscriminato
     return {
 
         'emails': new Set(json['emails']),
-        'role': CompanyRoleFromJSON(json['role']),
-        'receiptRecipient': json['receiptRecipient'] == null ? undefined : json['receiptRecipient'],
-        'receiptWriter': json['receiptWriter'] == null ? undefined : json['receiptWriter'],
     };
 }
 
@@ -93,8 +61,5 @@ export function InviteEmployeeRequestToJSONTyped(value?: InviteEmployeeRequest |
     return {
 
         'emails': Array.from(value['emails'] as Set<any>),
-        'role': CompanyRoleToJSON(value['role']),
-        'receiptRecipient': value['receiptRecipient'],
-        'receiptWriter': value['receiptWriter'],
     };
 }
