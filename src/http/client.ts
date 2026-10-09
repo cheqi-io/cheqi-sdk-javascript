@@ -26,6 +26,12 @@ import { ReceiptSubmissionResponseFromJSON } from "../models/generated/ReceiptSu
 import { MatchStatusResponseFromJSON } from "../models/generated/MatchStatusResponse.js";
 import type { MatchStatusResponse } from "../models/generated/MatchStatusResponse.js";
 import { StoreDTOFromJSON } from "../models/generated/StoreDTO.js";
+import { DestinationResponseFromJSON } from "../models/generated/DestinationResponse.js";
+import { InviteEmployeesResponseFromJSON } from "../models/generated/InviteEmployeesResponse.js";
+import { RegisterResponseFromJSON } from "../models/generated/RegisterResponse.js";
+import { WebhookDTOFromJSON } from "../models/generated/WebhookDTO.js";
+import { WebhookReceiptEnvelopeFromJSON } from "../models/generated/WebhookReceiptEnvelope.js";
+import type { DestinationResponse, InviteEmployeesResponse, RegisterRequest, RegisterResponse, WebhookDTO, WebhookReceiptEnvelope } from "../models/generated/index.js";
 import { Endpoints } from "./endpoints.js";
 import { RetryHandler } from "./retry.js";
 
@@ -202,13 +208,50 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
     }));
   }
 
-  async inviteUsers(companyId: string, emails: string[], accessToken?: string | null): Promise<void> {
-    await this.request("POST", Endpoints.COMPANY_INVITE_EMPLOYEES_ENDPOINT(companyId), {
-      body: { emails },
+  async inviteUsers(companyId: string, emails: string[], accessToken?: string | null, resendPending?: boolean): Promise<InviteEmployeesResponse> {
+    return InviteEmployeesResponseFromJSON(await this.request("POST", Endpoints.COMPANY_INVITE_EMPLOYEES_ENDPOINT(companyId), {
+      body: { emails, resendPending },
       accessToken,
-      operation: "inviteEmployees",
-      responseType: "void"
+      operation: "inviteEmployees"
+    }));
+  }
+
+  async listReceiptDestinations(accessToken?: string | null): Promise<DestinationResponse[]> {
+    const result = await this.request("GET", Endpoints.RECEIPT_DESTINATIONS_ENDPOINT, {
+      accessToken, operation: "listReceiptDestinations", responseType: "list"
     });
+    return (result as unknown[]).map(DestinationResponseFromJSON);
+  }
+
+  async registerReceiptDestination(request: RegisterRequest, accessToken?: string | null): Promise<RegisterResponse> {
+    return RegisterResponseFromJSON(await this.request("POST", Endpoints.RECEIPT_DESTINATIONS_ENDPOINT, {
+      body: normalizeValue(request), accessToken, operation: "registerReceiptDestination"
+    }));
+  }
+
+  async getPendingReceipts(destinationId: string, accessToken?: string | null): Promise<WebhookReceiptEnvelope[]> {
+    const result = await this.request("GET", Endpoints.RECEIPT_DESTINATION_QUEUE_ENDPOINT(destinationId), {
+      accessToken, operation: "getPendingReceipts", responseType: "list"
+    });
+    return (result as unknown[]).map(WebhookReceiptEnvelopeFromJSON);
+  }
+
+  async acknowledgeReceipts(destinationId: string, receiptIds: string[], accessToken?: string | null): Promise<void> {
+    await this.request("POST", Endpoints.RECEIPT_DESTINATION_ACKNOWLEDGE_ENDPOINT(destinationId), {
+      body: { receiptIds }, accessToken, operation: "acknowledgeReceipts", responseType: "void"
+    });
+  }
+
+  async deactivateReceiptDestination(destinationId: string, accessToken?: string | null): Promise<void> {
+    await this.request("DELETE", Endpoints.RECEIPT_DESTINATION_ENDPOINT(destinationId), {
+      accessToken, operation: "deactivateReceiptDestination", responseType: "void"
+    });
+  }
+
+  async updateWebhookSubscriptionUrl(subscriptionId: string, notificationUrl: string, accessToken?: string | null): Promise<WebhookDTO> {
+    return WebhookDTOFromJSON(await this.request("PATCH", Endpoints.WEBHOOK_SUBSCRIPTION_ENDPOINT(subscriptionId), {
+      body: { notificationUrl }, accessToken, operation: "updateWebhookSubscriptionUrl"
+    }));
   }
 
   async getStores(companyId: string, activeOnly?: boolean, accessToken?: string | null): Promise<StoreDTO[]> {

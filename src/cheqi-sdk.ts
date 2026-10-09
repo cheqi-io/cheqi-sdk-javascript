@@ -10,6 +10,7 @@ import { MatchingService } from "./services/matching.js";
 import { ReceiptService } from "./services/receipt.js";
 import { StoreService } from "./services/store.js";
 import { CompanyService } from "./services/company.js";
+import { WebhookService } from "./services/webhook.js";
 import { VerificationService } from "./services/verification.js";
 
 /**
@@ -43,6 +44,7 @@ export class CheqiSDK {
   readonly receiptService: ReceiptService;
   readonly storeService: StoreService;
   readonly companyService: CompanyService;
+  readonly webhookService: WebhookService;
   readonly creditNoteService: CreditNoteService;
 
   constructor(options: CheqiSDKOptions) {
@@ -61,6 +63,7 @@ export class CheqiSDK {
     );
     this.storeService = new StoreService(this.apiClient);
     this.companyService = new CompanyService(this.apiClient);
+    this.webhookService = new WebhookService(this.apiClient);
     this.creditNoteService = new CreditNoteService(
       this.apiClient,
       this.encryptionService,

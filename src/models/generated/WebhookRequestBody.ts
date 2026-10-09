@@ -37,6 +37,12 @@ export interface WebhookRequestBody {
      * @memberof WebhookRequestBody
      */
     notificationUrl?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof WebhookRequestBody
+     */
+    destinationId?: string;
 }
 
 
@@ -72,6 +78,7 @@ export function WebhookRequestBodyFromJSONTyped(json: any, ignoreDiscriminator: 
         'name': json['name'] == null ? undefined : json['name'],
         'events': json['events'] == null ? undefined : json['events'],
         'notificationUrl': json['notificationUrl'] == null ? undefined : json['notificationUrl'],
+        'destinationId': json['destinationId'] == null ? undefined : json['destinationId'],
     };
 }
 
@@ -89,5 +96,6 @@ export function WebhookRequestBodyToJSONTyped(value?: WebhookRequestBody | null,
         'name': value['name'],
         'events': value['events'],
         'notificationUrl': value['notificationUrl'],
+        'destinationId': value['destinationId'],
     };
 }

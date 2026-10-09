@@ -25,6 +25,12 @@ export interface InviteEmployeeRequest {
      * @memberof InviteEmployeeRequest
      */
     emails: Set<string>;
+    /**
+     *
+     * @type {boolean}
+     * @memberof InviteEmployeeRequest
+     */
+    resendPending?: boolean;
 }
 
 /**
@@ -46,6 +52,7 @@ export function InviteEmployeeRequestFromJSONTyped(json: any, ignoreDiscriminato
     return {
 
         'emails': new Set(json['emails']),
+        'resendPending': json['resendPending'] == null ? undefined : json['resendPending'],
     };
 }
 
@@ -61,5 +68,6 @@ export function InviteEmployeeRequestToJSONTyped(value?: InviteEmployeeRequest |
     return {
 
         'emails': Array.from(value['emails'] as Set<any>),
+        'resendPending': value['resendPending'],
     };
 }

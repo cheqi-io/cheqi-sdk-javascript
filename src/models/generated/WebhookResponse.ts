@@ -39,6 +39,12 @@ export interface WebhookResponse {
      * @memberof WebhookResponse
      */
     failedEvents?: Array<string>;
+    /**
+     *
+     * @type {Array<WebhookDTO>}
+     * @memberof WebhookResponse
+     */
+    existingWebhooks?: Array<WebhookDTO>;
 }
 
 /**
@@ -60,6 +66,7 @@ export function WebhookResponseFromJSONTyped(json: any, ignoreDiscriminator: boo
 
         'createdWebhooks': json['createdWebhooks'] == null ? undefined : ((json['createdWebhooks'] as Array<any>).map(WebhookDTOFromJSON)),
         'failedEvents': json['failedEvents'] == null ? undefined : json['failedEvents'],
+        'existingWebhooks': json['existingWebhooks'] == null ? undefined : ((json['existingWebhooks'] as Array<any>).map(WebhookDTOFromJSON)),
     };
 }
 
@@ -76,5 +83,6 @@ export function WebhookResponseToJSONTyped(value?: WebhookResponse | null, ignor
 
         'createdWebhooks': value['createdWebhooks'] == null ? undefined : ((value['createdWebhooks'] as Array<any>).map(WebhookDTOToJSON)),
         'failedEvents': value['failedEvents'],
+        'existingWebhooks': value['existingWebhooks'] == null ? undefined : ((value['existingWebhooks'] as Array<any>).map(WebhookDTOToJSON)),
     };
 }
