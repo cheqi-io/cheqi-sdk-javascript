@@ -38,21 +38,52 @@ import {
 
 const NOOP = { logger: new NoopLogger() };
 
-test("inviteUsers posts the email request and accepts an empty 200", async () => {
+test("inviteUsers posts the email request and returns invitation outcomes", async () => {
   let captured;
   const sdk = new CheqiSDK({
     apiEndpoint: Environment.SANDBOX,
     apiKey: "api-key",
     fetch: async (url, init) => {
       captured = { url: String(url), init };
-      return new Response("", { status: 200 });
+      return Response.json({ invitedEmails: ["employee@example.com"], pendingEmails: [], existingMembers: [] });
     }
   });
-  assert.equal(await sdk.companyService.inviteUsers("company-1", ["employee@example.com"], "oauth-token"), undefined);
+  assert.deepEqual(await sdk.companyService.inviteUsers("company-1", ["employee@example.com"], "oauth-token", true),
+    { invitedEmails: ["employee@example.com"], pendingEmails: [], existingMembers: [] });
   assert.equal(captured.url, "https://sandbox.api.cheqi.io/company/company-1/invite/employees");
   assert.equal(captured.init.method, "POST");
   assert.equal(captured.init.headers.Authorization, "Bearer oauth-token");
-  assert.deepEqual(JSON.parse(captured.init.body), { emails: ["employee@example.com"] });
+  assert.deepEqual(JSON.parse(captured.init.body), { emails: ["employee@example.com"], resendPending: true });
+});
+
+test("receipt destination and webhook methods use the production routes", async () => {
+  const calls = [];
+  const sdk = new CheqiSDK({
+    apiEndpoint: Environment.SANDBOX,
+    apiKey: "api-key",
+    fetch: async (url, init) => {
+      calls.push({ path: new URL(url).pathname, method: init.method, body: init.body });
+      if (calls.length === 1 || calls.length === 3) return Response.json([]);
+      if (calls.length === 5 || calls.length === 4) return new Response(null, { status: 204 });
+      return Response.json({ id: "destination-1", notificationUrl: "https://example.com/hook" });
+    }
+  });
+  assert.deepEqual(await sdk.companyService.listReceiptDestinations(), []);
+  await sdk.companyService.registerReceiptDestination({ name: "ERP", publicKey: "key", keyAlgorithm: "RSA" });
+  assert.deepEqual(await sdk.companyService.getPendingReceipts("destination-1"), []);
+  await sdk.companyService.acknowledgeReceipts("destination-1", ["receipt-1"]);
+  await sdk.companyService.deactivateReceiptDestination("destination-1");
+  await sdk.webhookService.updateSubscriptionUrl("subscription-1", "https://example.com/hook");
+  assert.deepEqual(calls.map(({ method, path }) => `${method} ${path}`), [
+    "GET /company/receipt-destinations",
+    "POST /company/receipt-destinations",
+    "GET /company/receipt-destinations/destination-1/receipts/queue",
+    "POST /company/receipt-destinations/destination-1/receipts/queue/acknowledge",
+    "DELETE /company/receipt-destinations/destination-1",
+    "PATCH /webhook/subscription/subscription-1"
+  ]);
+  assert.deepEqual(JSON.parse(calls[3].body), { receiptIds: ["receipt-1"] });
+  assert.deepEqual(JSON.parse(calls[5].body), { notificationUrl: "https://example.com/hook" });
 });
 
 function rsaKeyPair() {

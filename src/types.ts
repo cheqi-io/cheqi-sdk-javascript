@@ -122,7 +122,13 @@ export interface CheqiApiClient {
     request: import("./models/generated/index.js").CreateStoreRequest,
     accessToken?: string | null
   ): Promise<import("./models/generated/index.js").StoreDTO>;
-  inviteUsers(companyId: string, emails: string[], accessToken?: string | null): Promise<void>;
+  inviteUsers(companyId: string, emails: string[], accessToken?: string | null, resendPending?: boolean): Promise<import("./models/generated/index.js").InviteEmployeesResponse>;
+  listReceiptDestinations(accessToken?: string | null): Promise<import("./models/generated/index.js").DestinationResponse[]>;
+  registerReceiptDestination(request: import("./models/generated/index.js").RegisterRequest, accessToken?: string | null): Promise<import("./models/generated/index.js").RegisterResponse>;
+  getPendingReceipts(destinationId: string, accessToken?: string | null): Promise<import("./models/generated/index.js").WebhookReceiptEnvelope[]>;
+  acknowledgeReceipts(destinationId: string, receiptIds: string[], accessToken?: string | null): Promise<void>;
+  deactivateReceiptDestination(destinationId: string, accessToken?: string | null): Promise<void>;
+  updateWebhookSubscriptionUrl(subscriptionId: string, notificationUrl: string, accessToken?: string | null): Promise<import("./models/generated/index.js").WebhookDTO>;
   getStores(
     companyId: string,
     activeOnly?: boolean,

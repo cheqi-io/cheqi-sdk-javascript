@@ -24,6 +24,12 @@ export interface WebhookDTO {
      * @type {string}
      * @memberof WebhookDTO
      */
+    id?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof WebhookDTO
+     */
     name?: string;
     /**
      *
@@ -55,6 +61,12 @@ export interface WebhookDTO {
      * @memberof WebhookDTO
      */
     companyId?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof WebhookDTO
+     */
+    destinationId?: string;
 }
 
 /**
@@ -74,12 +86,14 @@ export function WebhookDTOFromJSONTyped(json: any, ignoreDiscriminator: boolean)
     }
     return {
 
+        'id': json['id'] == null ? undefined : json['id'],
         'name': json['name'] == null ? undefined : json['name'],
         'notificationUrl': json['notificationUrl'] == null ? undefined : json['notificationUrl'],
         'event': json['event'] == null ? undefined : json['event'],
         'clientApplicationId': json['clientApplicationId'] == null ? undefined : json['clientApplicationId'],
         'userId': json['userId'] == null ? undefined : json['userId'],
         'companyId': json['companyId'] == null ? undefined : json['companyId'],
+        'destinationId': json['destinationId'] == null ? undefined : json['destinationId'],
     };
 }
 
@@ -94,11 +108,13 @@ export function WebhookDTOToJSONTyped(value?: WebhookDTO | null, ignoreDiscrimin
 
     return {
 
+        'id': value['id'],
         'name': value['name'],
         'notificationUrl': value['notificationUrl'],
         'event': value['event'],
         'clientApplicationId': value['clientApplicationId'],
         'userId': value['userId'],
         'companyId': value['companyId'],
+        'destinationId': value['destinationId'],
     };
 }
