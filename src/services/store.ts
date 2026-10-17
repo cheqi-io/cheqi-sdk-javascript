@@ -1,5 +1,5 @@
 import { CheqiSDKError, ErrorCodes } from "../errors.js";
-import type { CheqiApiClient, CreateStoreRequest, StoreDTO, UpdateStoreRequest } from "../types.js";
+import type { CheqiApiClient, CreateStoreRequest, RequestOptions, StoreDTO, UpdateStoreRequest } from "../types.js";
 import { getCreateStoreRequestValidationErrors } from "../validators.js";
 
 export class StoreService {
@@ -19,10 +19,9 @@ export class StoreService {
   createStore(
     companyId: string,
     request: CreateStoreRequest,
-    accessToken: string | null = null
+    options?: RequestOptions | null
   ): Promise<StoreDTO> {
     this.validateCompanyId(companyId);
-    this.validateAccessToken(accessToken);
 
     const validationErrors = getCreateStoreRequestValidationErrors(request);
     if (validationErrors.length > 0) {
@@ -32,98 +31,80 @@ export class StoreService {
       });
     }
 
-    return this.apiClient.createStore(companyId, request, accessToken);
+    return this.apiClient.createStore(companyId, request, options);
   }
 
-  getStores(companyId: string, accessToken?: string | null): Promise<StoreDTO[]>;
   getStores(
     companyId: string,
-    activeOnly: boolean | undefined,
-    accessToken?: string | null
-  ): Promise<StoreDTO[]>;
-  getStores(
-    companyId: string,
-    activeOnlyOrAccessToken: boolean | string | null | undefined = undefined,
-    accessToken: string | null = null
+    activeOnly?: boolean,
+    options?: RequestOptions | null
   ): Promise<StoreDTO[]> {
-    const activeOnly = typeof activeOnlyOrAccessToken === "boolean"
-      ? activeOnlyOrAccessToken
-      : undefined;
-    const resolvedAccessToken = typeof activeOnlyOrAccessToken === "string"
-      ? activeOnlyOrAccessToken
-      : accessToken;
     this.validateCompanyId(companyId);
-    this.validateAccessToken(resolvedAccessToken);
-    return this.apiClient.getStores(companyId, activeOnly, resolvedAccessToken);
+    return this.apiClient.getStores(companyId, activeOnly, options);
   }
 
   getActiveStores(
     companyId: string,
-    accessToken: string | null = null
+    options?: RequestOptions | null
   ): Promise<StoreDTO[]> {
-    return this.getStores(companyId, true, accessToken);
+    return this.getStores(companyId, true, options);
   }
 
   getStore(
     companyId: string,
     storeId: string,
-    accessToken: string | null = null
+    options?: RequestOptions | null
   ): Promise<StoreDTO> {
     this.validateCompanyId(companyId);
     this.validateStoreId(storeId);
-    this.validateAccessToken(accessToken);
-    return this.apiClient.getStore(companyId, storeId, accessToken);
+    return this.apiClient.getStore(companyId, storeId, options);
   }
 
   updateStore(
     companyId: string,
     storeId: string,
     request: UpdateStoreRequest | null | undefined,
-    accessToken: string | null = null
+    options?: RequestOptions | null
   ): Promise<StoreDTO> {
     this.validateCompanyId(companyId);
     this.validateStoreId(storeId);
-    this.validateAccessToken(accessToken);
     if (!request) {
       throw new CheqiSDKError("Store request cannot be null", {
         errorCode: ErrorCodes.VALIDATION_ERROR,
         httpStatusCode: 400
       });
     }
-    return this.apiClient.updateStore(companyId, storeId, request, accessToken);
+    return this.apiClient.updateStore(companyId, storeId, request, options);
   }
 
   deleteStore(
     companyId: string,
     storeId: string,
-    accessToken: string | null = null
+    options?: RequestOptions | null
   ): Promise<void> {
     this.validateCompanyId(companyId);
     this.validateStoreId(storeId);
-    this.validateAccessToken(accessToken);
-    return this.apiClient.deleteStore(companyId, storeId, accessToken);
+    return this.apiClient.deleteStore(companyId, storeId, options);
   }
 
   activateStore(
     companyId: string,
     storeId: string,
-    accessToken: string | null = null
+    options?: RequestOptions | null
   ): Promise<void> {
     this.validateCompanyId(companyId);
     this.validateStoreId(storeId);
-    this.validateAccessToken(accessToken);
-    return this.apiClient.activateStore(companyId, storeId, accessToken);
+    return this.apiClient.activateStore(companyId, storeId, options);
   }
 
   deactivateStore(
     companyId: string,
     storeId: string,
-    accessToken: string | null = null
+    options?: RequestOptions | null
   ): Promise<void> {
     this.validateCompanyId(companyId);
     this.validateStoreId(storeId);
-    this.validateAccessToken(accessToken);
-    return this.apiClient.deactivateStore(companyId, storeId, accessToken);
+    return this.apiClient.deactivateStore(companyId, storeId, options);
   }
 
   private validateCompanyId(companyId: string | null | undefined): void {
@@ -140,15 +121,6 @@ export class StoreService {
       throw new CheqiSDKError("Store ID cannot be null", {
         errorCode: ErrorCodes.VALIDATION_ERROR,
         httpStatusCode: 400
-      });
-    }
-  }
-
-  private validateAccessToken(accessToken: string | null | undefined): void {
-    if (!accessToken?.trim()) {
-      throw new CheqiSDKError("Access token cannot be null or empty", {
-        errorCode: ErrorCodes.AUTHENTICATION_FAILED,
-        httpStatusCode: 401
       });
     }
   }

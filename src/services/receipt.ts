@@ -17,8 +17,10 @@ import type {
   ReceiptEnvelope,
   ReceiptPayload,
   ReceiptSubmissionResponse,
-  RecipientResolutionResponse
+  RecipientResolutionResponse,
+  RequestOptions
 } from "../types.js";
+import { validateRequestOptions } from "../http/request-options.js";
 import type { RecipientResolutionResponseDeliveryRouteTypeEnum } from "../models/generated/RecipientResolutionResponse.js";
 import { serializeJson } from "../utils.js";
 import { VerificationService } from "./verification.js";
@@ -26,7 +28,6 @@ import { EncryptionService } from "./encryption.js";
 import { MatchingService } from "./matching.js";
 
 const PAYLOAD_DOCUMENT_VERSION = "receipt-payload-v1";
-const UUID_PATTERN = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 
 /** Issues definitive receipt payloads through Cheqi's zero-knowledge device flow. */
 export class ReceiptService {
@@ -48,25 +49,22 @@ export class ReceiptService {
 
   /**
    * Resolves a route, then encrypts the exact supplied payload independently for
-   * every matched owner device. Pass an options object for storeId and accessToken.
-   * Legacy positional arguments remain supported: a third-argument UUID is a
-   * storeId and any other non-empty string is an access token.
+   * every matched owner device. Pass `{ storeId, accessToken }` to associate a store
+   * or act on behalf of a connected company.
    */
   async issueReceipt(
     identificationDetails: IdentificationDetails,
     receiptPayload: ReceiptPayload,
-    storeIdOrAccessToken: ReceiptIssueOptions | string | null = null,
-    accessToken?: string | null
+    options?: ReceiptIssueOptions | null
   ): Promise<ReceiptResult> {
     requireNonNull(identificationDetails, "identificationDetails");
     validatePayload(receiptPayload);
-    const { storeId, token } = resolveReceiptArguments(storeIdOrAccessToken, accessToken);
-    validateOptionalAccessToken(token);
+    const { storeId = null, ...requestOptions } = validateRequestOptions(options) as ReceiptIssueOptions;
 
     try {
       let resolution: RecipientResolutionResponse;
       try {
-        resolution = await this.matchingService.matchCustomer(identificationDetails, token);
+        resolution = await this.matchingService.matchCustomer(identificationDetails, requestOptions);
       } catch (error) {
         if (!isRecoverable(error)) throw error;
         return ReceiptResult.downloadPrepared(await this.prepareDownload(receiptPayload));
@@ -85,7 +83,7 @@ export class ReceiptService {
           resolution.matchId!,
           identificationDetails,
           receiptPayload,
-          token
+          requestOptions
         );
       }
       if (route === "EMAIL_FALLBACK") {
@@ -98,7 +96,7 @@ export class ReceiptService {
       validateDeviceRecipients(resolution);
       try {
         return ReceiptResult.accepted(await this.submitPayload(
-          resolution.matchId!, resolution.recipients!, receiptPayload, storeId, token
+          resolution.matchId!, resolution.recipients!, receiptPayload, storeId, requestOptions
         ));
       } catch (error) {
         if (error instanceof CheqiApiError && error.httpStatusCode === 410) {
@@ -116,10 +114,11 @@ export class ReceiptService {
   }
 
   /** Retrieves the original device snapshot without matching again. */
-  async getMatch(matchId: string, accessToken: string | null = null): Promise<MatchStatusResponse> {
-    validateRetryArguments(matchId, accessToken);
+  async getMatch(matchId: string, options?: RequestOptions | null): Promise<MatchStatusResponse> {
+    validateMatchId(matchId);
+    validateRequestOptions(options);
     try {
-      return await this.apiClient.getMatch(matchId, accessToken);
+      return await this.apiClient.getMatch(matchId, options);
     } catch (error) {
       if (error instanceof CheqiApiError) throw wrapApiError("Match retrieval failed", error);
       throw error;
@@ -128,12 +127,12 @@ export class ReceiptService {
 
   /** Makes one recovery attempt. Retain the original prepared download and URL. */
   async resumeReceipt(matchId: string, receiptPayload: ReceiptPayload,
-    storeIdOrAccessToken: ReceiptIssueOptions | string | null = null, accessToken?: string | null): Promise<ReceiptResult> {
-    const { storeId, token } = resolveReceiptArguments(storeIdOrAccessToken, accessToken);
-    validateRetryArguments(matchId, token);
+    options?: ReceiptIssueOptions | null): Promise<ReceiptResult> {
+    validateMatchId(matchId);
+    const { storeId = null, ...requestOptions } = validateRequestOptions(options) as ReceiptIssueOptions;
     validatePayload(receiptPayload);
     try {
-      const match = await this.apiClient.getMatch(matchId, token);
+      const match = await this.apiClient.getMatch(matchId, requestOptions);
       if (!match?.state || match.matchId !== matchId) throw validationError("Invalid match status response");
       switch (match.state) {
         case "SUBMITTED":
@@ -150,7 +149,7 @@ export class ReceiptService {
             throw validationError("Match does not contain a digital owner-device route");
           }
           return ReceiptResult.accepted(await this.submitPayload(matchId, match.recipients,
-            receiptPayload, storeId, token));
+            receiptPayload, storeId, requestOptions));
         default:
           throw validationError("Unknown match state");
       }
@@ -165,11 +164,11 @@ export class ReceiptService {
 
   /** Uploads a persisted generated request without changing its download id or ciphertext. */
   async uploadPreparedDownload(download: PreparedReceiptDownload,
-    accessToken: string | null = null): Promise<ClientReceiptDownloadResponse> {
+    options?: RequestOptions | null): Promise<ClientReceiptDownloadResponse> {
     requireNonNull(download, "download");
-    validateOptionalAccessToken(accessToken);
+    validateRequestOptions(options);
     try {
-      return await this.apiClient.uploadEncryptedDownloadReceipt({ ...download.uploadRequest }, accessToken);
+      return await this.apiClient.uploadEncryptedDownloadReceipt({ ...download.uploadRequest }, options);
     } catch (error) {
       if (error instanceof CheqiApiError) throw wrapApiError("Download upload failed", error);
       throw error;
@@ -195,7 +194,7 @@ export class ReceiptService {
 
   private generateEnvelope(matchId: string, recipients: MatchedRecipient[],
     payload: ReceiptPayload, storeId: string | null): EncryptedReceiptEnvelope {
-    validateRetryArguments(matchId, null);
+    validateMatchId(matchId);
     validatePayload(payload);
     if (!recipients?.length || recipients.some((recipient) => recipient == null)) {
       throw validationError("Match must contain owner devices");
@@ -205,9 +204,9 @@ export class ReceiptService {
   }
 
   private async submitPayload(matchId: string, recipients: MatchedRecipient[], payload: ReceiptPayload,
-    storeId: string | null, token: string | null): Promise<ReceiptSubmissionResponse> {
+    storeId: string | null, options: RequestOptions): Promise<ReceiptSubmissionResponse> {
     const response = await this.apiClient.submitEncryptedReceipt(
-      this.generateEnvelope(matchId, recipients, payload, storeId), token);
+      this.generateEnvelope(matchId, recipients, payload, storeId), options);
     if (!response?.cheqiReceiptId?.trim() || response.matchId !== matchId) {
       throw new CheqiApiError("Invalid receipt submission response", { errorCode: ErrorCodes.INVALID_RESPONSE });
     }
@@ -218,20 +217,20 @@ export class ReceiptService {
   async issueDownloadReceipt(
     identificationDetails: IdentificationDetails,
     receiptPayload: ReceiptPayload,
-    accessToken: string | null = null
+    options?: RequestOptions | null
   ): Promise<ReceiptResult> {
     requireNonNull(identificationDetails, "identificationDetails");
     validatePayload(receiptPayload);
     if (!identificationDetails.paymentType) {
       throw validationError("identificationDetails.paymentType is required");
     }
-    validateOptionalAccessToken(accessToken);
+    const requestOptions = validateRequestOptions(options);
     try {
       return await this.deliverClientEncryptedDownload(
         null,
         identificationDetails,
         receiptPayload,
-        accessToken
+        requestOptions
       );
     } catch (error) {
       if (error instanceof CheqiApiError) {
@@ -246,12 +245,12 @@ export class ReceiptService {
 
   async submitEncryptedReceipt(
     envelope: EncryptedReceiptEnvelope,
-    accessToken: string | null = null
+    options?: RequestOptions | null
   ): Promise<ReceiptSubmissionResponse> {
     requireNonNull(envelope, "envelope");
-    validateOptionalAccessToken(accessToken);
+    validateRequestOptions(options);
     try {
-      return await this.apiClient.submitEncryptedReceipt(envelope, accessToken);
+      return await this.apiClient.submitEncryptedReceipt(envelope, options);
     } catch (error) {
       if (error instanceof CheqiApiError) {
         throw wrapApiError("Encrypted receipt submission failed", error);
@@ -268,7 +267,7 @@ export class ReceiptService {
     fallbackResult: ReceiptResult,
     receiptEnvelope: ReceiptEnvelope,
     templateHash: string | null = null,
-    accessToken: string | null = null
+    options?: RequestOptions | null
   ): Promise<ReceiptResult> {
     requireNonNull(fallbackResult, "fallbackResult");
     requireNonNull(receiptEnvelope, "receiptEnvelope");
@@ -278,7 +277,7 @@ export class ReceiptService {
     ) {
       throw validationError("fallbackResult does not require a download receipt envelope");
     }
-    validateOptionalAccessToken(accessToken);
+    validateRequestOptions(options);
     const baseUrl = requireDownloadBaseUrl(this.receiptDownloadBaseUrl);
 
     try {
@@ -290,7 +289,7 @@ export class ReceiptService {
           ciphertext,
           templateHash
         },
-        accessToken
+        options
       );
       return ReceiptResult.downloadAccepted(fallbackResult.getMatchId(), response, link.url);
     } catch (error) {
@@ -317,11 +316,11 @@ export class ReceiptService {
     matchId: string | null,
     identificationDetails: IdentificationDetails,
     receiptPayload: ReceiptPayload,
-    accessToken: string | null
+    options: RequestOptions
   ): Promise<ReceiptResult> {
     const prepared = await this.prepareDownload(receiptPayload, identificationDetails);
     try {
-      const response = await this.apiClient.uploadEncryptedDownloadReceipt({ ...prepared.uploadRequest }, accessToken);
+      const response = await this.apiClient.uploadEncryptedDownloadReceipt({ ...prepared.uploadRequest }, options);
       return ReceiptResult.downloadAccepted(matchId, response, prepared.downloadUrl);
     } catch (error) {
       if (!isRecoverable(error)) throw error;
@@ -392,28 +391,6 @@ function validateDeviceRecipients(resolution: RecipientResolutionResponse): void
   }
 }
 
-function resolveReceiptArguments(
-  storeIdOrAccessToken: ReceiptIssueOptions | string | null,
-  explicitAccessToken: string | null | undefined
-): { storeId: string | null; token: string | null } {
-  if (typeof storeIdOrAccessToken === "object" && storeIdOrAccessToken !== null) {
-    return { storeId: storeIdOrAccessToken.storeId ?? null, token: storeIdOrAccessToken.accessToken ?? null };
-  }
-  if (explicitAccessToken !== undefined) {
-    return { storeId: storeIdOrAccessToken, token: explicitAccessToken };
-  }
-  if (storeIdOrAccessToken && !UUID_PATTERN.test(storeIdOrAccessToken)) {
-    return { storeId: null, token: storeIdOrAccessToken };
-  }
-  return { storeId: storeIdOrAccessToken, token: null };
-}
-
-function validateOptionalAccessToken(accessToken: string | null): void {
-  if (accessToken != null && !accessToken.trim()) {
-    throw validationError("accessToken cannot be empty");
-  }
-}
-
 function requireDownloadBaseUrl(value: string | null): string {
   if (!value?.trim()) {
     throw validationError("A receipt download base URL is required to complete download fallback");
@@ -445,9 +422,8 @@ function wrapApiError(prefix: string, error: CheqiApiError): CheqiSDKError {
   });
 }
 
-function validateRetryArguments(matchId: string, accessToken: string | null): void {
+function validateMatchId(matchId: string): void {
   if (!matchId?.trim()) throw validationError("matchId is required");
-  validateOptionalAccessToken(accessToken);
 }
 
 function validatePayload(payload: ReceiptPayload): void {

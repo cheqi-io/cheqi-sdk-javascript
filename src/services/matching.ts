@@ -1,12 +1,12 @@
 import { CheqiApiError, CheqiSDKError, ErrorCodes } from "../errors.js";
-import type { CheqiApiClient, IdentificationDetails, RecipientResolutionResponse } from "../types.js";
+import type { CheqiApiClient, IdentificationDetails, RecipientResolutionResponse, RequestOptions } from "../types.js";
 
 export class MatchingService {
   constructor(private readonly apiClient: Pick<CheqiApiClient, "matchCustomer">) {}
 
   async matchCustomer(
     identificationDetails: IdentificationDetails,
-    accessToken?: string | null
+    options?: RequestOptions | null
   ): Promise<RecipientResolutionResponse> {
     if (!identificationDetails) {
       throw new CheqiSDKError(
@@ -21,7 +21,7 @@ export class MatchingService {
     }
 
     try {
-      return await this.apiClient.matchCustomer(identificationDetails, accessToken);
+      return await this.apiClient.matchCustomer(identificationDetails, options);
     } catch (error) {
       if (error instanceof CheqiApiError) {
         throw error;
