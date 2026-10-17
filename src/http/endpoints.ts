@@ -1,4 +1,5 @@
 export const Endpoints = {
+  OAUTH_TOKEN_ENDPOINT: "/oauth2/token",
   CUSTOMER_MATCH_ENDPOINT: "/recipient/resolve",
   MATCH_STATUS_ENDPOINT: (matchId: string): string => `/recipient/matches/${encodeURIComponent(matchId)}`,
   ENCRYPTED_RECEIPT_ENDPOINT: "/receipt/encrypted",

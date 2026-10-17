@@ -47,7 +47,8 @@ export const CardDetailsCardProviderEnum = {
     MAESTRO: 'MAESTRO',
     MASTERCARD: 'MASTERCARD',
     VISA: 'VISA',
-    AMERICAN_EXPRESS: 'AMERICAN_EXPRESS'
+    AMERICAN_EXPRESS: 'AMERICAN_EXPRESS',
+    UNKNOWN: 'UNKNOWN'
 } as const;
 export type CardDetailsCardProviderEnum = typeof CardDetailsCardProviderEnum[keyof typeof CardDetailsCardProviderEnum];
 

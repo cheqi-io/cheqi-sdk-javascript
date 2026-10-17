@@ -51,9 +51,10 @@ export class RetryHandler {
   async executeWithRetry(
     operation: () => Promise<Response>,
     operationName: string,
-    allowRetries = true
+    allowRetries = true,
+    maxRetries?: number
   ): Promise<Response> {
-    const retryLimit = allowRetries ? this.maxRetries : 0;
+    const retryLimit = allowRetries ? maxRetries ?? this.maxRetries : 0;
     let attempt = 0;
     let lastError: unknown = null;
 

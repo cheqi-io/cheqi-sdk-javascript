@@ -48,7 +48,7 @@ test("inviteUsers posts the email request and returns invitation outcomes", asyn
       return Response.json({ invitedEmails: ["employee@example.com"], pendingEmails: [], existingMembers: [] });
     }
   });
-  assert.deepEqual(await sdk.companyService.inviteUsers("company-1", ["employee@example.com"], "oauth-token", true),
+  assert.deepEqual(await sdk.companyService.inviteUsers("company-1", ["employee@example.com"], true, { accessToken: "oauth-token" }),
     { invitedEmails: ["employee@example.com"], pendingEmails: [], existingMembers: [] });
   assert.equal(captured.url, "https://sandbox.api.cheqi.io/company/company-1/invite/employees");
   assert.equal(captured.init.method, "POST");
@@ -329,7 +329,7 @@ test("receipt issuance sends one unchanged definitive payload per owner device",
   const result = await service.issueReceipt(
     { recipientEmail: "buyer@example.com" },
     receiptPayload(),
-    storeId
+    { storeId }
   );
 
   assert.equal(result.isAccepted(), true);
@@ -343,12 +343,12 @@ test("receipt issuance sends one unchanged definitive payload per owner device",
   assert.equal(submitted.deviceDeliveries.length, 2);
 });
 
-test("receipt issuance forwards a three-argument OAuth token", async () => {
+test("receipt issuance forwards the per-call OAuth token", async () => {
   let matchedToken;
   let submittedToken;
   const apiClient = {
-    async matchCustomer(_request, token) {
-      matchedToken = token;
+    async matchCustomer(_request, options) {
+      matchedToken = options?.accessToken;
       return {
         routeFound: true,
         deliveryRouteType: "DIGITAL",
@@ -356,14 +356,14 @@ test("receipt issuance forwards a three-argument OAuth token", async () => {
         recipients: [{ id: "device-1", publicKey: rsaKeyPair().publicKeyB64 }]
       };
     },
-    async submitEncryptedReceipt(_envelope, token) {
-      submittedToken = token;
+    async submitEncryptedReceipt(_envelope, options) {
+      submittedToken = options?.accessToken;
       return { cheqiReceiptId: "CHQ-TOKEN", matchId: "match-token", status: "PENDING" };
     },
     async uploadEncryptedDownloadReceipt() { throw new Error("unreachable"); }
   };
   const service = new ReceiptService(apiClient, new EncryptionService(), new MatchingService(apiClient));
-  await service.issueReceipt({ recipientEmail: "buyer@example.com" }, receiptPayload(), "oauth-access-token");
+  await service.issueReceipt({ recipientEmail: "buyer@example.com" }, receiptPayload(), { accessToken: "oauth-access-token" });
   assert.equal(matchedToken, "oauth-access-token");
   assert.equal(submittedToken, "oauth-access-token");
 });
@@ -749,29 +749,30 @@ test("store service validates inputs and delegates every store operation", async
     }
   };
 
-  await service.createStore("company-1", request, "oauth-token");
-  await service.getStores("company-1", "oauth-token");
-  await service.getStores("company-1", undefined, "oauth-token");
-  await service.getActiveStores("company-1", "oauth-token");
-  await service.getStore("company-1", "store-1", "oauth-token");
-  await service.updateStore("company-1", "store-1", { storeName: "Updated" }, "oauth-token");
-  await service.deleteStore("company-1", "store-1", "oauth-token");
-  await service.activateStore("company-1", "store-1", "oauth-token");
-  await service.deactivateStore("company-1", "store-1", "oauth-token");
+  const options = { accessToken: "oauth-token" };
+  await service.createStore("company-1", request, options);
+  await service.getStores("company-1");
+  await service.getStores("company-1", undefined, options);
+  await service.getActiveStores("company-1", options);
+  await service.getStore("company-1", "store-1", options);
+  await service.updateStore("company-1", "store-1", { storeName: "Updated" }, options);
+  await service.deleteStore("company-1", "store-1", options);
+  await service.activateStore("company-1", "store-1", options);
+  await service.deactivateStore("company-1", "store-1", options);
 
   assert.deepEqual(calls.map(([operation]) => operation), [
     "create", "list", "list", "list", "get", "update", "delete", "activate", "deactivate"
   ]);
   assert.equal(calls[3][2], true);
-  assert.throws(() => service.getStores("", undefined, "oauth-token"), /Company ID cannot be null/);
-  assert.throws(() => service.getStore("company-1", "", "oauth-token"), /Store ID cannot be null/);
-  assert.throws(() => service.getStores("company-1", undefined, " "), /Access token cannot be null/);
+  assert.equal(calls[4][3], options);
+  assert.throws(() => service.getStores("", undefined, options), /Company ID cannot be null/);
+  assert.throws(() => service.getStore("company-1", "", options), /Store ID cannot be null/);
   assert.throws(
-    () => service.createStore("company-1", { storeName: "", addressDto: {} }, "oauth-token"),
+    () => service.createStore("company-1", { storeName: "", addressDto: {} }, options),
     /storeName is required.*streetName is required.*countryIsoCode is required/
   );
   assert.throws(
-    () => service.updateStore("company-1", "store-1", null, "oauth-token"),
+    () => service.updateStore("company-1", "store-1", null, options),
     /Store request cannot be null/
   );
 });
@@ -989,17 +990,17 @@ function recoveryService(overrides = {}) {
       return { routeFound: true, matchId: "original-match", deliveryRouteType: "DIGITAL",
         recipients: [{ id: "original-device", publicKey: "key" }] };
     },
-    async getMatch(id, token) {
-      calls.snapshots.push({ id, token });
+    async getMatch(id, options) {
+      calls.snapshots.push({ id, token: options?.accessToken });
       return { matchId: id, state: "MATCHED", route: "DIGITAL",
         recipients: [{ id: "original-device", publicKey: "key" }] };
     },
-    async submitEncryptedReceipt(envelope, token) {
-      calls.submissions.push({ envelope, token });
+    async submitEncryptedReceipt(envelope, options) {
+      calls.submissions.push({ envelope, token: options?.accessToken });
       return { cheqiReceiptId: "CHQ-ORIGINAL", matchId: envelope.matchId, status: "PENDING" };
     },
-    async uploadEncryptedDownloadReceipt(request, token) {
-      calls.uploads.push({ request: { ...request }, token });
+    async uploadEncryptedDownloadReceipt(request, options) {
+      calls.uploads.push({ request: { ...request }, token: options?.accessToken });
       return { cheqiReceiptId: "CHQ-DOWNLOAD" };
     },
     ...overrides
@@ -1041,8 +1042,8 @@ for (const failure of [
     assert.deepEqual(JSON.parse(envelope.documents.RECEIPT_PAYLOAD.content), JSON.parse(JSON.stringify(payload)));
     assert.equal(envelope.documents.IDENTIFICATION_DETAILS, undefined);
     assert.equal(envelope.documents.RECEIPT_PAYLOAD.content.includes("private@example.com"), false);
-    await service.uploadPreparedDownload(persisted, "company-token");
-    await service.uploadPreparedDownload(persisted, "company-token");
+    await service.uploadPreparedDownload(persisted, { accessToken: "company-token" });
+    await service.uploadPreparedDownload(persisted, { accessToken: "company-token" });
     assert.deepEqual(calls.uploads[0], calls.uploads[1]);
     assert.deepEqual(calls.uploads[0].request, persisted.uploadRequest);
     assert.equal(calls.uploads[0].token, "company-token");
@@ -1190,7 +1191,7 @@ test("HTTP match retrieval encodes the opaque id, authenticates and hydrates gen
       return Response.json({ matchId: "id /?", state: "SUBMITTED", expiresAt: "2026-09-29T10:00:00Z",
         submission: { cheqiReceiptId: "receipt", matchId: "id /?", createdAt: "2026-09-29T09:00:00Z" } });
     });
-  const match = await client.getMatch("id /?", "oauth-token");
+  const match = await client.getMatch("id /?", { accessToken: "oauth-token" });
   assert.equal(request.url, "https://test.api.cheqi.io/recipient/matches/id%20%2F%3F");
   assert.equal(request.headers.Authorization, "Bearer oauth-token");
   assert.equal(request.method, "GET");
@@ -1276,7 +1277,7 @@ test("generated expense metadata survives wallet and download decryption", async
   assert.deepEqual(await downloads.decryptDownloadEnvelope(ciphertext, link.contentKey), envelope);
 });
 
-test("issuance accepts an options object without guessing whether a token is a UUID", async () => {
+test("issuance passes a UUID-shaped access token through the options object unchanged", async () => {
   const { service, calls } = recoveryService();
   const accessToken = "706920f8-63a7-4d9d-a92a-5889545562ce";
   await service.issueReceipt({ paymentType: PaymentType.CASH }, receiptPayload(), { storeId: "store", accessToken });
@@ -1287,12 +1288,12 @@ test("issuance accepts an options object without guessing whether a token is a U
 test("credit-note issuance accepts the shared JavaScript options object", async () => {
   let submission;
   const api = {
-    async matchCustomer(_request, token) {
-      assert.equal(token, "oauth");
+    async matchCustomer(_request, options) {
+      assert.equal(options?.accessToken, "oauth");
       return { routeFound: true, matchId: "match", recipients: [{ id: "device", publicKey: "key" }] };
     },
-    async submitEncryptedCreditNote(envelope, token) {
-      submission = { envelope, token };
+    async submitEncryptedCreditNote(envelope, options) {
+      submission = { envelope, token: options?.accessToken };
       return { cheqiReceiptId: "credit", matchId: "match" };
     }
   };
@@ -1320,4 +1321,62 @@ test("OpenAPI drift comparison ignores mapping order but rejects contract change
   assert.equal(specsMatch(local, reordered.replace('[id]', '[id, matchId]')), false);
   assert.equal(specsMatch(local, reordered.replace('type: object', 'type: string')), false);
   assert.equal(specsMatch(local, reordered.replace('Receipt:', 'OtherReceipt:')), false);
+});
+
+test("per-call access tokens override the API key and nothing is cached between calls", async () => {
+  const authorizations = [];
+  const sdk = new CheqiSDK({ apiEndpoint: Environment.TEST, apiKey: "api-key", ...NOOP,
+    fetch: async (_url, init) => { authorizations.push(init.headers.Authorization); return Response.json([]); } });
+  await sdk.companyService.listReceiptDestinations({ accessToken: "customer-a" });
+  await sdk.companyService.listReceiptDestinations({ accessToken: "customer-b" });
+  await sdk.companyService.listReceiptDestinations();
+  assert.deepEqual(authorizations, ["Bearer customer-a", "Bearer customer-b", "Bearer api-key"]);
+});
+
+test("requestAccessToken posts snake_case client credentials for one Grant without a bearer", async () => {
+  let request;
+  const sdk = new CheqiSDK({ apiEndpoint: Environment.TEST, apiKey: "api-key", ...NOOP,
+    fetch: async (url, init) => {
+      request = { url: String(url), ...init };
+      return Response.json({ access_token: "company-token", token_type: "bearer", expires_in: 900, scope: "receipt:issue" });
+    } });
+  const token = await sdk.oauthService.requestAccessToken({
+    client_id: "client", client_secret: "secret", grant_id: "9f5968f2-93b7-4b4e-a1c3-7220a92f7d98", scope: "receipt:issue"
+  });
+  assert.equal(token.access_token, "company-token");
+  assert.equal(token.expires_in, 900);
+  assert.equal(request.url, "https://test.api.cheqi.io/oauth2/token");
+  assert.equal(request.headers.Authorization, undefined);
+  assert.deepEqual(JSON.parse(request.body), {
+    grant_type: "client_credentials", client_id: "client", client_secret: "secret",
+    grant_id: "9f5968f2-93b7-4b4e-a1c3-7220a92f7d98", scope: "receipt:issue"
+  });
+  await assert.rejects(() => sdk.oauthService.requestAccessToken({ client_id: "client", client_secret: "secret" }),
+    (error) => error.errorCode === ErrorCodes.INVALID_REQUEST);
+});
+
+test("per-call maxRetries and timeoutSeconds override the configured values", async () => {
+  let attempts = 0;
+  const sdk = new CheqiSDK({ apiEndpoint: Environment.TEST, apiKey: "api-key", maxRetries: 3, ...NOOP,
+    fetch: async () => { attempts++; return new Response("{}", { status: 503, headers: { "Retry-After": "0" } }); } });
+  await assert.rejects(() => sdk.companyService.listReceiptDestinations({ maxRetries: 0 }));
+  assert.equal(attempts, 1);
+
+  let signal;
+  const slow = new CheqiSDK({ apiEndpoint: Environment.TEST, apiKey: "api-key", maxRetries: 0, ...NOOP,
+    fetch: async (_url, init) => { signal = init.signal; return Response.json([]); } });
+  await slow.companyService.listReceiptDestinations({ timeoutSeconds: 0.05 });
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal(signal.aborted, true);
+});
+
+test("malformed per-call options are rejected before any request", async () => {
+  let requests = 0;
+  const sdk = new CheqiSDK({ apiEndpoint: Environment.TEST, apiKey: "api-key", ...NOOP,
+    fetch: async () => { requests++; return Response.json([]); } });
+  await assert.rejects(() => sdk.receiptService.issueReceipt({ paymentType: PaymentType.CASH }, receiptPayload(), { accessToken: " " }),
+    (error) => error.errorCode === ErrorCodes.VALIDATION_ERROR);
+  await assert.rejects(() => sdk.companyService.listReceiptDestinations({ maxRetries: -1 }),
+    (error) => error.errorCode === ErrorCodes.VALIDATION_ERROR);
+  assert.equal(requests, 0);
 });
