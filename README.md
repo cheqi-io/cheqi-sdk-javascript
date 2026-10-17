@@ -37,8 +37,9 @@ Every API method takes an optional `RequestOptions` object as its last argument.
 
 ```ts
 await sdk.storeService.getStores(companyId, undefined, { accessToken });
-await sdk.receiptService.uploadPreparedDownload(prepared, { accessToken, timeoutSeconds: 60, maxRetries: 0 });
 ```
+
+The same object can also set `timeoutSeconds` and `maxRetries` for a single call.
 
 Company access tokens are short-lived and bound to one Grant, so an integration that serves several companies holds one token per Grant. Request one with the client-credentials grant; the request and response use the generated snake_case OAuth models:
 
