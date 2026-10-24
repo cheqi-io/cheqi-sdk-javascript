@@ -118,12 +118,6 @@ paths:
               $ref: "#/components/schemas/AuthorizationCodeExchangeRequest"
         required: true
       responses:
-        "200":
-          description: Authorization code exchanged successfully
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/CompanyAuthorizationResponse"
         "401":
           description: Invalid client credentials
           content:
@@ -132,6 +126,12 @@ paths:
                 $ref: "#/components/schemas/CompanyAuthorizationResponse"
         "400":
           description: "Invalid, expired, or already used authorization code"
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/CompanyAuthorizationResponse"
+        "200":
+          description: Authorization code exchanged successfully
           content:
             '*/*':
               schema:
@@ -160,14 +160,14 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/OAuthGrantDetailsResponse"
-        "403":
-          description: The token is not authorized for this Grant or lacks company:read
+        "200":
+          description: Grant details retrieved successfully
           content:
             '*/*':
               schema:
                 $ref: "#/components/schemas/OAuthGrantDetailsResponse"
-        "200":
-          description: Grant details retrieved successfully
+        "403":
+          description: The token is not authorized for this Grant or lacks company:read
           content:
             '*/*':
               schema:
@@ -192,12 +192,6 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/OAuthTokenExchangeResponse"
-        "400":
-          description: Invalid authorization code or request parameters
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/OAuthTokenExchangeResponse"
         "200":
           description: OAuth exchange completed successfully
           content:
@@ -213,6 +207,12 @@ paths:
                     token_type: bearer
                     expires_in: 900
                     scope: receipt:issue
+        "400":
+          description: Invalid authorization code or request parameters
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/OAuthTokenExchangeResponse"
       security: []
   /company/{companyId}/stores/{storeId}:
     get:
@@ -238,12 +238,6 @@ paths:
           type: string
           format: uuid
       responses:
-        "200":
-          description: Store retrieved successfully
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/StoreDTO"
         "403":
           description: Not authorized to view this store
           content:
@@ -252,6 +246,12 @@ paths:
                 $ref: "#/components/schemas/StoreDTO"
         "404":
           description: Store or company not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/StoreDTO"
+        "200":
+          description: Store retrieved successfully
           content:
             '*/*':
               schema:
@@ -441,18 +441,18 @@ paths:
             '*/*':
               schema:
                 type: object
-        "201":
-          description: Store created successfully
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/StoreDTO"
         "400":
           description: Invalid request data
           content:
             '*/*':
               schema:
                 type: object
+        "201":
+          description: Store created successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/StoreDTO"
   /recipient/resolve:
     post:
       tags:
@@ -482,6 +482,12 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/RecipientResolutionResponse"
+        "200":
+          description: Recipient successfully resolved and matched
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/RecipientResolutionResponse"
         "401":
           description: Authentication required
           content:
@@ -490,12 +496,6 @@ paths:
                 $ref: "#/components/schemas/RecipientResolutionResponse"
         "400":
           description: Invalid identification details provided
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/RecipientResolutionResponse"
-        "200":
-          description: Recipient successfully resolved and matched
           content:
             '*/*':
               schema:
@@ -591,12 +591,6 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/ReceiptSubmissionResponse"
-        "404":
-          description: Match absent or belongs to another requester
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/ReceiptSubmissionResponse"
         "202":
           description: Encrypted receipt payload accepted for on-device formatting
           content:
@@ -605,6 +599,12 @@ paths:
                 oneOf:
                 - $ref: "#/components/schemas/ReceiptSubmissionResponse"
                 - $ref: "#/components/schemas/MatchStatusResponse"
+        "404":
+          description: Match absent or belongs to another requester
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ReceiptSubmissionResponse"
         "409":
           description: Match already used for another document
           content:
@@ -665,26 +665,26 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/ClientReceiptDownloadResponse"
-        "400":
-          description: "Invalid download id, IV, or ciphertext"
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/ClientReceiptDownloadResponse"
-        "403":
-          description: Insufficient permissions - requires receipt:issue scope
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/ClientReceiptDownloadResponse"
         "200":
           description: Idempotent replay of an identical earlier upload
           content:
             '*/*':
               schema:
                 $ref: "#/components/schemas/ClientReceiptDownloadResponse"
+        "400":
+          description: "Invalid download id, IV, or ciphertext"
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ClientReceiptDownloadResponse"
         "201":
           description: Encrypted receipt stored
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ClientReceiptDownloadResponse"
+        "403":
+          description: Insufficient permissions - requires receipt:issue scope
           content:
             '*/*':
               schema:
@@ -881,14 +881,14 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/ReceiptSubmissionResponse"
-        "403":
-          description: Insufficient permissions - requires receipt:issue scope
+        "202":
+          description: Encrypted credit-note generation job accepted
           content:
             '*/*':
               schema:
                 $ref: "#/components/schemas/ReceiptSubmissionResponse"
-        "202":
-          description: Encrypted credit-note generation job accepted
+        "403":
+          description: Insufficient permissions - requires receipt:issue scope
           content:
             '*/*':
               schema:
@@ -1156,16 +1156,16 @@ paths:
               $ref: "#/components/schemas/UpdateSubscriptionRequest"
         required: true
       responses:
-        "200":
-          description: Notification URL updated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/WebhookDTO"
         "403":
           description: Insufficient permissions for the subscription's event type
           content:
             '*/*':
+              schema:
+                $ref: "#/components/schemas/WebhookDTO"
+        "200":
+          description: Notification URL updated
+          content:
+            application/json:
               schema:
                 $ref: "#/components/schemas/WebhookDTO"
         "400":
@@ -1241,6 +1241,12 @@ paths:
           type: string
           format: uuid
       responses:
+        "200":
+          description: Store deactivated successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/StoreDTO"
         "404":
           description: Store or company not found
           content:
@@ -1249,12 +1255,6 @@ paths:
                 $ref: "#/components/schemas/StoreDTO"
         "403":
           description: Not authorized to deactivate this store
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/StoreDTO"
-        "200":
-          description: Store deactivated successfully
           content:
             '*/*':
               schema:
@@ -1283,6 +1283,12 @@ paths:
           type: string
           format: uuid
       responses:
+        "200":
+          description: Store activated successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/StoreDTO"
         "404":
           description: Store or company not found
           content:
@@ -1291,12 +1297,6 @@ paths:
                 $ref: "#/components/schemas/StoreDTO"
         "403":
           description: Not authorized to activate this store
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/StoreDTO"
-        "200":
-          description: Store activated successfully
           content:
             '*/*':
               schema:
@@ -1684,6 +1684,7 @@ components:
             - RETURN_REQUESTED
             - CREDIT_NOTE_CREATED
             - COMPANY_INVITATION_ACCEPTED
+            - SELF_BILLED_INVOICE_CREATED
         notificationUrl:
           type: string
         destinationId:
@@ -3431,6 +3432,7 @@ components:
       enum:
       - RECEIPT
       - CREDIT_NOTE
+      - SELF_BILLED_INVOICE
     EncryptedReceiptDeliveryResponse:
       type: object
       properties:
@@ -3540,13 +3542,13 @@ components:
           $ref: "#/components/schemas/PageableObject"
         sort:
           $ref: "#/components/schemas/SortObject"
+        numberOfElements:
+          type: integer
+          format: int32
         first:
           type: boolean
         last:
           type: boolean
-        numberOfElements:
-          type: integer
-          format: int32
         empty:
           type: boolean
     PageableObject:
@@ -3806,6 +3808,8 @@ components:
           $ref: "#/components/schemas/WebhookReceiptEnvelope"
         encryptedCreditNote:
           $ref: "#/components/schemas/WebhookReceiptEnvelope"
+        encryptedSelfBilledInvoice:
+          $ref: "#/components/schemas/WebhookReceiptEnvelope"
         creditNoteInitiationRequest:
           $ref: "#/components/schemas/WebhookCreditNoteInitiationRequest"
       description: Container for the event-specific webhook object.
@@ -3819,6 +3823,7 @@ components:
           - RETURN_REQUESTED
           - CREDIT_NOTE_CREATED
           - COMPANY_INVITATION_ACCEPTED
+          - SELF_BILLED_INVOICE_CREATED
         data:
           $ref: "#/components/schemas/WebhookData"
       description: Payload delivered to registered webhook notification URLs when

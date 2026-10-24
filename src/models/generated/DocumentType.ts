@@ -19,7 +19,8 @@
  */
 export const DocumentType = {
     RECEIPT: 'RECEIPT',
-    CREDIT_NOTE: 'CREDIT_NOTE'
+    CREDIT_NOTE: 'CREDIT_NOTE',
+    SELF_BILLED_INVOICE: 'SELF_BILLED_INVOICE'
 } as const;
 export type DocumentType = typeof DocumentType[keyof typeof DocumentType];
 

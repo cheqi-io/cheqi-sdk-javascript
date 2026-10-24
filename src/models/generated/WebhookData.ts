@@ -61,6 +61,12 @@ export interface WebhookData {
     encryptedCreditNote?: WebhookReceiptEnvelope;
     /**
      *
+     * @type {WebhookReceiptEnvelope}
+     * @memberof WebhookData
+     */
+    encryptedSelfBilledInvoice?: WebhookReceiptEnvelope;
+    /**
+     *
      * @type {WebhookCreditNoteInitiationRequest}
      * @memberof WebhookData
      */
@@ -87,6 +93,7 @@ export function WebhookDataFromJSONTyped(json: any, ignoreDiscriminator: boolean
         'companyInvitationAccepted': json['companyInvitationAccepted'] == null ? undefined : WebhookCompanyInvitationAcceptedFromJSON(json['companyInvitationAccepted']),
         'encryptedReceipt': json['encryptedReceipt'] == null ? undefined : WebhookReceiptEnvelopeFromJSON(json['encryptedReceipt']),
         'encryptedCreditNote': json['encryptedCreditNote'] == null ? undefined : WebhookReceiptEnvelopeFromJSON(json['encryptedCreditNote']),
+        'encryptedSelfBilledInvoice': json['encryptedSelfBilledInvoice'] == null ? undefined : WebhookReceiptEnvelopeFromJSON(json['encryptedSelfBilledInvoice']),
         'creditNoteInitiationRequest': json['creditNoteInitiationRequest'] == null ? undefined : WebhookCreditNoteInitiationRequestFromJSON(json['creditNoteInitiationRequest']),
     };
 }
@@ -105,6 +112,7 @@ export function WebhookDataToJSONTyped(value?: WebhookData | null, ignoreDiscrim
         'companyInvitationAccepted': WebhookCompanyInvitationAcceptedToJSON(value['companyInvitationAccepted']),
         'encryptedReceipt': WebhookReceiptEnvelopeToJSON(value['encryptedReceipt']),
         'encryptedCreditNote': WebhookReceiptEnvelopeToJSON(value['encryptedCreditNote']),
+        'encryptedSelfBilledInvoice': WebhookReceiptEnvelopeToJSON(value['encryptedSelfBilledInvoice']),
         'creditNoteInitiationRequest': WebhookCreditNoteInitiationRequestToJSON(value['creditNoteInitiationRequest']),
     };
 }
