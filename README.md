@@ -1,10 +1,10 @@
 # Cheqi JavaScript SDK
 
-JavaScript/TypeScript SDK for resolving receipt recipients and issuing end-to-end encrypted Cheqi receipts and credit notes. Its contract and behavior align with the Cheqi Java SDK, including receipt recovery and deferred encrypted downloads.
+`@cheqi/sdk` is a TypeScript-first SDK for Node.js 20+ and JavaScript runtimes with Fetch and Web Crypto. It resolves receipt recipients and issues end-to-end encrypted Cheqi receipts and credit notes. Its contract and behavior align with the Cheqi Java SDK, including receipt recovery and deferred encrypted downloads. Node and Chromium are tested in CI; see [runtime requirements](docs/runtimes.md) for other environments.
 
 ## Requirements
 
-- Node.js 20 or newer
+- Node.js 20 or newer for backend applications, or a modern browser/worker runtime with Fetch and Web Crypto
 - A Cheqi API key or OAuth access token for authenticated API calls
 - An RSA private key only when decrypting recipient envelopes
 
@@ -21,19 +21,21 @@ import { CheqiSDK, Environment } from "@cheqi/sdk";
 
 const sdk = new CheqiSDK({
   apiEndpoint: Environment.SANDBOX,
-  apiKey: "sk_..."
+  apiKey: process.env.CHEQI_API_KEY!
 });
 ```
 
 Standard API environments are `Environment.SANDBOX`, `Environment.TEST`, and `Environment.PRODUCTION`. For a custom deployment, pass its URL as `apiEndpoint` and set `receiptDownloadBaseUrl` when download fallback is enabled.
 
-A Fetch-compatible transport can be injected for proxying, tracing, or tests with the `fetch` option.
+API keys belong in trusted backend code. A Fetch-compatible transport can be injected for proxying, tracing, or tests with the `fetch` option.
+
+The `crypto` option accepts a Web Crypto provider with `subtle` and `getRandomValues`, and applies to every SDK crypto path. Omit it to use `globalThis.crypto`. Missing methods or unsupported algorithms throw `CryptoUnavailableError` with an actionable capability message. See [runtime requirements](docs/runtimes.md).
 
 Custom `apiClient` implementations take `RequestOptions` as the last argument of every operation, including `getMatch(matchId, options?)` and `requestAccessToken(request, options?)`.
 
 ## Request options and OAuth
 
-Every API method takes an optional `RequestOptions` object as its last argument. Use it to act on behalf of a connected company with its OAuth access token, or to override the timeout or retry count for one call. Without an access token, the call uses the configured `apiKey`.
+Every API method takes an optional `RequestOptions` object as its last argument. Use it to act on behalf of a connected company with its OAuth access token, or to override the timeout or retry count for one call. Authentication uses the per-call access token, then the configured `accessTokenProvider`, then `apiKey` when no provider is configured.
 
 ```ts
 await sdk.storeService.getStores(companyId, undefined, { accessToken });
@@ -54,6 +56,23 @@ const token = await sdk.oauthService.requestAccessToken({
 ```
 
 The SDK does not cache or refresh tokens. Store each token with its expiry in your own token store, request a new one before it expires, and pass the current token with `RequestOptions`.
+
+## Browser and worker issuance
+
+Use the small `@cheqi/sdk/issuer` entry point with a short-lived OAuth token. Do not ship a long-lived API key in downloadable code. The issuer uses the same matching, serialization, encryption, submission, and fallback flow as `CheqiSDK.receiptService`.
+
+```ts
+import { createCheqiIssuer, Environment } from "@cheqi/sdk/issuer";
+
+const issuer = createCheqiIssuer({
+  apiEndpoint: Environment.PRODUCTION,
+  accessTokenProvider: async () => getShortLivedToken()
+});
+
+const result = await issuer.issueReceipt(identificationDetails, receiptPayload);
+```
+
+`accessTokenProvider` is called before each HTTP request. You can also pass an `accessToken` in individual receipt options. Node backends may use the same issuer entry point, while the root `CheqiSDK` remains the full backend SDK with verification, decryption, stores, credit notes, and management APIs.
 
 ## Receipt issuance
 
@@ -77,7 +96,7 @@ import {
 
 const sdk = new CheqiSDK({
   apiEndpoint: Environment.SANDBOX,
-  apiKey: "sk_..."
+  apiKey: process.env.CHEQI_API_KEY!
 });
 
 const identificationDetails = {
@@ -90,7 +109,7 @@ const identificationDetails = {
 } satisfies IdentificationDetails;
 
 const receiptPayload = createReceiptPayload({
-  documentNumber: "POS-2026-0001",
+  documentNumber: "R-2026-0001",
   issueDate: new Date(),
   currency: "EUR",
   receiptSubtotal: "10.00",
@@ -196,7 +215,7 @@ To inspect a match or encrypt locally without submitting:
 ```ts
 const match = await sdk.receiptService.getMatch(matchId, { accessToken });
 // Requires a MATCHED digital snapshot; also accepts RecipientResolutionResponse.
-const encrypted = sdk.receiptService.generateEncryptedReceiptEnvelope(match, receiptPayload, storeId);
+const encrypted = await sdk.receiptService.generateEncryptedReceiptEnvelope(match, receiptPayload, storeId);
 await sdk.receiptService.submitEncryptedReceipt(encrypted, { accessToken });
 ```
 
@@ -237,7 +256,7 @@ const completed = await sdk.receiptService.completeDownloadFallback(
 ```ts
 const resolution = await sdk.matchingService.matchCustomer(identificationDetails, { accessToken });
 
-const delivery = sdk.encryptionService.encryptReceiptForRecipient(
+const delivery = await sdk.encryptionService.encryptReceiptForRecipient(
   receiptPayloadJson,
   resolution.recipients[0]
 );
@@ -266,7 +285,7 @@ const result = await sdk.creditNoteService.issueCreditNote(
 Customer return requests are separate from merchant-issued credit notes. Decrypt, deserialize, and validate polling or webhook requests in one call:
 
 ```ts
-const request = sdk.decryptionService.decryptCreditNoteInitiationRequest(
+const request = await sdk.decryptionService.decryptCreditNoteInitiationRequest(
   webhook.data.creditNoteInitiationRequest,
   privateKeyBase64
 );
@@ -279,7 +298,7 @@ The validation checks product IDs, positive return quantities, reason codes, not
 `decryptReceipt` accepts either an `EncryptedReceiptDeliveryResponse` from polling or a `WebhookReceiptEnvelope` from `data.encryptedReceipt` / `data.encryptedCreditNote`:
 
 ```ts
-const envelope = sdk.decryptionService.decryptReceipt(
+const envelope = await sdk.decryptionService.decryptReceipt(
   webhook.data.encryptedReceipt,
   privateKeyBase64
 );
@@ -309,8 +328,13 @@ const route = Generated.RecipientResolutionResponseDeliveryRouteTypeEnum.DIGITAL
 
 ## Development
 
+See [runtime support and entry points](docs/runtimes.md), [the v3 migration guide](docs/migration-v3.md), and the [changelog](CHANGELOG.md).
+
 ```bash
+npx playwright install chromium
 npm test
+npm run test:node
+npm run test:browser
 npm run typecheck
 make generate
 ```

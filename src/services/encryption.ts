@@ -1,96 +1,78 @@
-import { constants, createCipheriv, createPublicKey, publicEncrypt, randomBytes, type KeyObject } from "node:crypto";
+import { bytesToArrayBuffer, bytesToBase64, concatBytes, utf8ToBytes } from "../bytes.js";
 import { AES_KEY_LENGTH, GCM_IV_LENGTH } from "../crypto.js";
-import { EncryptionError } from "../errors.js";
+import { CryptoUnavailableError, EncryptionError } from "../errors.js";
+import { cryptoOperation, randomBytes, requireSubtleCrypto, type CryptoProvider } from "../runtime-crypto.js";
 import type { EncryptedReceiptPayload, MatchedRecipient } from "../types.js";
 import { decodeKey } from "../utils.js";
 
-/**
- * Parse an RSA public key, supporting both X.509 SubjectPublicKeyInfo (SPKI) and
- * raw PKCS#1 RSAPublicKey DER (the format produced by iOS
- * `SecKeyCopyExternalRepresentation`). Mirrors the Java SDK `RSAPublicKeyParser`.
- */
-function parsePublicKey(publicKeyBase64: string): KeyObject {
-  const der = decodeKey(publicKeyBase64);
+// iOS SecKeyCopyExternalRepresentation supplies PKCS#1 rather than SPKI.
+const RSA_ALGORITHM = Uint8Array.from([0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
+  0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00]);
+
+function derLength(length: number): Uint8Array {
+  if (length < 128) return Uint8Array.of(length);
+  if (length < 256) return Uint8Array.of(0x81, length);
+  return Uint8Array.of(0x82, length >> 8, length & 255);
+}
+
+function pkcs1ToSpki(pkcs1: Uint8Array): Uint8Array {
+  const bitString = concatBytes(Uint8Array.of(0x03), derLength(pkcs1.length + 1), Uint8Array.of(0), pkcs1);
+  const contents = concatBytes(RSA_ALGORITHM, bitString);
+  return concatBytes(Uint8Array.of(0x30), derLength(contents.length), contents);
+}
+
+async function importPublicKey(value: string, subtle: SubtleCrypto): Promise<CryptoKey> {
+  const der = decodeKey(value);
+  const algorithm = { name: "RSA-OAEP", hash: "SHA-256" };
   try {
-    return createPublicKey({ key: der, format: "der", type: "spki" });
-  } catch {
-    // Fall back to raw PKCS#1 RSA public key (iOS SecKeyCopyExternalRepresentation).
-    return createPublicKey({ key: der, format: "der", type: "pkcs1" });
+    return await cryptoOperation("RSA-OAEP/SHA-256 public-key import", () =>
+      subtle.importKey("spki", bytesToArrayBuffer(der), algorithm, false, ["encrypt"]));
+  } catch (error) {
+    if (error instanceof CryptoUnavailableError) throw error;
+    return cryptoOperation("RSA-OAEP/SHA-256 public-key import", () =>
+      subtle.importKey("spki", bytesToArrayBuffer(pkcs1ToSpki(der)), algorithm, false, ["encrypt"]));
   }
 }
 
-function hybridEncrypt(plaintext: string, publicKeyBase64: string): { encryptedData: string; encryptedKey: string } {
-  if (!publicKeyBase64) {
-    throw new EncryptionError("Public key is required for encryption");
-  }
-
-  const aesKey = randomBytes(AES_KEY_LENGTH);
-  const iv = randomBytes(GCM_IV_LENGTH);
-  const cipher = createCipheriv("aes-256-gcm", aesKey, iv);
-  const ciphertext = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  const encryptedData = Buffer.concat([iv, ciphertext, tag]).toString("base64");
-
-  const publicKey = parsePublicKey(publicKeyBase64);
-
-  const encryptedKey = publicEncrypt(
-    {
-      key: publicKey,
-      oaepHash: "sha256",
-      padding: constants.RSA_PKCS1_OAEP_PADDING
-    },
-    aesKey
-  ).toString("base64");
-
-  return { encryptedData, encryptedKey };
+async function hybridEncrypt(plaintext: string, publicKeyBase64: string, provider?: CryptoProvider): Promise<{ encryptedData: string; encryptedKey: string }> {
+  if (!publicKeyBase64) throw new EncryptionError("Public key is required for encryption");
+  const subtle = requireSubtleCrypto(provider, "importKey", "encrypt");
+  const aesKey = randomBytes(AES_KEY_LENGTH, provider);
+  const iv = randomBytes(GCM_IV_LENGTH, provider);
+  const key = await cryptoOperation("AES-256-GCM key import", () =>
+    subtle.importKey("raw", bytesToArrayBuffer(aesKey), "AES-GCM", false, ["encrypt"]));
+  // Web Crypto appends the 16-byte GCM tag, matching the existing iv|ciphertext|tag wire format.
+  const ciphertextAndTag = new Uint8Array(await cryptoOperation("AES-256-GCM encryption", () =>
+    subtle.encrypt({ name: "AES-GCM", iv: bytesToArrayBuffer(iv), tagLength: 128 }, key, bytesToArrayBuffer(utf8ToBytes(plaintext)))));
+  const publicKey = await importPublicKey(publicKeyBase64, subtle);
+  const wrappedKey = new Uint8Array(await cryptoOperation("RSA-OAEP/SHA-256 key wrapping", () =>
+    subtle.encrypt({ name: "RSA-OAEP" }, publicKey, bytesToArrayBuffer(aesKey))));
+  return { encryptedData: bytesToBase64(concatBytes(iv, ciphertextAndTag)), encryptedKey: bytesToBase64(wrappedKey) };
 }
 
-/**
- * Performs hybrid RSA-OAEP + AES-256-GCM encryption of receipts and credit
- * notes for individual recipients.
- */
+/** Hybrid RSA-OAEP/SHA-256 and AES-256-GCM encryption for recipient devices. */
 export class EncryptionService {
-  /**
-   * Encrypt the exact supplied JSON independently for one temporary device
-   * recipient. No receipt values are calculated, enriched, or modified.
-   */
-  encryptForDevice(plaintextJson: string, recipient: MatchedRecipient): EncryptedReceiptPayload {
-    if (!recipient) {
-      throw new EncryptionError("recipient cannot be null");
-    }
-    if (!recipient.id?.trim()) {
-      throw new EncryptionError("recipient.id cannot be null or empty");
-    }
-    if (!recipient.publicKey?.trim()) {
-      throw new EncryptionError("recipient.publicKey cannot be null or empty");
-    }
-    if (!plaintextJson?.trim()) {
-      throw new EncryptionError("plaintextJson cannot be null or empty");
-    }
+  constructor(private readonly crypto?: CryptoProvider) {}
 
+  async encryptForDevice(plaintextJson: string, recipient: MatchedRecipient): Promise<EncryptedReceiptPayload> {
+    if (!recipient) throw new EncryptionError("recipient cannot be null");
+    if (!recipient.id?.trim()) throw new EncryptionError("recipient.id cannot be null or empty");
+    if (!recipient.publicKey?.trim()) throw new EncryptionError("recipient.publicKey cannot be null or empty");
+    if (!plaintextJson?.trim()) throw new EncryptionError("plaintextJson cannot be null or empty");
     try {
-      const { encryptedData, encryptedKey } = hybridEncrypt(plaintextJson, recipient.publicKey);
-
-      return {
-        deviceRecipientId: recipient.id,
-        encryptedContent: encryptedData,
-        encryptedAesKey: encryptedKey
-      };
+      const { encryptedData, encryptedKey } = await hybridEncrypt(plaintextJson, recipient.publicKey, this.crypto);
+      return { deviceRecipientId: recipient.id, encryptedContent: encryptedData, encryptedAesKey: encryptedKey };
     } catch (error) {
-      if (error instanceof EncryptionError) throw error;
-      throw new EncryptionError(`Failed to encrypt payload for temporary recipient ${recipient.id}`, {
-        cause: error
-      });
+      if (error instanceof EncryptionError || error instanceof CryptoUnavailableError) throw error;
+      throw new EncryptionError(`Failed to encrypt payload for temporary recipient ${recipient.id}`, { cause: error });
     }
   }
 
-  /** Compatibility alias for receipt-specific callers. */
-  encryptReceiptForRecipient(receiptJson: string, recipient: MatchedRecipient): EncryptedReceiptPayload {
+  encryptReceiptForRecipient(receiptJson: string, recipient: MatchedRecipient): Promise<EncryptedReceiptPayload> {
     return this.encryptForDevice(receiptJson, recipient);
   }
 
-  /** Compatibility alias for credit-note-specific callers. */
-  encryptCreditNoteForRecipient(creditNoteJson: string, recipient: MatchedRecipient): EncryptedReceiptPayload {
+  encryptCreditNoteForRecipient(creditNoteJson: string, recipient: MatchedRecipient): Promise<EncryptedReceiptPayload> {
     return this.encryptForDevice(creditNoteJson, recipient);
   }
 }

@@ -1,6 +1,7 @@
-import { constants, createDecipheriv, createPrivateKey, privateDecrypt } from "node:crypto";
+import { base64ToBytes, bytesToArrayBuffer, bytesToUtf8 } from "../bytes.js";
 import { AES_KEY_LENGTH, GCM_IV_LENGTH, GCM_TAG_LENGTH } from "../crypto.js";
-import { DecryptionError } from "../errors.js";
+import { CryptoUnavailableError, DecryptionError } from "../errors.js";
+import { cryptoOperation, requireSubtleCrypto, type CryptoProvider } from "../runtime-crypto.js";
 import { ReceiptEnvelopeFromJSON } from "../models/generated/ReceiptEnvelope.js";
 import { instanceOfRefundPreference } from "../models/generated/RefundPreference.js";
 import { instanceOfReturnReasonCode } from "../models/generated/ReturnReasonCode.js";
@@ -28,23 +29,16 @@ function requireText(value: string | undefined, field: string): string {
   return value;
 }
 
-function rsaDecrypt(encryptedKeyBase64: string, privateKeyBase64: string): Buffer {
+async function rsaDecrypt(encryptedKeyBase64: string, privateKeyBase64: string, provider?: CryptoProvider): Promise<Uint8Array> {
   requireText(encryptedKeyBase64, "encryptedKey");
   requireText(privateKeyBase64, "privateKeyBase64");
 
-  const privateKey = createPrivateKey({
-    key: decodeKey(privateKeyBase64),
-    format: "der",
-    type: "pkcs8"
-  });
-  const decryptedKey = privateDecrypt(
-    {
-      key: privateKey,
-      oaepHash: "sha256",
-      padding: constants.RSA_PKCS1_OAEP_PADDING
-    },
-    Buffer.from(encryptedKeyBase64, "base64")
-  );
+  const subtle = requireSubtleCrypto(provider, "importKey", "decrypt");
+  const privateKey = await cryptoOperation("RSA-OAEP/SHA-256 private-key import", () =>
+    subtle.importKey("pkcs8", bytesToArrayBuffer(decodeKey(privateKeyBase64)),
+      { name: "RSA-OAEP", hash: "SHA-256" }, false, ["decrypt"]));
+  const decryptedKey = new Uint8Array(await cryptoOperation("RSA-OAEP/SHA-256 key unwrapping", () =>
+    subtle.decrypt({ name: "RSA-OAEP" }, privateKey, bytesToArrayBuffer(base64ToBytes(encryptedKeyBase64)))));
 
   if (decryptedKey.length !== AES_KEY_LENGTH) {
     throw new DecryptionError(
@@ -54,9 +48,9 @@ function rsaDecrypt(encryptedKeyBase64: string, privateKeyBase64: string): Buffe
   return decryptedKey;
 }
 
-function aesDecrypt(encryptedDataBase64: string, aesKey: Buffer): string {
+async function aesDecrypt(encryptedDataBase64: string, aesKey: Uint8Array, provider?: CryptoProvider): Promise<string> {
   requireText(encryptedDataBase64, "encryptedData");
-  const combined = Buffer.from(encryptedDataBase64, "base64");
+  const combined = base64ToBytes(encryptedDataBase64);
   const minLength = GCM_IV_LENGTH + GCM_TAG_LENGTH;
   if (combined.length < minLength) {
     throw new DecryptionError(
@@ -65,17 +59,21 @@ function aesDecrypt(encryptedDataBase64: string, aesKey: Buffer): string {
   }
 
   const iv = combined.subarray(0, GCM_IV_LENGTH);
-  const ciphertext = combined.subarray(GCM_IV_LENGTH, combined.length - GCM_TAG_LENGTH);
-  const tag = combined.subarray(combined.length - GCM_TAG_LENGTH);
-  const decipher = createDecipheriv("aes-256-gcm", aesKey, iv);
-  decipher.setAuthTag(tag);
-  return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
+  const subtle = requireSubtleCrypto(provider, "importKey", "decrypt");
+  const key = await cryptoOperation("AES-256-GCM key import", () =>
+    subtle.importKey("raw", bytesToArrayBuffer(aesKey), "AES-GCM", false, ["decrypt"]));
+  const plaintext = await cryptoOperation("AES-256-GCM decryption", () =>
+    subtle.decrypt({ name: "AES-GCM", iv: bytesToArrayBuffer(iv), tagLength: 128 }, key,
+      bytesToArrayBuffer(combined.subarray(GCM_IV_LENGTH))));
+  return bytesToUtf8(new Uint8Array(plaintext));
 }
 
 /** Decrypts complete recipient envelopes with the recipient's private key. */
 export class DecryptionService {
+  constructor(private readonly crypto?: CryptoProvider) {}
+
   /** Accepts either a polling delivery or `data.encryptedReceipt` webhook envelope. */
-  decryptReceipt(delivery: ReceiptDelivery, privateKeyBase64: string): ReceiptEnvelope {
+  async decryptReceipt(delivery: ReceiptDelivery, privateKeyBase64: string): Promise<ReceiptEnvelope> {
     if (!delivery) {
       throw new TypeError("delivery cannot be null");
     }
@@ -86,21 +84,22 @@ export class DecryptionService {
     );
 
     try {
-      const plaintext = aesDecrypt(
+      const plaintext = await aesDecrypt(
         encryptedEnvelope,
-        rsaDecrypt(encryptedEnvelopeKey, privateKeyBase64)
+        await rsaDecrypt(encryptedEnvelopeKey, privateKeyBase64, this.crypto), this.crypto
       );
       return ReceiptEnvelopeFromJSON(JSON.parse(plaintext));
     } catch (error) {
+      if (error instanceof CryptoUnavailableError) throw error;
       throw new DecryptionError("Failed to decrypt receipt envelope", { cause: error });
     }
   }
 
   /** Decrypts a customer credit-note initiation payload without deserializing it. */
-  decryptCreditNoteInitiation(
+  async decryptCreditNoteInitiation(
     request: CreditNoteInitiationDelivery,
     privateKeyBase64: string
-  ): string {
+  ): Promise<string> {
     if (!request) {
       throw new TypeError("request cannot be null");
     }
@@ -114,21 +113,22 @@ export class DecryptionService {
     );
 
     try {
-      return aesDecrypt(
+      return await aesDecrypt(
         encryptedRequest,
-        rsaDecrypt(encryptedSymmetricKey, privateKeyBase64)
+        await rsaDecrypt(encryptedSymmetricKey, privateKeyBase64, this.crypto), this.crypto
       );
     } catch (error) {
+      if (error instanceof CryptoUnavailableError) throw error;
       throw new DecryptionError("Failed to decrypt credit-note initiation request", { cause: error });
     }
   }
 
   /** Decrypts, deserializes, and validates a customer return request. */
-  decryptCreditNoteInitiationRequest(
+  async decryptCreditNoteInitiationRequest(
     request: CreditNoteInitiationDelivery,
     privateKeyBase64: string
-  ): CreditNoteInitiationRequest {
-    const plaintext = this.decryptCreditNoteInitiation(request, privateKeyBase64);
+  ): Promise<CreditNoteInitiationRequest> {
+    const plaintext = await this.decryptCreditNoteInitiation(request, privateKeyBase64);
     try {
       const parsed = JSON.parse(plaintext) as CreditNoteInitiationRequest;
       validateCreditNoteInitiationRequest(parsed);

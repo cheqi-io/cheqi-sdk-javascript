@@ -200,6 +200,6 @@ export function canonicalizeXml(xml: string): string {
 }
 
 /** Canonicalize XML and return its SHA-256 hash as a lowercase hex string. */
-export function canonicalizeAndHashXml(xml: string): string {
-  return sha256Hex(canonicalizeXml(xml));
+export function canonicalizeAndHashXml(xml: string, crypto?: import("./runtime-crypto.js").CryptoProvider): Promise<string> {
+  return sha256Hex(canonicalizeXml(xml), crypto);
 }

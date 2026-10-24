@@ -50,7 +50,7 @@ export class CreditNoteService {
         matchId: resolution.matchId!,
         parentCheqiReceiptId,
         storeId: storeId ?? undefined,
-        deviceDeliveries: this.encryptForDevices(plaintextJson, resolution.recipients!)
+        deviceDeliveries: await this.encryptForDevices(plaintextJson, resolution.recipients!)
       };
       const response = await this.apiClient.submitEncryptedCreditNote(envelope, requestOptions);
       return CreditNoteResult.accepted(parentCheqiReceiptId, response);
@@ -82,13 +82,13 @@ export class CreditNoteService {
     }
   }
 
-  private encryptForDevices(
+  private async encryptForDevices(
     plaintextJson: string,
     recipients: MatchedRecipient[]
-  ): EncryptedReceiptPayload[] {
-    return recipients.map((recipient) =>
+  ): Promise<EncryptedReceiptPayload[]> {
+    return Promise.all(recipients.map((recipient) =>
       this.encryptionService.encryptCreditNoteForRecipient(plaintextJson, recipient)
-    );
+    ));
   }
 }
 

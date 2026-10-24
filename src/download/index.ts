@@ -13,11 +13,8 @@
  * server: Cheqi stores ciphertext it can never decrypt, and decryption happens on the
  * customer's device.
  *
- * This module is intentionally separate from {@link ../services/decryption.js | DecryptionService}
- * (the Node-only RSA + AES path for receipts delivered to Cheqi wallets) and is
- * **browser-safe**: it uses only WebCrypto (`globalThis.crypto`), no `node:crypto` and no
- * `Buffer`, so the same code runs on terminals (Node >= 20) and on the public receipt
- * download page.
+ * This module is separate from recipient-envelope decryption, but both paths
+ * use Web Crypto and run in Node.js 20+ and modern browser runtimes.
  *
  * Framing matches the SDK's hybrid encryption: `base64(iv || ciphertext || tag)` in a
  * single opaque blob. The plaintext is a {@link ReceiptEnvelope} — the same envelope model
@@ -25,12 +22,16 @@
  */
 
 import { AES_KEY_LENGTH, GCM_IV_LENGTH, GCM_TAG_LENGTH } from "../crypto.js";
-import { DecryptionError, EncryptionError } from "../errors.js";
+import { base64ToBytes as fromBase64, bytesToBase64 as toBase64 } from "../bytes.js";
+import { CryptoUnavailableError, DecryptionError, EncryptionError } from "../errors.js";
+import { cryptoOperation, randomBytes, requireSubtleCrypto, type CryptoProvider } from "../runtime-crypto.js";
 import type { ReceiptEnvelope } from "../models/generated/ReceiptEnvelope.js";
 import { ReceiptEnvelopeFromJSON, ReceiptEnvelopeToJSON } from "../models/generated/ReceiptEnvelope.js";
 
 // Re-exported so browser-safe consumers can type envelopes without importing the SDK root.
 export type { ReceiptEnvelope };
+export type { CryptoProvider } from "../runtime-crypto.js";
+export { CryptoUnavailableError } from "../errors.js";
 
 /** Download id length in bytes (128 bits — the enumeration defense on the public endpoint). */
 export const DOWNLOAD_ID_LENGTH = 16;
@@ -45,41 +46,6 @@ export interface DownloadLink {
   url: string;
 }
 
-function webCrypto(): Crypto {
-  const cryptoApi = globalThis.crypto;
-  if (!cryptoApi?.subtle) {
-    throw new EncryptionError("WebCrypto is not available in this environment (requires a browser or Node >= 20)");
-  }
-  return cryptoApi;
-}
-
-function subtle(): SubtleCrypto {
-  return webCrypto().subtle;
-}
-
-function randomBytes(length: number): Uint8Array {
-  const bytes = new Uint8Array(length);
-  webCrypto().getRandomValues(bytes);
-  return bytes;
-}
-
-function toBase64(bytes: Uint8Array): string {
-  let binary = "";
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
-  return btoa(binary);
-}
-
-function fromBase64(value: string): Uint8Array {
-  const binary = atob(value);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
-
 function toBase64Url(bytes: Uint8Array): string {
   return toBase64(bytes).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 }
@@ -88,7 +54,7 @@ function fromBase64Url(value: string): Uint8Array {
   return fromBase64(value.replaceAll("-", "+").replaceAll("_", "/"));
 }
 
-async function importContentKey(contentKey: string, usage: KeyUsage): Promise<CryptoKey> {
+async function importContentKey(contentKey: string, usage: "encrypt" | "decrypt", provider?: CryptoProvider): Promise<CryptoKey> {
   let keyBytes: Uint8Array;
   try {
     keyBytes = fromBase64Url(contentKey);
@@ -98,7 +64,9 @@ async function importContentKey(contentKey: string, usage: KeyUsage): Promise<Cr
   if (keyBytes.length !== AES_KEY_LENGTH) {
     throw new DecryptionError(`Content key has invalid length: expected ${AES_KEY_LENGTH} bytes, got ${keyBytes.length}`);
   }
-  return subtle().importKey("raw", keyBytes as BufferSource, "AES-GCM", false, [usage]);
+  const subtle = requireSubtleCrypto(provider, "importKey", usage);
+  return cryptoOperation("AES-256-GCM key import", () =>
+    subtle.importKey("raw", keyBytes as BufferSource, "AES-GCM", false, [usage]));
 }
 
 /**
@@ -107,13 +75,13 @@ async function importContentKey(contentKey: string, usage: KeyUsage): Promise<Cr
  * The integration must retain the request, id, and key before exposing the URL so it can
  * finish template generation, encryption, and upload later.
  */
-export function generateDownloadLink(baseUrl: string): DownloadLink {
+export function generateDownloadLink(baseUrl: string, crypto?: CryptoProvider): DownloadLink {
   if (!baseUrl?.trim()) {
     throw new EncryptionError("baseUrl cannot be null or empty");
   }
   const receiptBaseUrl = receiptOrigin(baseUrl);
-  const downloadId = toBase64Url(randomBytes(DOWNLOAD_ID_LENGTH));
-  const contentKey = toBase64Url(randomBytes(AES_KEY_LENGTH));
+  const downloadId = toBase64Url(randomBytes(DOWNLOAD_ID_LENGTH, crypto));
+  const contentKey = toBase64Url(randomBytes(AES_KEY_LENGTH, crypto));
   return { downloadId, contentKey, url: buildDownloadUrl(receiptBaseUrl, downloadId, contentKey) };
 }
 
@@ -160,16 +128,17 @@ function receiptOrigin(baseUrl: string): string {
  * persist the result: upload retries MUST resend identical bytes (the endpoint is
  * idempotent on them).
  */
-export async function encryptDownloadEnvelope(envelope: ReceiptEnvelope, contentKey: string): Promise<string> {
-  const key = await importContentKey(contentKey, "encrypt");
-  const iv = randomBytes(GCM_IV_LENGTH);
+export async function encryptDownloadEnvelope(envelope: ReceiptEnvelope, contentKey: string, crypto?: CryptoProvider): Promise<string> {
+  const key = await importContentKey(contentKey, "encrypt", crypto);
+  const iv = randomBytes(GCM_IV_LENGTH, crypto);
   // Normalize through FromJSON first so callers may pass either plain parsed JSON or
   // hydrated model objects. The round-trip also allow-lists the current envelope fields.
   const normalized = ReceiptEnvelopeToJSON(ReceiptEnvelopeFromJSON(envelope));
   const plaintext = new TextEncoder().encode(JSON.stringify(normalized));
 
   const encrypted = new Uint8Array(
-    await subtle().encrypt({ name: "AES-GCM", iv: iv as BufferSource }, key, plaintext as BufferSource)
+    await cryptoOperation("AES-256-GCM encryption", () => requireSubtleCrypto(crypto, "encrypt")
+      .encrypt({ name: "AES-GCM", iv: iv as BufferSource, tagLength: 128 }, key, plaintext as BufferSource))
   );
 
   const combined = new Uint8Array(iv.length + encrypted.length);
@@ -183,8 +152,8 @@ export async function encryptDownloadEnvelope(envelope: ReceiptEnvelope, content
  * `GET /public/receipt/encrypted/{downloadId}`) with the content key from the URL fragment.
  * Throws {@link DecryptionError} when the key is wrong or the blob was tampered with.
  */
-export async function decryptDownloadEnvelope(encryptedEnvelope: string, contentKey: string): Promise<ReceiptEnvelope> {
-  const key = await importContentKey(contentKey, "decrypt");
+export async function decryptDownloadEnvelope(encryptedEnvelope: string, contentKey: string, crypto?: CryptoProvider): Promise<ReceiptEnvelope> {
+  const key = await importContentKey(contentKey, "decrypt", crypto);
 
   let combined: Uint8Array;
   try {
@@ -202,12 +171,13 @@ export async function decryptDownloadEnvelope(encryptedEnvelope: string, content
 
   let plaintext: ArrayBuffer;
   try {
-    plaintext = await subtle().decrypt(
-      { name: "AES-GCM", iv: iv as BufferSource },
+    plaintext = await cryptoOperation("AES-256-GCM decryption", () => requireSubtleCrypto(crypto, "decrypt").decrypt(
+      { name: "AES-GCM", iv: iv as BufferSource, tagLength: 128 },
       key,
       ciphertextWithTag as BufferSource
-    );
-  } catch {
+    ));
+  } catch (error) {
+    if (error instanceof CryptoUnavailableError) throw error;
     throw new DecryptionError("Failed to decrypt envelope: wrong content key or tampered ciphertext");
   }
 
@@ -220,13 +190,15 @@ export async function decryptDownloadEnvelope(encryptedEnvelope: string, content
 
 /** Object-oriented facade matching the Java SDK's stateless DownloadService. */
 export class DownloadService {
+  constructor(private readonly crypto?: CryptoProvider) {}
+
   static readonly DOWNLOAD_ID_LENGTH = DOWNLOAD_ID_LENGTH;
   static readonly CONTENT_KEY_LENGTH = AES_KEY_LENGTH;
   static readonly PRODUCTION_BASE_URL = "https://receipt.cheqi.io";
   static readonly SANDBOX_BASE_URL = "https://sandbox.receipt.cheqi.io";
 
   generateDownloadLink(baseUrl: string): DownloadLink {
-    return generateDownloadLink(baseUrl);
+    return generateDownloadLink(baseUrl, this.crypto);
   }
 
   buildDownloadUrl(baseUrl: string, downloadId: string, contentKey: string): string {
@@ -238,10 +210,10 @@ export class DownloadService {
   }
 
   encryptDownloadEnvelope(envelope: ReceiptEnvelope, contentKey: string): Promise<string> {
-    return encryptDownloadEnvelope(envelope, contentKey);
+    return encryptDownloadEnvelope(envelope, contentKey, this.crypto);
   }
 
   decryptDownloadEnvelope(ciphertext: string, contentKey: string): Promise<ReceiptEnvelope> {
-    return decryptDownloadEnvelope(ciphertext, contentKey);
+    return decryptDownloadEnvelope(ciphertext, contentKey, this.crypto);
   }
 }

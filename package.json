@@ -22,28 +22,49 @@
     "sdk"
   ],
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+      "import": "./dist/index.js"
     },
     "./download": {
       "types": "./dist/download/index.d.ts",
       "default": "./dist/download/index.js"
+    },
+    "./issuer": {
+      "types": "./dist/issuer.d.ts",
+      "import": "./dist/issuer.js"
+    },
+    "./crypto": {
+      "types": "./dist/crypto-entry.d.ts",
+      "import": "./dist/crypto-entry.js"
+    },
+    "./models": {
+      "types": "./dist/models/index.d.ts",
+      "import": "./dist/models/index.js"
+    },
+    "./verification": {
+      "types": "./dist/verification-entry.d.ts",
+      "import": "./dist/verification-entry.js"
     }
   },
   "files": [
     "dist",
     "README.md",
+    "CHANGELOG.md",
+    "docs",
     "LICENSE"
   ],
   "scripts": {
     "prebuild": "node ./scripts/clean-dist.mjs",
     "build": "tsc -p tsconfig.build.json",
-    "test": "npm run build && node --test test/sdk.test.js",
-    "check:package": "npm run build && node ./scripts/check-package.mjs && npm pack --dry-run",
+    "test": "npm run build && node --test test/*.test.js",
+    "test:node": "npm run build && node --test test/sdk.test.js test/interoperability.test.js test/runtime-crypto.test.js",
+    "test:browser": "npm run build && node --test test/package-consumers.test.js",
+    "check:package": "npm run build && node ./scripts/check-package.mjs",
     "typecheck": "tsc -p tsconfig.json",
     "prepublishOnly": "npm test && npm run check:package"
   },
@@ -52,6 +73,8 @@
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
+    "esbuild": "^0.28.2",
+    "playwright": "^1.63.0",
     "typescript": "^5.9.3",
     "yaml": "^2.9.1"
   },

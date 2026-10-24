@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { CheqiApiError, CheqiSDKError, ErrorCodes, SubmissionInProgressError } from "../errors.js";
 import {
   encryptDownloadEnvelope,
@@ -23,15 +22,16 @@ import type {
 import { validateRequestOptions } from "../http/request-options.js";
 import type { RecipientResolutionResponseDeliveryRouteTypeEnum } from "../models/generated/RecipientResolutionResponse.js";
 import { serializeJson } from "../utils.js";
-import { VerificationService } from "./verification.js";
+import { canonicalizeJson } from "../rfc8785.js";
+import { sha256Hex } from "../utils.js";
 import { EncryptionService } from "./encryption.js";
 import { MatchingService } from "./matching.js";
+import { randomUuid, type CryptoProvider } from "../runtime-crypto.js";
 
 const PAYLOAD_DOCUMENT_VERSION = "receipt-payload-v1";
 
 /** Issues definitive receipt payloads through Cheqi's zero-knowledge device flow. */
 export class ReceiptService {
-  private readonly verificationService = new VerificationService();
 
   constructor(
     private readonly apiClient: Pick<
@@ -40,7 +40,8 @@ export class ReceiptService {
     >,
     private readonly encryptionService: EncryptionService,
     private readonly matchingService: MatchingService,
-    private readonly receiptDownloadBaseUrl: string | null = "https://receipt.cheqi.io"
+    private readonly receiptDownloadBaseUrl: string | null = "https://receipt.cheqi.io",
+    private readonly crypto?: CryptoProvider
   ) {
     if (!apiClient) throw new TypeError("apiClient cannot be null");
     if (!encryptionService) throw new TypeError("encryptionService cannot be null");
@@ -176,8 +177,8 @@ export class ReceiptService {
   }
 
   /** Encrypts locally for a resolved route or a retrieved MATCHED digital snapshot. */
-  generateEncryptedReceiptEnvelope(match: RecipientResolutionResponse | MatchStatusResponse,
-    receiptPayload: ReceiptPayload, storeId: string | null = null): EncryptedReceiptEnvelope {
+  async generateEncryptedReceiptEnvelope(match: RecipientResolutionResponse | MatchStatusResponse,
+    receiptPayload: ReceiptPayload, storeId: string | null = null): Promise<EncryptedReceiptEnvelope> {
     requireNonNull(match, "match");
     if ("state" in match) {
       if (match.state !== "MATCHED" || match.route !== "DIGITAL") {
@@ -192,21 +193,21 @@ export class ReceiptService {
     return this.generateEnvelope(match.matchId!, match.recipients!, receiptPayload, storeId);
   }
 
-  private generateEnvelope(matchId: string, recipients: MatchedRecipient[],
-    payload: ReceiptPayload, storeId: string | null): EncryptedReceiptEnvelope {
+  private async generateEnvelope(matchId: string, recipients: MatchedRecipient[],
+    payload: ReceiptPayload, storeId: string | null): Promise<EncryptedReceiptEnvelope> {
     validateMatchId(matchId);
     validatePayload(payload);
     if (!recipients?.length || recipients.some((recipient) => recipient == null)) {
       throw validationError("Match must contain owner devices");
     }
     return { matchId, storeId: storeId ?? undefined,
-      deviceDeliveries: this.encryptForDevices(serializeJson(payload), recipients) };
+      deviceDeliveries: await this.encryptForDevices(serializeJson(payload), recipients) };
   }
 
   private async submitPayload(matchId: string, recipients: MatchedRecipient[], payload: ReceiptPayload,
     storeId: string | null, options: RequestOptions): Promise<ReceiptSubmissionResponse> {
     const response = await this.apiClient.submitEncryptedReceipt(
-      this.generateEnvelope(matchId, recipients, payload, storeId), options);
+      await this.generateEnvelope(matchId, recipients, payload, storeId), options);
     if (!response?.cheqiReceiptId?.trim() || response.matchId !== matchId) {
       throw new CheqiApiError("Invalid receipt submission response", { errorCode: ErrorCodes.INVALID_RESPONSE });
     }
@@ -281,8 +282,8 @@ export class ReceiptService {
     const baseUrl = requireDownloadBaseUrl(this.receiptDownloadBaseUrl);
 
     try {
-      const link = generateDownloadLink(baseUrl);
-      const ciphertext = await encryptDownloadEnvelope(receiptEnvelope, link.contentKey);
+      const link = generateDownloadLink(baseUrl, this.crypto);
+      const ciphertext = await encryptDownloadEnvelope(receiptEnvelope, link.contentKey, this.crypto);
       const response = await this.apiClient.uploadEncryptedDownloadReceipt(
         {
           downloadId: link.downloadId,
@@ -303,13 +304,13 @@ export class ReceiptService {
     }
   }
 
-  private encryptForDevices(
+  private async encryptForDevices(
     plaintextJson: string,
     recipients: MatchedRecipient[]
-  ): EncryptedReceiptPayload[] {
-    return recipients.map((recipient) =>
+  ): Promise<EncryptedReceiptPayload[]> {
+    return Promise.all(recipients.map((recipient) =>
       this.encryptionService.encryptReceiptForRecipient(plaintextJson, recipient)
-    );
+    ));
   }
 
   private async deliverClientEncryptedDownload(
@@ -330,13 +331,13 @@ export class ReceiptService {
 
   private async prepareDownload(receiptPayload: ReceiptPayload,
     identificationDetails?: IdentificationDetails): Promise<PreparedReceiptDownload> {
-    const link = generateDownloadLink(requireDownloadBaseUrl(this.receiptDownloadBaseUrl));
+    const link = generateDownloadLink(requireDownloadBaseUrl(this.receiptDownloadBaseUrl), this.crypto);
     const payloadDocument = serializeJson(receiptPayload);
     const envelope: ReceiptEnvelope = {
       cheqiReceiptId: link.downloadId,
       envelopeVersion: 2,
       receiptGeneratorVersion: PAYLOAD_DOCUMENT_VERSION,
-      receiptUuid: randomUUID(),
+      receiptUuid: randomUuid(this.crypto),
       documents: {
         RECEIPT_PAYLOAD: { mediaType: "application/json", content: payloadDocument },
         ...(identificationDetails == null ? {} : {
@@ -350,8 +351,8 @@ export class ReceiptService {
       downloadUrl: link.url,
       uploadRequest: {
         downloadId: link.downloadId,
-        ciphertext: await encryptDownloadEnvelope(envelope, link.contentKey),
-        templateHash: this.verificationService.calculateCheqiReceiptHash(payloadDocument)
+        ciphertext: await encryptDownloadEnvelope(envelope, link.contentKey, this.crypto),
+        templateHash: await sha256Hex(canonicalizeJson(payloadDocument), this.crypto)
       }
     };
   }

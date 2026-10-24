@@ -1,5 +1,4 @@
 import { CheqiSDKConfig } from "../config.js";
-import { createRequire } from "node:module";
 import { CheqiApiError, ErrorCodes, SubmissionInProgressError } from "../errors.js";
 import type { Logger } from "../logger.js";
 import { NoopLogger } from "../logger.js";
@@ -41,8 +40,7 @@ import type { DestinationResponse, InviteEmployeesResponse, RegisterRequest, Reg
 import { Endpoints } from "./endpoints.js";
 import { RetryHandler } from "./retry.js";
 
-const require = createRequire(import.meta.url);
-const SDK_VERSION = (require("../../package.json") as { version: string }).version;
+const SDK_VERSION = "3.0.0";
 
 function mapErrorCode(status: number) {
   if (status === 400) return ErrorCodes.INVALID_REQUEST;
@@ -347,14 +345,15 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
 
   // ---------- internals ----------
 
-  /** Uses the per-call access token when present, otherwise the configured API key. */
-  private headers(options: RequestOptions, authenticate: boolean): Record<string, string> {
+  /** Uses per-call credentials, the token provider, then the configured API key. */
+  private async headers(options: RequestOptions, authenticate: boolean): Promise<Record<string, string>> {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       "User-Agent": this.userAgent
     };
     if (!authenticate) return headers;
-    const token = options.accessToken ?? this.config.apiKey;
+    const token = options.accessToken ?? (this.config.accessTokenProvider
+      ? await this.config.accessTokenProvider() : this.config.apiKey);
     if (!token?.trim()) {
       throw new CheqiApiError("No credentials for this call: pass { accessToken } or configure apiKey", {
         errorCode: ErrorCodes.AUTHENTICATION_FAILED,
@@ -381,7 +380,7 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
 
     this.logger.debug(`${operation} ${method} ${url.pathname}`);
 
-    const headers = this.headers(callOptions, authenticate);
+    const headers = await this.headers(callOptions, authenticate);
     const timeoutMs = (callOptions.timeoutSeconds ?? this.config.timeoutSeconds) * 1000;
     const response = await this.retryHandler.executeWithRetry(
       () => this.fetchImpl(url, {
