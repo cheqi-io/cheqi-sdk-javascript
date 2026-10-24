@@ -9,6 +9,9 @@ import { EncryptionService } from "./services/encryption.js";
 import { MatchingService } from "./services/matching.js";
 import { ReceiptService } from "./services/receipt.js";
 import { StoreService } from "./services/store.js";
+import { CompanyService } from "./services/company.js";
+import { WebhookService } from "./services/webhook.js";
+import { OAuthService } from "./services/oauth.js";
 import { VerificationService } from "./services/verification.js";
 
 /**
@@ -27,7 +30,7 @@ import { VerificationService } from "./services/verification.js";
  * const result = await sdk.receiptService.issueReceipt(
  *   identificationDetails,
  *   receiptPayload,
- *   accessToken
+ *   { accessToken }
  * );
  * ```
  */
@@ -41,7 +44,10 @@ export class CheqiSDK {
   readonly matchingService: MatchingService;
   readonly receiptService: ReceiptService;
   readonly storeService: StoreService;
+  readonly companyService: CompanyService;
+  readonly webhookService: WebhookService;
   readonly creditNoteService: CreditNoteService;
+  readonly oauthService: OAuthService;
 
   constructor(options: CheqiSDKOptions) {
     this.config = new CheqiSDKConfig(options);
@@ -58,11 +64,14 @@ export class CheqiSDK {
       this.config.receiptDownloadBaseUrl
     );
     this.storeService = new StoreService(this.apiClient);
+    this.companyService = new CompanyService(this.apiClient);
+    this.webhookService = new WebhookService(this.apiClient);
     this.creditNoteService = new CreditNoteService(
       this.apiClient,
       this.encryptionService,
       this.matchingService
     );
+    this.oauthService = new OAuthService(this.apiClient);
   }
 
 }

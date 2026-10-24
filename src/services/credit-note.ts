@@ -8,13 +8,13 @@ import type {
   IdentificationDetails,
   MatchedRecipient,
   ReceiptSubmissionResponse,
-  RecipientResolutionResponse
+  RecipientResolutionResponse,
+  RequestOptions
 } from "../types.js";
+import { validateRequestOptions } from "../http/request-options.js";
 import { serializeJson } from "../utils.js";
 import { EncryptionService } from "./encryption.js";
 import { MatchingService } from "./matching.js";
-
-const UUID_PATTERN = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 
 /** Issues definitive credit-note values through the encrypted credit-note endpoint. */
 export class CreditNoteService {
@@ -33,17 +33,15 @@ export class CreditNoteService {
     identificationDetails: IdentificationDetails,
     parentCheqiReceiptId: string,
     creditNotePayload: unknown,
-    storeIdOrAccessToken: ReceiptIssueOptions | string | null = null,
-    accessToken?: string | null
+    options?: ReceiptIssueOptions | null
   ): Promise<CreditNoteResult> {
     requireNonNull(identificationDetails, "identificationDetails");
     requireText(parentCheqiReceiptId, "parentCheqiReceiptId");
     requireNonNull(creditNotePayload, "creditNotePayload");
-    const { storeId, token } = resolveArguments(storeIdOrAccessToken, accessToken);
-    validateOptionalAccessToken(token);
+    const { storeId = null, ...requestOptions } = validateRequestOptions(options) as ReceiptIssueOptions;
 
     try {
-      const resolution = await this.matchingService.matchCustomer(identificationDetails, token);
+      const resolution = await this.matchingService.matchCustomer(identificationDetails, requestOptions);
       validateDeviceRoute(resolution);
       const plaintextJson = typeof creditNotePayload === "string"
         ? creditNotePayload
@@ -54,7 +52,7 @@ export class CreditNoteService {
         storeId: storeId ?? undefined,
         deviceDeliveries: await this.encryptForDevices(plaintextJson, resolution.recipients!)
       };
-      const response = await this.apiClient.submitEncryptedCreditNote(envelope, token);
+      const response = await this.apiClient.submitEncryptedCreditNote(envelope, requestOptions);
       return CreditNoteResult.accepted(parentCheqiReceiptId, response);
     } catch (error) {
       if (error instanceof CheqiApiError) throw wrapApiError("Credit-note submission failed", error);
@@ -67,12 +65,12 @@ export class CreditNoteService {
 
   async submitEncryptedCreditNote(
     envelope: EncryptedCreditNoteEnvelope,
-    accessToken: string | null = null
+    options?: RequestOptions | null
   ): Promise<ReceiptSubmissionResponse> {
     requireNonNull(envelope, "envelope");
-    validateOptionalAccessToken(accessToken);
+    validateRequestOptions(options);
     try {
-      return await this.apiClient.submitEncryptedCreditNote(envelope, accessToken);
+      return await this.apiClient.submitEncryptedCreditNote(envelope, options);
     } catch (error) {
       if (error instanceof CheqiApiError) {
         throw wrapApiError("Encrypted credit-note submission failed", error);
@@ -105,26 +103,6 @@ function validateDeviceRoute(resolution: RecipientResolutionResponse): void {
   if (!resolution.recipients?.length) {
     throw validationError("Recipient resolution did not include owner devices");
   }
-}
-
-function resolveArguments(
-  storeIdOrAccessToken: ReceiptIssueOptions | string | null,
-  explicitAccessToken: string | null | undefined
-): { storeId: string | null; token: string | null } {
-  if (typeof storeIdOrAccessToken === "object" && storeIdOrAccessToken !== null) {
-    return { storeId: storeIdOrAccessToken.storeId ?? null, token: storeIdOrAccessToken.accessToken ?? null };
-  }
-  if (explicitAccessToken !== undefined) {
-    return { storeId: storeIdOrAccessToken, token: explicitAccessToken };
-  }
-  if (storeIdOrAccessToken && !UUID_PATTERN.test(storeIdOrAccessToken)) {
-    return { storeId: null, token: storeIdOrAccessToken };
-  }
-  return { storeId: storeIdOrAccessToken, token: null };
-}
-
-function validateOptionalAccessToken(value: string | null): void {
-  if (value != null && !value.trim()) throw validationError("accessToken cannot be empty");
 }
 
 function requireNonNull<T>(value: T | null | undefined, name: string): asserts value is T {

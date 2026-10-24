@@ -29,7 +29,31 @@ Standard API environments are `Environment.SANDBOX`, `Environment.TEST`, and `En
 
 API keys belong in trusted backend code. A Fetch-compatible transport can be injected for proxying, tracing, or tests with the `fetch` option.
 
-Custom `apiClient` implementations must implement `getMatch(matchId, accessToken?)` alongside the existing HTTP operations to support receipt recovery.
+Custom `apiClient` implementations take `RequestOptions` as the last argument of every operation, including `getMatch(matchId, options?)` and `requestAccessToken(request, options?)`.
+
+## Request options and OAuth
+
+Every API method takes an optional `RequestOptions` object as its last argument. Use it to act on behalf of a connected company with its OAuth access token, or to override the timeout or retry count for one call. Without an access token, the call uses the configured `apiKey`.
+
+```ts
+await sdk.storeService.getStores(companyId, undefined, { accessToken });
+```
+
+The same object can also set `timeoutSeconds` and `maxRetries` for a single call.
+
+Company access tokens are short-lived and bound to one Grant, so an integration that serves several companies holds one token per Grant. Request one with the client-credentials grant; the request and response use the generated snake_case OAuth models:
+
+```ts
+const token = await sdk.oauthService.requestAccessToken({
+  client_id: clientId,
+  client_secret: clientSecret,
+  grant_id: grantId,
+  scope: "receipt:issue"
+});
+// token.access_token, token.expires_in
+```
+
+The SDK does not cache or refresh tokens. Store each token with its expiry in your own token store, request a new one before it expires, and pass the current token with `RequestOptions`.
 
 ## Browser, POS extension, and worker issuance
 
@@ -131,7 +155,7 @@ if (result.cheqiReceiptId) {
 }
 ```
 
-For OAuth and store association, use a JavaScript options object:
+For OAuth and store association, pass `ReceiptIssueOptions` (`RequestOptions` plus `storeId`):
 
 ```ts
 await sdk.receiptService.issueReceipt(identificationDetails, receiptPayload, {
@@ -140,7 +164,7 @@ await sdk.receiptService.issueReceipt(identificationDetails, receiptPayload, {
 });
 ```
 
-The same options work with `resumeReceipt` and `issueCreditNote`. Existing positional token and store arguments remain supported.
+The same options work with `resumeReceipt` and `issueCreditNote`.
 
 `ReceiptPayload` is definitive. Supply `taxesApplied`, totals, line values, payment presentation, and jurisdictional data yourself. The SDK does not infer, calculate, or reconcile them.
 
@@ -172,7 +196,7 @@ if (result.preparedDownload) {
 
 // Later, in your integration's worker:
 const prepared: PreparedReceiptDownload = JSON.parse(serializedDownload);
-await sdk.receiptService.uploadPreparedDownload(prepared, accessToken);
+await sdk.receiptService.uploadPreparedDownload(prepared, { accessToken });
 
 if (result.state === ReceiptIssueState.DIGITAL_PENDING && result.matchId) {
   const resumed = await sdk.receiptService.resumeReceipt(result.matchId, receiptPayload, {
@@ -187,10 +211,10 @@ A prepared download is a plain object pairing `downloadUrl` with the generated `
 To inspect a match or encrypt locally without submitting:
 
 ```ts
-const match = await sdk.receiptService.getMatch(matchId, accessToken);
+const match = await sdk.receiptService.getMatch(matchId, { accessToken });
 // Requires a MATCHED digital snapshot; also accepts RecipientResolutionResponse.
 const encrypted = await sdk.receiptService.generateEncryptedReceiptEnvelope(match, receiptPayload, storeId);
-await sdk.receiptService.submitEncryptedReceipt(encrypted, accessToken);
+await sdk.receiptService.submitEncryptedReceipt(encrypted, { accessToken });
 ```
 
 `sdk.apiClient.submitEncryptedReceipt` and `sdk.apiClient.submitEncryptedCreditNote` throw `SubmissionInProgressError` for an `IN_PROGRESS` response. It carries `retryAfterSeconds`; an HTTP 202 with a receipt ID remains an accepted submission. The service submission methods wrap this error in `CheqiSDKError.cause`. Non-idempotent submissions are never automatically retried by the HTTP client.
@@ -207,7 +231,7 @@ To create an encrypted download without recipient matching:
 const result = await sdk.receiptService.issueDownloadReceipt(
   { paymentType: PaymentType.CASH },
   receiptPayload,
-  accessToken
+  { accessToken }
 );
 console.log(result.downloadUrl);
 ```
@@ -221,14 +245,14 @@ const completed = await sdk.receiptService.completeDownloadFallback(
   result,
   receiptEnvelope,
   templateHash,
-  accessToken
+  { accessToken }
 );
 ```
 
 ## Lower-level operations
 
 ```ts
-const resolution = await sdk.matchingService.matchCustomer(identificationDetails, accessToken);
+const resolution = await sdk.matchingService.matchCustomer(identificationDetails, { accessToken });
 
 const delivery = await sdk.encryptionService.encryptReceiptForRecipient(
   receiptPayloadJson,
@@ -238,7 +262,7 @@ const delivery = await sdk.encryptionService.encryptReceiptForRecipient(
 const response = await sdk.receiptService.submitEncryptedReceipt({
   matchId: resolution.matchId,
   deviceDeliveries: [delivery]
-}, accessToken);
+}, { accessToken });
 ```
 
 The caller must use the selected route and preserve identical definitive plaintext across device encryptions.
@@ -252,7 +276,7 @@ const result = await sdk.creditNoteService.issueCreditNote(
   identificationDetails,
   parentCheqiReceiptId,
   definitiveCreditNotePayload,
-  accessToken
+  { storeId, accessToken }
 );
 ```
 
@@ -285,9 +309,9 @@ The plaintext is already a complete `ReceiptEnvelope`; no backend-context merge 
 Store operations require an OAuth token with the relevant store permissions:
 
 ```ts
-const store = await sdk.storeService.createStore(companyId, createStoreRequest, accessToken);
-const stores = await sdk.storeService.getStores(companyId, accessToken);
-const activeStores = await sdk.storeService.getActiveStores(companyId, accessToken);
+const store = await sdk.storeService.createStore(companyId, createStoreRequest, { accessToken });
+const stores = await sdk.storeService.getStores(companyId, undefined, { accessToken });
+const activeStores = await sdk.storeService.getActiveStores(companyId, { accessToken });
 ```
 
 ## Generated models

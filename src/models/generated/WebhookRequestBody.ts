@@ -37,6 +37,12 @@ export interface WebhookRequestBody {
      * @memberof WebhookRequestBody
      */
     notificationUrl?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof WebhookRequestBody
+     */
+    destinationId?: string;
 }
 
 
@@ -46,7 +52,8 @@ export interface WebhookRequestBody {
 export const WebhookRequestBodyEventsEnum = {
     RECEIPT_CREATED: 'RECEIPT_CREATED',
     RETURN_REQUESTED: 'RETURN_REQUESTED',
-    CREDIT_NOTE_CREATED: 'CREDIT_NOTE_CREATED'
+    CREDIT_NOTE_CREATED: 'CREDIT_NOTE_CREATED',
+    COMPANY_INVITATION_ACCEPTED: 'COMPANY_INVITATION_ACCEPTED'
 } as const;
 export type WebhookRequestBodyEventsEnum = typeof WebhookRequestBodyEventsEnum[keyof typeof WebhookRequestBodyEventsEnum];
 
@@ -71,6 +78,7 @@ export function WebhookRequestBodyFromJSONTyped(json: any, ignoreDiscriminator: 
         'name': json['name'] == null ? undefined : json['name'],
         'events': json['events'] == null ? undefined : json['events'],
         'notificationUrl': json['notificationUrl'] == null ? undefined : json['notificationUrl'],
+        'destinationId': json['destinationId'] == null ? undefined : json['destinationId'],
     };
 }
 
@@ -88,5 +96,6 @@ export function WebhookRequestBodyToJSONTyped(value?: WebhookRequestBody | null,
         'name': value['name'],
         'events': value['events'],
         'notificationUrl': value['notificationUrl'],
+        'destinationId': value['destinationId'],
     };
 }

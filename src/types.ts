@@ -56,11 +56,8 @@ export type {
   WebhookReceiptEnvelope
 } from "./models/generated/index.js";
 
-/** Options shared by receipt issuance, recovery, and credit-note issuance. */
-export interface ReceiptIssueOptions {
-  storeId?: string | null;
-  accessToken?: string | null;
-}
+import type { RequestOptions } from "./http/request-options.js";
+export type { RequestOptions, ReceiptIssueOptions } from "./http/request-options.js";
 
 export interface CheqiSDKOptions {
   /** Cheqi API base URL, usually one of the Environment constants. */
@@ -79,10 +76,13 @@ export interface CheqiSDKOptions {
   apiClient?: CheqiApiClient;
 }
 
-export interface RequestOptions {
+/** Internal options for one HTTP call made by {@link CheqiApiClient} implementations. */
+export interface HttpCallOptions {
   body?: unknown;
   params?: Record<string, string | number | boolean | null | undefined>;
-  accessToken?: string | null;
+  options?: RequestOptions | null;
+  /** Set to false for calls that carry their own credentials, such as the token request. */
+  authenticate?: boolean;
   operation: string;
   /** Override whether transient failures may be retried for this operation. */
   retryable?: boolean;
@@ -92,55 +92,69 @@ export interface RequestOptions {
 
 export type FetchLike = typeof fetch;
 
-/** HTTP boundary used by the handwritten SDK services. */
+/**
+ * HTTP boundary used by the handwritten SDK services.
+ * Every call takes optional {@link RequestOptions} as its last argument.
+ */
 export interface CheqiApiClient {
+  requestAccessToken(
+    request: import("./models/generated/index.js").ClientCredentialsTokenRequest,
+    options?: RequestOptions | null
+  ): Promise<import("./models/generated/index.js").OAuthTokenExchangeResponse>;
   getMatch(
     matchId: string,
-    accessToken?: string | null
+    options?: RequestOptions | null
   ): Promise<import("./models/generated/index.js").MatchStatusResponse>;
   matchCustomer(
     request: import("./models/generated/index.js").IdentificationDetails,
-    accessToken?: string | null
+    options?: RequestOptions | null
   ): Promise<import("./models/generated/index.js").RecipientResolutionResponse>;
   submitEncryptedReceipt(
     request: import("./models/generated/index.js").EncryptedReceiptEnvelope,
-    accessToken?: string | null
+    options?: RequestOptions | null
   ): Promise<import("./models/generated/index.js").ReceiptSubmissionResponse>;
   submitEncryptedCreditNote(
     request: import("./models/generated/index.js").EncryptedCreditNoteEnvelope,
-    accessToken?: string | null
+    options?: RequestOptions | null
   ): Promise<import("./models/generated/index.js").ReceiptSubmissionResponse>;
   uploadEncryptedDownloadReceipt(
     request: import("./models/generated/index.js").ClientReceiptDownloadRequest,
-    accessToken?: string | null
+    options?: RequestOptions | null
   ): Promise<import("./models/generated/index.js").ClientReceiptDownloadResponse>;
   sendReceiptViaEmail(
     customerEmail: string,
     receipt: import("./models/generated/index.js").CheqiReceipt,
-    accessToken?: string | null
+    options?: RequestOptions | null
   ): Promise<void>;
   createStore(
     companyId: string,
     request: import("./models/generated/index.js").CreateStoreRequest,
-    accessToken?: string | null
+    options?: RequestOptions | null
   ): Promise<import("./models/generated/index.js").StoreDTO>;
+  inviteUsers(companyId: string, emails: string[], resendPending?: boolean, options?: RequestOptions | null): Promise<import("./models/generated/index.js").InviteEmployeesResponse>;
+  listReceiptDestinations(options?: RequestOptions | null): Promise<import("./models/generated/index.js").DestinationResponse[]>;
+  registerReceiptDestination(request: import("./models/generated/index.js").RegisterRequest, options?: RequestOptions | null): Promise<import("./models/generated/index.js").RegisterResponse>;
+  getPendingReceipts(destinationId: string, options?: RequestOptions | null): Promise<import("./models/generated/index.js").WebhookReceiptEnvelope[]>;
+  acknowledgeReceipts(destinationId: string, receiptIds: string[], options?: RequestOptions | null): Promise<void>;
+  deactivateReceiptDestination(destinationId: string, options?: RequestOptions | null): Promise<void>;
+  updateWebhookSubscriptionUrl(subscriptionId: string, notificationUrl: string, options?: RequestOptions | null): Promise<import("./models/generated/index.js").WebhookDTO>;
   getStores(
     companyId: string,
     activeOnly?: boolean,
-    accessToken?: string | null
+    options?: RequestOptions | null
   ): Promise<import("./models/generated/index.js").StoreDTO[]>;
   getStore(
     companyId: string,
     storeId: string,
-    accessToken?: string | null
+    options?: RequestOptions | null
   ): Promise<import("./models/generated/index.js").StoreDTO>;
   updateStore(
     companyId: string,
     storeId: string,
     request: import("./models/generated/index.js").UpdateStoreRequest,
-    accessToken?: string | null
+    options?: RequestOptions | null
   ): Promise<import("./models/generated/index.js").StoreDTO>;
-  deleteStore(companyId: string, storeId: string, accessToken?: string | null): Promise<void>;
-  activateStore(companyId: string, storeId: string, accessToken?: string | null): Promise<void>;
-  deactivateStore(companyId: string, storeId: string, accessToken?: string | null): Promise<void>;
+  deleteStore(companyId: string, storeId: string, options?: RequestOptions | null): Promise<void>;
+  activateStore(companyId: string, storeId: string, options?: RequestOptions | null): Promise<void>;
+  deactivateStore(companyId: string, storeId: string, options?: RequestOptions | null): Promise<void>;
 }
