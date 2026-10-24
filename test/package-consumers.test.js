@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 import { build } from "esbuild";
 import { chromium } from "playwright";
+import { verifyPosCryptoReport } from "../scripts/verify-pos-crypto-report.mjs";
 
 const root = new URL("../", import.meta.url);
 const fixture = JSON.parse(await readFile(new URL("./fixtures/v2-crypto.json", import.meta.url), "utf8"));
@@ -31,19 +32,27 @@ test("installed package works in Node and Chromium, with a small issuer bundle",
       ["--module", "NodeNext", "--moduleResolution", "NodeNext", "--target", "ES2022",
         "--strict", "--skipLibCheck", "--noEmit", join(temp, "types.mts")]);
 
-    await copyFile(new URL("../test-fixtures/shopify-extension/index.ts", import.meta.url), join(temp, "index.ts"));
-    await copyFile(new URL("../test-fixtures/shopify-extension/browser-test.ts", import.meta.url), join(temp, "browser-test.ts"));
+    const fixtureDir = join(temp, "test-fixtures", "shopify-extension");
+    await mkdir(fixtureDir, { recursive: true });
+    await mkdir(join(temp, "test", "fixtures"), { recursive: true });
+    await Promise.all(["index.ts", "browser-test.ts", "device-check.ts"].map((file) =>
+      copyFile(new URL(`../test-fixtures/shopify-extension/${file}`, import.meta.url), join(fixtureDir, file))));
+    await copyFile(new URL("./fixtures/v2-crypto.json", import.meta.url), join(temp, "test", "fixtures", "v2-crypto.json"));
+    execFileSync(join(new URL("../node_modules/.bin/tsc", import.meta.url).pathname),
+      ["--module", "ESNext", "--moduleResolution", "Bundler", "--target", "ES2022", "--strict",
+        "--skipLibCheck", "--resolveJsonModule", "--noEmit", ...["index.ts", "browser-test.ts", "device-check.ts"]
+          .map((file) => join(fixtureDir, file))]);
     const issuerBundle = join(temp, "issuer.js");
-    const issuerBuild = await build({ entryPoints: [join(temp, "index.ts")], outfile: issuerBundle,
+    const issuerBuild = await build({ entryPoints: [join(fixtureDir, "index.ts")], outfile: issuerBundle,
       bundle: true, platform: "browser", format: "esm", minify: true, metafile: true });
     const issuerCode = await readFile(issuerBundle);
     const gzipBytes = gzipSync(issuerCode).length;
     assert.ok(gzipBytes < 25_000, `issuer bundle is ${gzipBytes} gzip bytes`);
     assert.ok(Object.keys(issuerBuild.metafile.inputs).every((path) => !path.startsWith("node:")));
-    assert.doesNotMatch(issuerCode.toString(), /\bBuffer\b|node:crypto|node:fs|node:path|process\.env/);
+    assert.doesNotMatch(issuerCode.toString(), /\bBuffer\b|\brequire\s*\(|node:crypto|node:fs|node:path|process\.env/);
 
     const browserBundle = join(temp, "browser.js");
-    await build({ entryPoints: [join(temp, "browser-test.ts")], outfile: browserBundle,
+    await build({ entryPoints: [join(fixtureDir, "browser-test.ts")], outfile: browserBundle,
       bundle: true, platform: "browser", format: "esm", minify: true });
     const script = await readFile(browserBundle, "utf8");
     browser = await chromium.launch({ headless: true });
@@ -66,6 +75,17 @@ test("installed package works in Node and Chromium, with a small issuer bundle",
       ["/recipient/resolve", "/receipt/encrypted"]);
     assert.ok(result.issuer.requests.every((request) => request.authorization === "Bearer short-lived-oauth-token"));
     assert.equal(result.issuer.requests[1].body.deviceDeliveries.length, 1);
+    assert.equal(result.diagnostics.runtime, "non-pos");
+    assert.equal(result.diagnostics.posVersion, null);
+    assert.equal(result.diagnostics.passed, true, JSON.stringify(result.diagnostics.checks));
+    assert.equal(result.missingCrypto.name, "CryptoUnavailableError");
+    assert.equal(result.missingCrypto.capability, "crypto.subtle");
+    assert.match(result.missingCrypto.message, /crypto option/);
+    verifyPosCryptoReport(result.diagnostics, { allowNonPos: true });
+    assert.throws(() => verifyPosCryptoReport(result.diagnostics), /not generated inside Shopify POS/);
+    const corrupted = structuredClone(result.diagnostics);
+    corrupted.artifacts.SPKI.encryptedContent = corrupted.artifacts.SPKI.encryptedContent.slice(0, -8) + "AAAAAAAA";
+    assert.throws(() => verifyPosCryptoReport(corrupted, { allowNonPos: true }));
     console.log(`Issuer bundle: ${issuerCode.length} bytes raw, ${gzipBytes} bytes gzip`);
   } finally {
     await browser?.close();

@@ -26,6 +26,7 @@ import { canonicalizeJson } from "../rfc8785.js";
 import { sha256Hex } from "../utils.js";
 import { EncryptionService } from "./encryption.js";
 import { MatchingService } from "./matching.js";
+import { randomUuid, type CryptoProvider } from "../runtime-crypto.js";
 
 const PAYLOAD_DOCUMENT_VERSION = "receipt-payload-v1";
 
@@ -39,7 +40,8 @@ export class ReceiptService {
     >,
     private readonly encryptionService: EncryptionService,
     private readonly matchingService: MatchingService,
-    private readonly receiptDownloadBaseUrl: string | null = "https://receipt.cheqi.io"
+    private readonly receiptDownloadBaseUrl: string | null = "https://receipt.cheqi.io",
+    private readonly crypto?: CryptoProvider
   ) {
     if (!apiClient) throw new TypeError("apiClient cannot be null");
     if (!encryptionService) throw new TypeError("encryptionService cannot be null");
@@ -280,8 +282,8 @@ export class ReceiptService {
     const baseUrl = requireDownloadBaseUrl(this.receiptDownloadBaseUrl);
 
     try {
-      const link = generateDownloadLink(baseUrl);
-      const ciphertext = await encryptDownloadEnvelope(receiptEnvelope, link.contentKey);
+      const link = generateDownloadLink(baseUrl, this.crypto);
+      const ciphertext = await encryptDownloadEnvelope(receiptEnvelope, link.contentKey, this.crypto);
       const response = await this.apiClient.uploadEncryptedDownloadReceipt(
         {
           downloadId: link.downloadId,
@@ -329,13 +331,13 @@ export class ReceiptService {
 
   private async prepareDownload(receiptPayload: ReceiptPayload,
     identificationDetails?: IdentificationDetails): Promise<PreparedReceiptDownload> {
-    const link = generateDownloadLink(requireDownloadBaseUrl(this.receiptDownloadBaseUrl));
+    const link = generateDownloadLink(requireDownloadBaseUrl(this.receiptDownloadBaseUrl), this.crypto);
     const payloadDocument = serializeJson(receiptPayload);
     const envelope: ReceiptEnvelope = {
       cheqiReceiptId: link.downloadId,
       envelopeVersion: 2,
       receiptGeneratorVersion: PAYLOAD_DOCUMENT_VERSION,
-      receiptUuid: crypto.randomUUID(),
+      receiptUuid: randomUuid(this.crypto),
       documents: {
         RECEIPT_PAYLOAD: { mediaType: "application/json", content: payloadDocument },
         ...(identificationDetails == null ? {} : {
@@ -349,8 +351,8 @@ export class ReceiptService {
       downloadUrl: link.url,
       uploadRequest: {
         downloadId: link.downloadId,
-        ciphertext: await encryptDownloadEnvelope(envelope, link.contentKey),
-        templateHash: await sha256Hex(canonicalizeJson(payloadDocument))
+        ciphertext: await encryptDownloadEnvelope(envelope, link.contentKey, this.crypto),
+        templateHash: await sha256Hex(canonicalizeJson(payloadDocument), this.crypto)
       }
     };
   }

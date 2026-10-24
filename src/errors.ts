@@ -127,6 +127,16 @@ export class DecryptionError extends CheqiSDKError {
   }
 }
 
+/** The runtime or configured provider cannot perform a required crypto operation. */
+export class CryptoUnavailableError extends CheqiSDKError {
+  constructor(readonly capability: string, options: Pick<CheqiErrorOptions, "cause"> = {}) {
+    super(`Required cryptography is unavailable: ${capability}. ` +
+      "Use a runtime with Web Crypto support or pass a compatible implementation as the crypto option.",
+    { ...options, errorCode: ErrorCodes.CONFIGURATION_ERROR });
+    this.name = "CryptoUnavailableError";
+  }
+}
+
 export class ReceiptProcessingError extends CheqiSDKError {}
 
 export class CreditNoteProcessingError extends CheqiSDKError {}

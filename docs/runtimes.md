@@ -1,6 +1,8 @@
 # Runtime support and entry points
 
-`@cheqi/sdk` supports trusted Node.js 20+ backends, modern browsers, POS/UI extensions, worker runtimes, Deno, and Bun. The shared protocol uses Fetch, Web Crypto, typed arrays, text encoding, URLs, and abort signals. A runtime must provide these standard APIs.
+`@cheqi/sdk` is tested on Node.js 20+ and Chromium. Its portable issuer is intended for POS/UI extensions and other JavaScript runtimes that provide the required standard APIs. Shopify POS device verification is a separate requirement; see [POS verification](pos-verification.md). Deno, Bun, and Cloudflare Workers are not exercised in CI.
+
+The shared protocol uses Fetch, Web Crypto, typed arrays, `TextEncoder`/`TextDecoder`, `atob`/`btoa`, URL, timers, and `AbortSignal.timeout`. There is no dependency on `window`, `document`, Node built-ins, `Buffer`, or `require`. The `fetch` and `crypto` configuration options accept compatible implementations without modifying globals.
 
 ## Trusted backend
 
@@ -24,13 +26,19 @@ import { createCheqiIssuer, Environment } from "@cheqi/sdk/issuer";
 
 const issuer = createCheqiIssuer({
   apiEndpoint: Environment.PRODUCTION,
-  accessTokenProvider: async () => getShortLivedToken()
+  accessTokenProvider: async () => getShortLivedToken(),
+  crypto: platformCrypto,
+  fetch: platformFetch
 });
 
 await issuer.issueReceipt(identificationDetails, receiptPayload);
 ```
 
 The issuer entry point exports receipt payload helpers and avoids importing decryption, private-key handling, XML verification, and store administration. The token provider runs for each HTTP request. Keep long-lived credentials out of browser bundles. Callers can pass an `accessToken` per receipt operation when they already hold a scoped token.
+
+Omit `crypto` and `fetch` to use their global implementations. A `CryptoProvider` needs `subtle` and `getRandomValues`; `randomUUID` is not needed. One configured provider supplies receipt and credit-note encryption, recipient decryption, JSON/XML hashes, download links, download encryption/decryption, and UUIDv4 randomness. The standalone crypto services accept the provider in their constructors; download functions and `sha256Hex` accept it as their last optional argument.
+
+Missing crypto methods and unavailable AES-256-GCM, RSA-OAEP/SHA-256, or SHA-256 algorithms throw `CryptoUnavailableError` with `errorCode: "CONFIGURATION_ERROR"`. Its `capability` names the failing operation and its message explains how to supply an implementation. Invalid keys and modified ciphertext remain encryption/decryption errors. The SDK never substitutes insecure randomness, uploads plaintext on crypto failure, or falls back to a Node implementation. Provider validation is lazy, so non-crypto backend APIs remain usable independently.
 
 ## Other entry points
 
@@ -43,4 +51,4 @@ The issuer entry point exports receipt payload helpers and avoids importing decr
 | `@cheqi/sdk/models` | Models and value factories |
 | `@cheqi/sdk/download` | Encrypted download links |
 
-The built-package consumer fixture checks Node and Chromium. The issuer bundle from that fixture is 42,829 bytes raw and 12,997 bytes gzip with esbuild minification. It has no Node built-ins, Buffer shim, or crypto shim. The 25 KB gzip target is met. Deno, Bun, and Cloudflare Workers are supported through the same standard APIs; this repository does not yet run those runtimes in CI.
+The installed-package consumer fixture checks Node and Chromium, including Node-to-Chromium and Chromium-to-Node decryption using the legacy protocol. The issuer fixture is approximately 15 KB gzip with esbuild minification, below the enforced 25 KB target. It contains no Node built-ins, `Buffer` shim, `require`, or crypto shim. The separate device diagnostic bundle includes public test private keys and is never part of the published SDK or production issuer bundle.

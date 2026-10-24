@@ -1,6 +1,6 @@
 # Cheqi JavaScript SDK
 
-`@cheqi/sdk` is a TypeScript-first SDK for Node.js 20+ and modern JavaScript runtimes, including browsers, POS extensions, workers, Deno, and Bun. It resolves receipt recipients and issues end-to-end encrypted Cheqi receipts and credit notes. Its contract and behavior align with the Cheqi Java SDK, including receipt recovery and deferred encrypted downloads.
+`@cheqi/sdk` is a TypeScript-first SDK for Node.js 20+ and JavaScript runtimes with Fetch and Web Crypto. It resolves receipt recipients and issues end-to-end encrypted Cheqi receipts and credit notes. Its contract and behavior align with the Cheqi Java SDK, including receipt recovery and deferred encrypted downloads. Node and Chromium are tested in CI; Shopify POS requires [device verification](docs/pos-verification.md).
 
 ## Requirements
 
@@ -29,11 +29,13 @@ Standard API environments are `Environment.SANDBOX`, `Environment.TEST`, and `En
 
 API keys belong in trusted backend code. A Fetch-compatible transport can be injected for proxying, tracing, or tests with the `fetch` option.
 
+The `crypto` option accepts a Web Crypto provider with `subtle` and `getRandomValues`, and applies to every SDK crypto path. Omit it to use `globalThis.crypto`. Missing methods or unsupported algorithms throw `CryptoUnavailableError` with an actionable capability message. See [runtime requirements](docs/runtimes.md).
+
 Custom `apiClient` implementations take `RequestOptions` as the last argument of every operation, including `getMatch(matchId, options?)` and `requestAccessToken(request, options?)`.
 
 ## Request options and OAuth
 
-Every API method takes an optional `RequestOptions` object as its last argument. Use it to act on behalf of a connected company with its OAuth access token, or to override the timeout or retry count for one call. Without an access token, the call uses the configured `apiKey`.
+Every API method takes an optional `RequestOptions` object as its last argument. Use it to act on behalf of a connected company with its OAuth access token, or to override the timeout or retry count for one call. Authentication uses the per-call access token, then the configured `accessTokenProvider`, then `apiKey` when no provider is configured.
 
 ```ts
 await sdk.storeService.getStores(companyId, undefined, { accessToken });

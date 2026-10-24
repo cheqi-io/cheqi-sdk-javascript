@@ -28,6 +28,7 @@ export class CheqiSDKConfig {
   readonly apiEndpoint: string;
   readonly environment: Nullable<string>;
   readonly apiKey: Nullable<string>;
+  readonly crypto: import("./runtime-crypto.js").CryptoProvider | undefined;
   readonly accessTokenProvider: (() => string | Promise<string>) | null;
   readonly receiptDownloadBaseUrl: Nullable<string>;
   readonly privateKey: Nullable<string>;
@@ -82,6 +83,7 @@ export class CheqiSDKConfig {
       this.logger.warn("No authentication configured. API calls will fail unless access tokens are provided explicitly.");
     }
     this.apiKey = apiKey;
+    this.crypto = options.crypto;
     this.accessTokenProvider = accessTokenProvider;
 
     // --- private key ---

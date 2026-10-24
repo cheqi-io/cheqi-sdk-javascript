@@ -51,17 +51,18 @@ export class CheqiSDK {
 
   constructor(options: CheqiSDKOptions) {
     this.config = new CheqiSDKConfig(options);
-    this.verificationService = new VerificationService();
-    this.decryptionService = new DecryptionService();
-    this.downloadService = new DownloadService();
-    this.encryptionService = new EncryptionService();
+    this.verificationService = new VerificationService(options.crypto);
+    this.decryptionService = new DecryptionService(options.crypto);
+    this.downloadService = new DownloadService(options.crypto);
+    this.encryptionService = new EncryptionService(options.crypto);
     this.apiClient = options.apiClient ?? new DefaultCheqiApiClient(this.config, options.fetch);
     this.matchingService = new MatchingService(this.apiClient);
     this.receiptService = new ReceiptService(
       this.apiClient,
       this.encryptionService,
       this.matchingService,
-      this.config.receiptDownloadBaseUrl
+      this.config.receiptDownloadBaseUrl,
+      options.crypto
     );
     this.storeService = new StoreService(this.apiClient);
     this.companyService = new CompanyService(this.apiClient);

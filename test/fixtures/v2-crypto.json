@@ -10,5 +10,6 @@
   "ivBase64": "D7TYqDEx9fHvd/K2",
   "ciphertextBase64": "T1YRn0YIyNFlFuWWrFmVd16Giq94SL0X3BjnIonG/ZX2qnbJn/viJYcooTQ3CCVLSw1GVg==",
   "tagBase64": "RLIgh2VfdE8JwrvJMGH7dQ==",
-  "aesKeyBase64": "aMDNj9W7xDZ364a9GamsMjbbPdY/Ouffl0Ju17SbdUo="
+  "aesKeyBase64": "aMDNj9W7xDZ364a9GamsMjbbPdY/Ouffl0Ju17SbdUo=",
+  "publicKeyPkcs1B64": "MIIBCgKCAQEAjk516TTNjDKs6lW5Munk7XhOl194ECjGFsiMbxKt1Rqnd/IFsVU8gQngNxj3qT8uUCbrFYTaSRQ28NtjfTlWldDJgjEWDOoSGEbY4M7t4Y5E1+T4ergcO8etRBLsKLSUMpwWBABOhiR7iTyexsaQNt3ZS0aoqJ2uX/fq1F9K1oJKh4FCgnNghM70vos6WgLdTxPLgvIOxJtwm0QDLEefKckxMYcv+xvrWeG/C0Reh3hmGalhQWTWhB0h64TGLtKspf1Nz3NF4DUGI1RoW2rvanh7P4eOMHwzvnCHAH+z0HhtSAYL9KThrJVkyai5Bq6XNy3tbkEpagSe2Z8q/7NH0wIDAQAB"
 }

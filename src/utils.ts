@@ -1,4 +1,5 @@
 import { base64ToBytes, bytesToArrayBuffer, bytesToUtf8, utf8ToBytes } from "./bytes.js";
+import { cryptoOperation, requireSubtleCrypto, type CryptoProvider } from "./runtime-crypto.js";
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -22,8 +23,10 @@ export function isValidEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
-export async function sha256Hex(value: string): Promise<string> {
-  const digest = new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", bytesToArrayBuffer(utf8ToBytes(value))));
+export async function sha256Hex(value: string, crypto?: CryptoProvider): Promise<string> {
+  const subtle = requireSubtleCrypto(crypto, "digest");
+  const digest = new Uint8Array(await cryptoOperation("SHA-256 hashing", () =>
+    subtle.digest("SHA-256", bytesToArrayBuffer(utf8ToBytes(value)))));
   return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 

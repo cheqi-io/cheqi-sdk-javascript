@@ -13,6 +13,7 @@ const requiredFiles = [
   "CHANGELOG.md",
   "docs/runtimes.md",
   "docs/migration-v3.md",
+  "docs/pos-verification.md",
   packageJson.main,
   packageJson.types,
   packageJson.exports["./download"].default,
@@ -40,6 +41,9 @@ try {
   const [artifact] = JSON.parse(output);
   if (!artifact?.files?.some((file) => file.path === "dist/issuer.js")) {
     throw new Error("Issuer entry point is missing from npm package");
+  }
+  if (artifact.files.some((file) => /^(?:test|test-fixtures|scripts)\//.test(file.path))) {
+    throw new Error("Development diagnostics and test keys must not be published in the SDK");
   }
   console.log(`npm package verified: ${artifact.filename}`);
 } finally {

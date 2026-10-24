@@ -1,8 +1,11 @@
 import { canonicalizeJson } from "../rfc8785.js";
 import { sha256Hex } from "../utils.js";
 import { canonicalizeAndHashXml, canonicalizeXml } from "../xml.js";
+import type { CryptoProvider } from "../runtime-crypto.js";
 
 export class VerificationService {
+  constructor(private readonly crypto?: CryptoProvider) {}
+
   calculateCheqiReceiptHash(cheqiReceipt: string | object): Promise<string> {
     return this.canonicalizeAndHashJson(cheqiReceipt);
   }
@@ -12,7 +15,7 @@ export class VerificationService {
   }
 
   canonicalizeAndHashJson(json: string | object): Promise<string> {
-    return sha256Hex(canonicalizeJson(json));
+    return sha256Hex(canonicalizeJson(json), this.crypto);
   }
 
   async verifyJsonHash(json: string | object, expectedHash: string): Promise<boolean> {
@@ -28,7 +31,7 @@ export class VerificationService {
   }
 
   canonicalizeAndHashXml(xml: string): Promise<string> {
-    return canonicalizeAndHashXml(xml);
+    return canonicalizeAndHashXml(xml, this.crypto);
   }
 
   async verifyXmlHash(xml: string, expectedHash: string): Promise<boolean> {

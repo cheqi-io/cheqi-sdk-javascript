@@ -1,6 +1,7 @@
 import { bytesToArrayBuffer, bytesToBase64, concatBytes, utf8ToBytes } from "../bytes.js";
 import { AES_KEY_LENGTH, GCM_IV_LENGTH } from "../crypto.js";
-import { EncryptionError } from "../errors.js";
+import { CryptoUnavailableError, EncryptionError } from "../errors.js";
+import { cryptoOperation, randomBytes, requireSubtleCrypto, type CryptoProvider } from "../runtime-crypto.js";
 import type { EncryptedReceiptPayload, MatchedRecipient } from "../types.js";
 import { decodeKey } from "../utils.js";
 
@@ -20,40 +21,49 @@ function pkcs1ToSpki(pkcs1: Uint8Array): Uint8Array {
   return concatBytes(Uint8Array.of(0x30), derLength(contents.length), contents);
 }
 
-async function importPublicKey(value: string): Promise<CryptoKey> {
+async function importPublicKey(value: string, subtle: SubtleCrypto): Promise<CryptoKey> {
   const der = decodeKey(value);
   const algorithm = { name: "RSA-OAEP", hash: "SHA-256" };
   try {
-    return await crypto.subtle.importKey("spki", bytesToArrayBuffer(der), algorithm, false, ["encrypt"]);
-  } catch {
-    return crypto.subtle.importKey("spki", bytesToArrayBuffer(pkcs1ToSpki(der)), algorithm, false, ["encrypt"]);
+    return await cryptoOperation("RSA-OAEP/SHA-256 public-key import", () =>
+      subtle.importKey("spki", bytesToArrayBuffer(der), algorithm, false, ["encrypt"]));
+  } catch (error) {
+    if (error instanceof CryptoUnavailableError) throw error;
+    return cryptoOperation("RSA-OAEP/SHA-256 public-key import", () =>
+      subtle.importKey("spki", bytesToArrayBuffer(pkcs1ToSpki(der)), algorithm, false, ["encrypt"]));
   }
 }
 
-async function hybridEncrypt(plaintext: string, publicKeyBase64: string): Promise<{ encryptedData: string; encryptedKey: string }> {
+async function hybridEncrypt(plaintext: string, publicKeyBase64: string, provider?: CryptoProvider): Promise<{ encryptedData: string; encryptedKey: string }> {
   if (!publicKeyBase64) throw new EncryptionError("Public key is required for encryption");
-  const aesKey = crypto.getRandomValues(new Uint8Array(AES_KEY_LENGTH));
-  const iv = crypto.getRandomValues(new Uint8Array(GCM_IV_LENGTH));
-  const key = await crypto.subtle.importKey("raw", bytesToArrayBuffer(aesKey), "AES-GCM", false, ["encrypt"]);
+  const subtle = requireSubtleCrypto(provider, "importKey", "encrypt");
+  const aesKey = randomBytes(AES_KEY_LENGTH, provider);
+  const iv = randomBytes(GCM_IV_LENGTH, provider);
+  const key = await cryptoOperation("AES-256-GCM key import", () =>
+    subtle.importKey("raw", bytesToArrayBuffer(aesKey), "AES-GCM", false, ["encrypt"]));
   // Web Crypto appends the 16-byte GCM tag, matching the existing iv|ciphertext|tag wire format.
-  const ciphertextAndTag = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: bytesToArrayBuffer(iv) }, key, bytesToArrayBuffer(utf8ToBytes(plaintext))));
-  const publicKey = await importPublicKey(publicKeyBase64);
-  const wrappedKey = new Uint8Array(await crypto.subtle.encrypt({ name: "RSA-OAEP" }, publicKey, bytesToArrayBuffer(aesKey)));
+  const ciphertextAndTag = new Uint8Array(await cryptoOperation("AES-256-GCM encryption", () =>
+    subtle.encrypt({ name: "AES-GCM", iv: bytesToArrayBuffer(iv), tagLength: 128 }, key, bytesToArrayBuffer(utf8ToBytes(plaintext)))));
+  const publicKey = await importPublicKey(publicKeyBase64, subtle);
+  const wrappedKey = new Uint8Array(await cryptoOperation("RSA-OAEP/SHA-256 key wrapping", () =>
+    subtle.encrypt({ name: "RSA-OAEP" }, publicKey, bytesToArrayBuffer(aesKey))));
   return { encryptedData: bytesToBase64(concatBytes(iv, ciphertextAndTag)), encryptedKey: bytesToBase64(wrappedKey) };
 }
 
 /** Hybrid RSA-OAEP/SHA-256 and AES-256-GCM encryption for recipient devices. */
 export class EncryptionService {
+  constructor(private readonly crypto?: CryptoProvider) {}
+
   async encryptForDevice(plaintextJson: string, recipient: MatchedRecipient): Promise<EncryptedReceiptPayload> {
     if (!recipient) throw new EncryptionError("recipient cannot be null");
     if (!recipient.id?.trim()) throw new EncryptionError("recipient.id cannot be null or empty");
     if (!recipient.publicKey?.trim()) throw new EncryptionError("recipient.publicKey cannot be null or empty");
     if (!plaintextJson?.trim()) throw new EncryptionError("plaintextJson cannot be null or empty");
     try {
-      const { encryptedData, encryptedKey } = await hybridEncrypt(plaintextJson, recipient.publicKey);
+      const { encryptedData, encryptedKey } = await hybridEncrypt(plaintextJson, recipient.publicKey, this.crypto);
       return { deviceRecipientId: recipient.id, encryptedContent: encryptedData, encryptedAesKey: encryptedKey };
     } catch (error) {
-      if (error instanceof EncryptionError) throw error;
+      if (error instanceof EncryptionError || error instanceof CryptoUnavailableError) throw error;
       throw new EncryptionError(`Failed to encrypt payload for temporary recipient ${recipient.id}`, { cause: error });
     }
   }

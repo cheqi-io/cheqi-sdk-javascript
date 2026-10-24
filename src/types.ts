@@ -72,6 +72,8 @@ export interface CheqiSDKOptions {
   logger?: import("./logger.js").Logger;
   /** Custom Fetch-compatible transport, useful for instrumentation and testing. */
   fetch?: FetchLike;
+  /** Web Crypto implementation. Defaults to globalThis.crypto; never falls back to Node crypto. */
+  crypto?: import("./runtime-crypto.js").CryptoProvider;
   /** Fully custom API client. When set, `fetch` is ignored. */
   apiClient?: CheqiApiClient;
 }

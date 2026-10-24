@@ -5,7 +5,8 @@
 | `services/encryption.ts` | `node:crypto`, `Buffer` | AES-GCM, RSA-OAEP, key parsing | Web Crypto and `Uint8Array`; SPKI and iOS PKCS#1 public keys remain supported. Wire format remains Base64 of IV, ciphertext, tag. |
 | `services/decryption.ts` | `node:crypto`, `Buffer` | RSA unwrapping and AES-GCM | Web Crypto; PKCS#8 private keys, SHA-256 OAEP, and framing retained. |
 | `utils.ts` | `node:crypto`, `Buffer` | SHA-256 and DER decoding | Web Crypto hash and shared byte helpers. |
-| `services/receipt.ts` | `node:crypto` | Random receipt UUID | `crypto.randomUUID()`. Receipt serialization unchanged. |
+| `services/receipt.ts` | `node:crypto` | Random receipt UUID | UUIDv4 from the configured provider's `getRandomValues()`. No `randomUUID()` requirement. Receipt serialization unchanged. |
+| `runtime-crypto.ts` | Global-only crypto | Runtime capabilities | Injectable `CryptoProvider`; missing methods and unsupported algorithms produce actionable `CryptoUnavailableError` failures. |
 | `http/client.ts` | `node:module` | Reading package version | Embedded SDK version; Fetch transport, timeout, retries, errors and correlation IDs preserved. |
 | `download/index.ts` | Web Crypto, `atob`, `btoa` | Download encryption and Base64 | Already portable; kept the existing download wire format. |
 | `xml.ts` | `@xmldom/xmldom` | XML parsing for exclusive canonicalization | Retained for full SDK verification. Excluded from issuer entry point. |
