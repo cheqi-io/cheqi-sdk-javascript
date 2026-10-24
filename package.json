@@ -64,8 +64,6 @@
     "test": "npm run build && node --test test/*.test.js",
     "test:node": "npm run build && node --test test/sdk.test.js test/interoperability.test.js test/runtime-crypto.test.js",
     "test:browser": "npm run build && node --test test/package-consumers.test.js",
-    "build:pos-check": "npm run build && node ./scripts/build-pos-crypto-check.mjs",
-    "verify:pos-report": "node ./scripts/verify-pos-crypto-report.mjs",
     "check:package": "npm run build && node ./scripts/check-package.mjs",
     "typecheck": "tsc -p tsconfig.json",
     "prepublishOnly": "npm test && npm run check:package"

@@ -13,7 +13,6 @@ const requiredFiles = [
   "CHANGELOG.md",
   "docs/runtimes.md",
   "docs/migration-v3.md",
-  "docs/pos-verification.md",
   packageJson.main,
   packageJson.types,
   packageJson.exports["./download"].default,
@@ -43,7 +42,7 @@ try {
     throw new Error("Issuer entry point is missing from npm package");
   }
   if (artifact.files.some((file) => /^(?:test|test-fixtures|scripts)\//.test(file.path))) {
-    throw new Error("Development diagnostics and test keys must not be published in the SDK");
+    throw new Error("Test fixtures and development scripts must not be published in the SDK");
   }
   console.log(`npm package verified: ${artifact.filename}`);
 } finally {

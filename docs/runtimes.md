@@ -1,6 +1,6 @@
 # Runtime support and entry points
 
-`@cheqi/sdk` is tested on Node.js 20+ and Chromium. Its portable issuer is intended for POS/UI extensions and other JavaScript runtimes that provide the required standard APIs. Shopify POS device verification is a separate requirement; see [POS verification](pos-verification.md). Deno, Bun, and Cloudflare Workers are not exercised in CI.
+`@cheqi/sdk` is tested on Node.js 20+ and Chromium. Its portable issuer can be used in JavaScript runtimes that provide the required standard APIs. Deno, Bun, and Cloudflare Workers are not exercised in CI.
 
 The shared protocol uses Fetch, Web Crypto, typed arrays, `TextEncoder`/`TextDecoder`, `atob`/`btoa`, URL, timers, and `AbortSignal.timeout`. There is no dependency on `window`, `document`, Node built-ins, `Buffer`, or `require`. The `fetch` and `crypto` configuration options accept compatible implementations without modifying globals.
 
@@ -19,7 +19,7 @@ await sdk.receiptService.issueReceipt(identificationDetails, receiptPayload);
 
 The root SDK includes matching, issuance, download receipts, decryption, verification, credit notes, and store APIs. API keys are suitable for trusted servers. OAuth access tokens remain available on individual operations. The `fetch` option accepts a custom Fetch-compatible transport, and `apiClient` accepts a full custom client.
 
-## Browser, POS, and worker
+## Browser and worker
 
 ```ts
 import { createCheqiIssuer, Environment } from "@cheqi/sdk/issuer";
@@ -51,4 +51,4 @@ Missing crypto methods and unavailable AES-256-GCM, RSA-OAEP/SHA-256, or SHA-256
 | `@cheqi/sdk/models` | Models and value factories |
 | `@cheqi/sdk/download` | Encrypted download links |
 
-The installed-package consumer fixture checks Node and Chromium, including Node-to-Chromium and Chromium-to-Node decryption using the legacy protocol. The issuer fixture is approximately 15 KB gzip with esbuild minification, below the enforced 25 KB target. It contains no Node built-ins, `Buffer` shim, `require`, or crypto shim. The separate device diagnostic bundle includes public test private keys and is never part of the published SDK or production issuer bundle.
+The installed-package consumer fixture checks Node and Chromium, including Node-to-Chromium and Chromium-to-Node decryption using the legacy protocol. The issuer fixture is approximately 15 KB gzip with esbuild minification, below the enforced 25 KB target. It contains no Node built-ins, `Buffer` shim, `require`, or crypto shim. Test fixtures are excluded from the published SDK.

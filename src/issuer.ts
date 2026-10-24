@@ -5,7 +5,7 @@ import { MatchingService } from "./services/matching.js";
 import { ReceiptService } from "./services/receipt.js";
 import type { CheqiSDKOptions } from "./types.js";
 
-/** A small issuer facade for browser, POS, worker, and server integrations. */
+/** A small issuer facade for browser, worker, and server integrations. */
 export function createCheqiIssuer(options: CheqiSDKOptions): ReceiptService {
   const config = new CheqiSDKConfig(options);
   const client = options.apiClient ?? new DefaultCheqiApiClient(config, options.fetch);

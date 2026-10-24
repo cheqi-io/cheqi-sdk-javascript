@@ -1,6 +1,6 @@
 # Cheqi JavaScript SDK
 
-`@cheqi/sdk` is a TypeScript-first SDK for Node.js 20+ and JavaScript runtimes with Fetch and Web Crypto. It resolves receipt recipients and issues end-to-end encrypted Cheqi receipts and credit notes. Its contract and behavior align with the Cheqi Java SDK, including receipt recovery and deferred encrypted downloads. Node and Chromium are tested in CI; Shopify POS requires [device verification](docs/pos-verification.md).
+`@cheqi/sdk` is a TypeScript-first SDK for Node.js 20+ and JavaScript runtimes with Fetch and Web Crypto. It resolves receipt recipients and issues end-to-end encrypted Cheqi receipts and credit notes. Its contract and behavior align with the Cheqi Java SDK, including receipt recovery and deferred encrypted downloads. Node and Chromium are tested in CI; see [runtime requirements](docs/runtimes.md) for other environments.
 
 ## Requirements
 
@@ -57,7 +57,7 @@ const token = await sdk.oauthService.requestAccessToken({
 
 The SDK does not cache or refresh tokens. Store each token with its expiry in your own token store, request a new one before it expires, and pass the current token with `RequestOptions`.
 
-## Browser, POS extension, and worker issuance
+## Browser and worker issuance
 
 Use the small `@cheqi/sdk/issuer` entry point with a short-lived OAuth token. Do not ship a long-lived API key in downloadable code. The issuer uses the same matching, serialization, encryption, submission, and fallback flow as `CheqiSDK.receiptService`.
 
@@ -109,7 +109,7 @@ const identificationDetails = {
 } satisfies IdentificationDetails;
 
 const receiptPayload = createReceiptPayload({
-  documentNumber: "POS-2026-0001",
+  documentNumber: "R-2026-0001",
   issueDate: new Date(),
   currency: "EUR",
   receiptSubtotal: "10.00",

@@ -6,7 +6,7 @@ function response(body: unknown): Response {
   return { status: 200, headers: { get: () => null }, text: async () => JSON.stringify(body) } as unknown as Response;
 }
 
-/** Minimal POS-style consumer: no platform APIs or Node shims. */
+/** Portable consumer: no platform APIs or Node shims. */
 export async function runIssuerFixture(publicKey: string, crypto?: CryptoProvider,
   route: "DIGITAL" | "DOWNLOAD_FALLBACK" = "DIGITAL") {
   const requests: Array<{ path: string; body: any; authorization: string | null }> = [];
@@ -33,7 +33,7 @@ export async function runIssuerFixture(publicKey: string, crypto?: CryptoProvide
     }
   });
   const payload = createReceiptPayload({
-    documentNumber: "POS-1", issueDate: new Date("2026-10-03T10:00:00Z"),
+    documentNumber: "R-FIXTURE-0001", issueDate: new Date("2026-10-03T10:00:00Z"),
     currency: "EUR", receiptSubtotal: "10.00", totalBeforeTax: "10.00",
     totalTaxAmount: "2.10", totalAmount: "12.10", taxesApplied: true,
     products: [{ name: "Coffee", identifier: "SKU-1", quantity: 1,
