@@ -39,10 +39,13 @@ test("installed package works in Node and Chromium, with a small issuer bundle",
       join(temp, "node_modules", "@xmldom", "xmldom"), { recursive: true });
     await copyFile(new URL("../test-fixtures/node-backend/index.mjs", import.meta.url), join(temp, "backend.mjs"));
     await copyFile(new URL("../test-fixtures/node-backend/types.mts", import.meta.url), join(temp, "types.mts"));
+    for (const types of ["@types/node", "undici-types"]) {
+      await cp(new URL(`../node_modules/${types}`, import.meta.url), join(temp, "node_modules", types), { recursive: true });
+    }
     assert.match(execFileSync("node", [join(temp, "backend.mjs")], { encoding: "utf8" }), /passed/);
     execFileSync(join(new URL("../node_modules/.bin/tsc", import.meta.url).pathname),
       ["--module", "NodeNext", "--moduleResolution", "NodeNext", "--target", "ES2022",
-        "--strict", "--noEmit", join(temp, "types.mts")]);
+        "--lib", "ES2022", "--types", "node", "--strict", "--noEmit", join(temp, "types.mts")]);
 
     await copyFile(new URL("../test-fixtures/portable/types.mts", import.meta.url), join(temp, "portable.mts"));
     await writeFile(join(temp, "tsconfig.portable.json"), JSON.stringify({ compilerOptions: {

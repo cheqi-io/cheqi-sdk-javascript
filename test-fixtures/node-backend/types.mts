@@ -4,7 +4,12 @@ import { EncryptionService, DecryptionService, sha256Hex, CryptoUnavailableError
 import { VerificationService } from "@cheqi/sdk/verification";
 import { DownloadService, generateDownloadLink, encryptDownloadEnvelope, decryptDownloadEnvelope } from "@cheqi/sdk/download";
 
+import { webcrypto } from "node:crypto";
+
 declare const identification: IdentificationDetailsShape;
+// Node's own Web Crypto objects are assignable without adapters.
+void createCheqiIssuer({ apiEndpoint: Environment.TEST, apiKey: "server-secret", crypto: webcrypto });
+void new CheqiSDK({ apiEndpoint: Environment.TEST, apiKey: "server-secret", crypto: globalThis.crypto });
 declare const payload: ReceiptPayload;
 const crypto: CryptoProvider = { subtle: globalThis.crypto.subtle, getRandomValues: globalThis.crypto.getRandomValues.bind(globalThis.crypto) };
 const sdk = new CheqiSDK({ apiEndpoint: Environment.PRODUCTION, apiKey: "server-secret", crypto, fetch: globalThis.fetch });

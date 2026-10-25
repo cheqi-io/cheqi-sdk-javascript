@@ -21,7 +21,8 @@ export interface SubtleCryptoProvider {
 
 export interface CryptoProvider {
   readonly subtle: SubtleCryptoProvider;
-  getRandomValues(array: Uint8Array): Uint8Array;
+  // ArrayBuffer-backed, so Node's webcrypto (which rejects shared buffers) stays assignable.
+  getRandomValues(array: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer>;
 }
 
 export function requireSubtleCrypto(provider: CryptoProvider | undefined,
