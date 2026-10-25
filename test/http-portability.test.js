@@ -115,14 +115,18 @@ test("401 refresh honors maxRetries=0, explicit credentials, and non-idempotent 
 
 test("transport retries resolve fresh provider credentials on every attempt", async () => {
   const authorizations = [];
+  const signals = [];
   let providerCalls = 0;
   const sdk = new CheqiSDK({ ...options, maxRetries: 1, accessTokenProvider: async () => `token-${++providerCalls}`,
     fetch: async (_input, init) => {
       authorizations.push(init.headers.Authorization);
+      signals.push(init.signal);
       return authorizations.length === 1 ? new Response("{}", { status: 503, headers: { "Retry-After": "0" } }) : Response.json([]);
     } });
   await sdk.companyService.listReceiptDestinations();
   assert.deepEqual(authorizations, ["Bearer token-1", "Bearer token-2"]);
+  assert.equal(signals[0].aborted, true, "release the discarded response when retrying");
+  assert.equal(signals[1].aborted, false, "successful attempts release timers without aborting");
 });
 
 test("key decoding retains standard and URL-safe Base64 compatibility", async () => {

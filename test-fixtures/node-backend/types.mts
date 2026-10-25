@@ -1,4 +1,4 @@
-import { CheqiSDK, Environment, type IdentificationDetailsShape, type Generated } from "@cheqi/sdk";
+import { CheqiSDK, Environment, RetryHandler, type IdentificationDetailsShape, type Generated } from "@cheqi/sdk";
 import { createCheqiIssuer, type ReceiptPayload, type CryptoProvider } from "@cheqi/sdk/issuer";
 import { EncryptionService, DecryptionService, sha256Hex, CryptoUnavailableError } from "@cheqi/sdk/crypto";
 import { VerificationService } from "@cheqi/sdk/verification";
@@ -23,6 +23,9 @@ void downloads.generateDownloadLink("https://receipt.example");
 void decryptDownloadEnvelope("ciphertext", link.contentKey, crypto);
 void sha256Hex("abc", crypto);
 void new CryptoUnavailableError("SHA-256");
+// Native response methods remain inferred for users of the generic retry helper.
+void new RetryHandler().executeWithRetry(() => globalThis.fetch("https://example.test"), "fixture")
+  .then((response) => response.json());
 type Receipt = Generated.ReceiptPayload;
 declare const receipt: Receipt;
 void receipt;

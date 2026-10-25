@@ -49,13 +49,13 @@ export class RetryHandler {
     this.logger = options.logger ?? new NoopLogger();
   }
 
-  async executeWithRetry(
-    operation: () => Promise<FetchResponse>,
+  async executeWithRetry<T extends FetchResponse>(
+    operation: () => Promise<T>,
     operationName: string,
     allowRetries = true,
     maxRetries?: number,
     retryUnauthorized = false
-  ): Promise<FetchResponse> {
+  ): Promise<T> {
     const retryLimit = allowRetries ? maxRetries ?? this.maxRetries : 0;
     let attempt = 0;
     let lastError: unknown = null;

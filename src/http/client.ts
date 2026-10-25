@@ -392,12 +392,15 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
     const timeoutMs = (callOptions.timeoutSeconds ?? this.config.timeoutSeconds) * 1000;
     let cancelTimeout: () => void = () => {};
     let timedOut = false;
+    let previousController: AbortController | undefined;
     try {
       const response = await this.retryHandler.executeWithRetry(
         async () => {
           cancelTimeout();
+          previousController?.abort();
           const headers = await this.headers(callOptions, authenticate);
           const controller = new AbortController();
+          previousController = controller;
           timedOut = false;
           const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
           cancelTimeout = () => clearTimeout(timer);
