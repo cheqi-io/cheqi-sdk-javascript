@@ -1,4 +1,6 @@
 export { CheqiSDK, createCheqiSDK } from "./cheqi-sdk.js";
+export { createCheqiIssuer } from "./issuer.js";
+export type { CryptoProvider } from "./runtime-crypto.js";
 export { Environment, ReceiptEnvironment, CheqiSDKConfig } from "./config.js";
 export * from "./errors.js";
 export type { Logger } from "./logger.js";
@@ -31,6 +33,8 @@ export type {
   EncryptedReceiptEnvelope,
   EncryptedReceiptPayload,
   FetchLike,
+  FetchRequestInit,
+  FetchResponse,
   IdentificationDetails as IdentificationDetailsShape,
   JsonObject,
   JsonPrimitive,

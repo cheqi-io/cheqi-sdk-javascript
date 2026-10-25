@@ -41,6 +41,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install Chromium for browser tests
+        run: npx playwright install --with-deps chromium
+
       - name: Set package version
         run: |
           CURRENT_VERSION="$(node -p "require('./package.json').version")"

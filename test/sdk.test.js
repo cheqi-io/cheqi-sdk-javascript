@@ -267,9 +267,9 @@ test("payload factories reject non-finite and unsafe numeric values", () => {
   );
 });
 
-test("encryption produces the current per-device payload shape", () => {
+test("encryption produces the current per-device payload shape", async () => {
   const { publicKeyB64 } = rsaKeyPair();
-  const encrypted = new EncryptionService().encryptForDevice("{\"hello\":\"world\"}", {
+  const encrypted = await new EncryptionService().encryptForDevice("{\"hello\":\"world\"}", {
     id: "device-1",
     publicKey: publicKeyB64
   });
@@ -280,12 +280,12 @@ test("encryption produces the current per-device payload shape", () => {
   assert.equal("publicKey" in encrypted, false);
 });
 
-test("encryption rejects incomplete temporary recipients", () => {
+test("encryption rejects incomplete temporary recipients", async () => {
   const encryption = new EncryptionService();
-  assert.throws(() => encryption.encryptForDevice("{}", null), /recipient cannot be null/);
-  assert.throws(() => encryption.encryptForDevice("{}", { id: "", publicKey: "key" }), /recipient.id/);
-  assert.throws(() => encryption.encryptForDevice("{}", { id: "device", publicKey: "" }), /recipient.publicKey/);
-  assert.throws(() => encryption.encryptForDevice("", { id: "device", publicKey: "key" }), /plaintextJson/);
+  await assert.rejects(() => encryption.encryptForDevice("{}", null), /recipient cannot be null/);
+  await assert.rejects(() => encryption.encryptForDevice("{}", { id: "", publicKey: "key" }), /recipient.id/);
+  await assert.rejects(() => encryption.encryptForDevice("{}", { id: "device", publicKey: "" }), /recipient.publicKey/);
+  await assert.rejects(() => encryption.encryptForDevice("", { id: "device", publicKey: "key" }), /plaintextJson/);
 });
 
 test("receipt issuance sends one unchanged definitive payload per owner device", async () => {
@@ -514,7 +514,7 @@ test("credit notes use their own generated envelope and preserve plaintext", asy
   assert.equal(submitted.deviceDeliveries.length, 1);
 });
 
-test("queued and webhook receipt envelopes decrypt to the complete ReceiptEnvelope", () => {
+test("queued and webhook receipt envelopes decrypt to the complete ReceiptEnvelope", async () => {
   const { privateKeyB64, publicKeyB64 } = rsaKeyPair();
   const expected = {
     cheqiReceiptId: "CHQ-20260730-000001",
@@ -523,7 +523,7 @@ test("queued and webhook receipt envelopes decrypt to the complete ReceiptEnvelo
     receiptGeneratorVersion: "2.1.0",
     receiptUuid: "706920f8-63a7-4d9d-a92a-5889545562ce"
   };
-  const encrypted = new EncryptionService().encryptForDevice(JSON.stringify(expected), {
+  const encrypted = await new EncryptionService().encryptForDevice(JSON.stringify(expected), {
     id: "device-1",
     publicKey: publicKeyB64
   });
@@ -537,11 +537,11 @@ test("queued and webhook receipt envelopes decrypt to the complete ReceiptEnvelo
     encryptedEnvelopeKey: encrypted.encryptedAesKey
   };
   const decryption = new DecryptionService();
-  assert.deepEqual(JSON.parse(JSON.stringify(decryption.decryptReceipt(queued, privateKeyB64))), expected);
-  assert.deepEqual(JSON.parse(JSON.stringify(decryption.decryptReceipt(webhook, privateKeyB64))), expected);
+  assert.deepEqual(JSON.parse(JSON.stringify(await decryption.decryptReceipt(queued, privateKeyB64))), expected);
+  assert.deepEqual(JSON.parse(JSON.stringify(await decryption.decryptReceipt(webhook, privateKeyB64))), expected);
 });
 
-test("queued and webhook credit-note initiation requests decrypt and validate", () => {
+test("queued and webhook credit-note initiation requests decrypt and validate", async () => {
   const { privateKeyB64, publicKeyB64 } = rsaKeyPair();
   const expected = {
     cheqiReceiptId: "CHQ-20260730-000001",
@@ -549,7 +549,7 @@ test("queued and webhook credit-note initiation requests decrypt and validate", 
     lineItems: [{ productId: "SKU-1", quantity: 1, reasonCode: ReturnReasonCode.DAMAGED }],
     refundPreference: "ORIGINAL_PAYMENT_METHOD"
   };
-  const encrypted = new EncryptionService().encryptForDevice(JSON.stringify(expected), {
+  const encrypted = await new EncryptionService().encryptForDevice(JSON.stringify(expected), {
     id: "device-1",
     publicKey: publicKeyB64
   });
@@ -559,8 +559,8 @@ test("queued and webhook credit-note initiation requests decrypt and validate", 
   };
   const webhook = { companyId: "company-1", ...queued };
   const decryption = new DecryptionService();
-  assert.deepEqual(decryption.decryptCreditNoteInitiationRequest(queued, privateKeyB64), expected);
-  assert.deepEqual(decryption.decryptCreditNoteInitiationRequest(webhook, privateKeyB64), expected);
+  assert.deepEqual(await decryption.decryptCreditNoteInitiationRequest(queued, privateKeyB64), expected);
+  assert.deepEqual(await decryption.decryptCreditNoteInitiationRequest(webhook, privateKeyB64), expected);
 });
 
 test("credit-note initiation validation matches Java merchant-side rules", () => {
@@ -649,12 +649,23 @@ test("download service round-trips current receipt envelopes", async () => {
   assert.throws(() => downloads.parseDownloadUrl("https://receipt.example/not-valid#bad"), /downloadId/);
 });
 
-test("verification canonicalizes JSON before hashing", () => {
+test("verification canonicalizes JSON before hashing", async () => {
   const verification = new VerificationService();
   assert.equal(
-    verification.calculateCheqiReceiptHash('{"b":2,"a":1}'),
-    verification.calculateCheqiReceiptHash('{"a":1,"b":2}')
+    await verification.calculateCheqiReceiptHash('{"b":2,"a":1}'),
+    await verification.calculateCheqiReceiptHash('{"a":1,"b":2}')
   );
+});
+
+test("XML verification retains canonicalization and async SHA-256", async () => {
+  const verification = new VerificationService();
+  const xml = '<root xmlns="urn:test"><child a="1">value</child></root>';
+  const canonical = verification.canonicalizeUbl(xml);
+  assert.equal(canonical, xml);
+  const hash = await verification.calculateUblHash(xml);
+  assert.match(hash, /^[0-9a-f]{64}$/);
+  assert.equal(await verification.verifyXmlHash(xml, hash), true);
+  assert.equal(await verification.verifyXmlHash(xml, "bad"), false);
 });
 
 test("default HTTP client posts the v2 encrypted envelope unchanged", async () => {
@@ -1167,19 +1178,19 @@ test("invalid payloads fail before matching and malformed snapshots fail before 
   }
 });
 
-test("envelope generation accepts both generated match types without HTTP", () => {
+test("envelope generation accepts both generated match types without HTTP", async () => {
   const { service, calls } = recoveryService();
   const recipients = [{ id: "device", publicKey: "key" }];
   for (const match of [
     { routeFound: true, deliveryRouteType: "DIGITAL", matchId: "id", recipients },
     { state: "MATCHED", route: "DIGITAL", matchId: "id", recipients }
   ]) {
-    const envelope = service.generateEncryptedReceiptEnvelope(match, receiptPayload(), "store");
+    const envelope = await service.generateEncryptedReceiptEnvelope(match, receiptPayload(), "store");
     assert.equal(envelope.matchId, "id");
     assert.equal(envelope.storeId, "store");
     assert.equal(envelope.deviceDeliveries[0].deviceRecipientId, "device");
   }
-  assert.throws(() => service.generateEncryptedReceiptEnvelope({ state: "SUBMITTED", route: "DIGITAL" }, receiptPayload()), /MATCHED/);
+  await assert.rejects(() => service.generateEncryptedReceiptEnvelope({ state: "SUBMITTED", route: "DIGITAL" }, receiptPayload()), /MATCHED/);
   assert.equal(calls.matches + calls.snapshots.length + calls.submissions.length, 0);
 });
 
@@ -1266,8 +1277,8 @@ test("generated expense metadata survives wallet and download decryption", async
       submittedAt: new Date("2026-09-29T10:00:00Z"), reason: "Business lunch"
     }
   };
-  const encrypted = new EncryptionService().encryptForDevice(JSON.stringify(envelope), { id: "device", publicKey: publicKeyB64 });
-  const decrypted = new DecryptionService().decryptReceipt({
+  const encrypted = await new EncryptionService().encryptForDevice(JSON.stringify(envelope), { id: "device", publicKey: publicKeyB64 });
+  const decrypted = await new DecryptionService().decryptReceipt({
     encryptedEnvelope: encrypted.encryptedContent, encryptedEnvelopeKey: encrypted.encryptedAesKey
   }, privateKeyB64);
   assert.deepEqual(decrypted, envelope);
@@ -1367,7 +1378,7 @@ test("per-call maxRetries and timeoutSeconds override the configured values", as
     fetch: async (_url, init) => { signal = init.signal; return Response.json([]); } });
   await slow.companyService.listReceiptDestinations({ timeoutSeconds: 0.05 });
   await new Promise((resolve) => setTimeout(resolve, 100));
-  assert.equal(signal.aborted, true);
+  assert.equal(signal.aborted, false, "successful calls must release their timeout timer");
 });
 
 test("malformed per-call options are rejected before any request", async () => {

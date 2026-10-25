@@ -1,3 +1,5 @@
+import type { FetchLike } from "./transport.js";
+
 export type Nullable<T> = T | null;
 
 export type JsonPrimitive = string | number | boolean | null;
@@ -64,12 +66,16 @@ export interface CheqiSDKOptions {
   apiEndpoint: string;
   receiptDownloadBaseUrl?: string;
   apiKey?: Nullable<string>;
+  /** OAuth or short-lived token, resolved before each API request. */
+  accessTokenProvider?: () => string | Promise<string>;
   privateKey?: Nullable<string>;
   timeoutSeconds?: number;
   maxRetries?: number;
   logger?: import("./logger.js").Logger;
   /** Custom Fetch-compatible transport, useful for instrumentation and testing. */
   fetch?: FetchLike;
+  /** Web Crypto implementation. Defaults to globalThis.crypto; never falls back to Node crypto. */
+  crypto?: import("./runtime-crypto.js").CryptoProvider;
   /** Fully custom API client. When set, `fetch` is ignored. */
   apiClient?: CheqiApiClient;
 }
@@ -88,7 +94,7 @@ export interface HttpCallOptions {
   responseType?: "json" | "list" | "void";
 }
 
-export type FetchLike = typeof fetch;
+export type { FetchLike, FetchRequestInit, FetchResponse } from "./transport.js";
 
 /**
  * HTTP boundary used by the handwritten SDK services.
