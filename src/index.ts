@@ -33,6 +33,8 @@ export type {
   EncryptedReceiptEnvelope,
   EncryptedReceiptPayload,
   FetchLike,
+  FetchRequestInit,
+  FetchResponse,
   IdentificationDetails as IdentificationDetailsShape,
   JsonObject,
   JsonPrimitive,

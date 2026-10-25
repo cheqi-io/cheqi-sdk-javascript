@@ -40,7 +40,8 @@ import type { DestinationResponse, InviteEmployeesResponse, RegisterRequest, Reg
 import { Endpoints } from "./endpoints.js";
 import { RetryHandler } from "./retry.js";
 
-const SDK_VERSION = "3.0.0";
+import { SDK_VERSION } from "../version.js";
+import type { FetchResponse } from "../transport.js";
 
 function mapErrorCode(status: number) {
   if (status === 400) return ErrorCodes.INVALID_REQUEST;
@@ -59,7 +60,7 @@ function mapErrorCode(status: number) {
  */
 function buildErrorMessage(operation: string, status: number, responseText: string): string {
   if (status === 401) {
-    return `${operation} failed: authentication failed — check your API key or access token`;
+    return `${operation} failed: authentication failed — check your API key, access token, or accessTokenProvider`;
   }
   if (status === 403) {
     return `${operation} failed: access forbidden — insufficient permissions`;
@@ -94,7 +95,7 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
 
   constructor(
     private readonly config: CheqiSDKConfig,
-    private readonly fetchImpl: FetchLike = globalThis.fetch
+    private readonly fetchImpl: FetchLike = (input, init) => globalThis.fetch(input, init)
   ) {
     if (!config) {
       throw new Error("CheqiSDKConfig is required");
@@ -352,10 +353,18 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
       "User-Agent": this.userAgent
     };
     if (!authenticate) return headers;
-    const token = options.accessToken ?? (this.config.accessTokenProvider
-      ? await this.config.accessTokenProvider() : this.config.apiKey);
-    if (!token?.trim()) {
-      throw new CheqiApiError("No credentials for this call: pass { accessToken } or configure apiKey", {
+    let token = options.accessToken ?? this.config.apiKey;
+    if (options.accessToken == null && this.config.accessTokenProvider) {
+      try {
+        token = await this.config.accessTokenProvider();
+      } catch (cause) {
+        throw new CheqiApiError("accessTokenProvider failed to supply credentials", {
+          errorCode: ErrorCodes.AUTHENTICATION_FAILED, httpStatusCode: 401, cause
+        });
+      }
+    }
+    if (typeof token !== "string" || !token.trim()) {
+      throw new CheqiApiError("No credentials for this call: pass { accessToken } or configure accessTokenProvider or apiKey", {
         errorCode: ErrorCodes.AUTHENTICATION_FAILED,
         httpStatusCode: 401
       });
@@ -380,66 +389,86 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
 
     this.logger.debug(`${operation} ${method} ${url.pathname}`);
 
-    const headers = await this.headers(callOptions, authenticate);
     const timeoutMs = (callOptions.timeoutSeconds ?? this.config.timeoutSeconds) * 1000;
-    const response = await this.retryHandler.executeWithRetry(
-      () => this.fetchImpl(url, {
-        method,
-        headers,
-        body: body === undefined ? undefined : typeof body === "string" ? body : serializeJson(body),
-        signal: AbortSignal.timeout(timeoutMs)
-      }),
-      operation,
-      retryable ?? isIdempotentMethod(method),
-      callOptions.maxRetries
-    );
-
-    if (response.status >= 400) {
-      const responseText = await readResponseText(response);
-      const correlationId = response.headers.get("x-correlation-id");
-      this.logger.error(
-        `${operation} failed: status=${response.status}, correlationId=${correlationId ?? "none"}`
-      );
-      throw new CheqiApiError(buildErrorMessage(operation, response.status, responseText), {
-        errorCode: mapErrorCode(response.status),
-        httpStatusCode: response.status,
-        correlationId
-      });
-    }
-
-    this.logger.debug(`${operation} completed: status=${response.status}`);
-
-    if (responseType === "void") {
-      return undefined;
-    }
-
-    const text = await readResponseText(response);
-    if (!text) {
-      if (responseType === "list") return [];
-      throw invalidResponseError(operation, response, "an empty response");
-    }
+    let cancelTimeout: () => void = () => {};
+    let timedOut = false;
     try {
-      const parsed = JSON.parse(text);
-      if (parsed == null) {
-        throw invalidResponseError(operation, response, "a null JSON response");
+      const response = await this.retryHandler.executeWithRetry(
+        async () => {
+          cancelTimeout();
+          const headers = await this.headers(callOptions, authenticate);
+          const controller = new AbortController();
+          timedOut = false;
+          const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
+          cancelTimeout = () => clearTimeout(timer);
+          try {
+            const fetchImpl = this.fetchImpl;
+            return await fetchImpl(url.toString(), {
+              method, headers,
+              body: body === undefined ? undefined : typeof body === "string" ? body : serializeJson(body),
+              signal: controller.signal
+            });
+          } catch (error) {
+            cancelTimeout();
+            throw error;
+          }
+        },
+        operation,
+        retryable ?? isIdempotentMethod(method),
+        callOptions.maxRetries,
+        authenticate && callOptions.accessToken == null && this.config.accessTokenProvider != null
+      );
+
+      if (response.status >= 400) {
+        const responseText = await readResponseText(response);
+        const correlationId = response.headers.get("x-correlation-id");
+        this.logger.error(
+          `${operation} failed: status=${response.status}, correlationId=${correlationId ?? "none"}`
+        );
+        throw new CheqiApiError(buildErrorMessage(operation, response.status, responseText), {
+          errorCode: mapErrorCode(response.status),
+          httpStatusCode: response.status,
+          correlationId
+        });
       }
-      if (responseType === "list" && !Array.isArray(parsed)) {
-        throw invalidResponseError(operation, response, "JSON that is not an array");
+
+      this.logger.debug(`${operation} completed: status=${response.status}`);
+
+      if (responseType === "void") return undefined;
+
+      const text = await readResponseText(response);
+      if (!text) {
+        if (responseType === "list") return [];
+        throw invalidResponseError(operation, response, "an empty response");
       }
-      return parsed;
-    } catch (error) {
-      if (error instanceof CheqiApiError) throw error;
-      throw new CheqiApiError(`${operation} returned an invalid (non-JSON) response`, {
-        errorCode: ErrorCodes.INVALID_RESPONSE,
-        httpStatusCode: response.status,
-        correlationId: response.headers.get("x-correlation-id"),
-        cause: error
-      });
+      try {
+        const parsed = JSON.parse(text);
+        if (parsed == null) throw invalidResponseError(operation, response, "a null JSON response");
+        if (responseType === "list" && !Array.isArray(parsed)) {
+          throw invalidResponseError(operation, response, "JSON that is not an array");
+        }
+        return parsed;
+      } catch (error) {
+        if (error instanceof CheqiApiError) throw error;
+        throw new CheqiApiError(`${operation} returned an invalid (non-JSON) response`, {
+          errorCode: ErrorCodes.INVALID_RESPONSE,
+          httpStatusCode: response.status,
+          correlationId: response.headers.get("x-correlation-id"),
+          cause: error
+        });
+      }
+    } catch (cause) {
+      if (timedOut && (!(cause instanceof CheqiApiError) || cause.httpStatusCode === 0)) {
+        throw new CheqiApiError(`${operation} timed out`, { errorCode: ErrorCodes.TIMEOUT_ERROR, cause });
+      }
+      throw cause;
+    } finally {
+      cancelTimeout();
     }
   }
 }
 
-async function readResponseText(response: Response): Promise<string> {
+async function readResponseText(response: FetchResponse): Promise<string> {
   try {
     return await response.text();
   } catch (cause) {
@@ -454,7 +483,7 @@ async function readResponseText(response: Response): Promise<string> {
 
 function invalidResponseError(
   operation: string,
-  response: Response,
+  response: FetchResponse,
   detail: string
 ): CheqiApiError {
   return new CheqiApiError(`${operation} returned ${detail}`, {

@@ -2,6 +2,7 @@ import { bytesToArrayBuffer, bytesToBase64, concatBytes, utf8ToBytes } from "../
 import { AES_KEY_LENGTH, GCM_IV_LENGTH } from "../crypto.js";
 import { CryptoUnavailableError, EncryptionError } from "../errors.js";
 import { cryptoOperation, randomBytes, requireSubtleCrypto, type CryptoProvider } from "../runtime-crypto.js";
+import type { CryptoKeyHandle, SubtleCryptoProvider } from "../runtime-crypto.js";
 import type { EncryptedReceiptPayload, MatchedRecipient } from "../types.js";
 import { decodeKey } from "../utils.js";
 
@@ -21,7 +22,7 @@ function pkcs1ToSpki(pkcs1: Uint8Array): Uint8Array {
   return concatBytes(Uint8Array.of(0x30), derLength(contents.length), contents);
 }
 
-async function importPublicKey(value: string, subtle: SubtleCrypto): Promise<CryptoKey> {
+async function importPublicKey(value: string, subtle: SubtleCryptoProvider): Promise<CryptoKeyHandle> {
   const der = decodeKey(value);
   const algorithm = { name: "RSA-OAEP", hash: "SHA-256" };
   try {

@@ -7,7 +7,7 @@
 | `utils.ts` | `node:crypto`, `Buffer` | SHA-256 and DER decoding | Web Crypto hash and shared byte helpers. |
 | `services/receipt.ts` | `node:crypto` | Random receipt UUID | UUIDv4 from the configured provider's `getRandomValues()`. No `randomUUID()` requirement. Receipt serialization unchanged. |
 | `runtime-crypto.ts` | Global-only crypto | Runtime capabilities | Injectable `CryptoProvider`; missing methods and unsupported algorithms produce actionable `CryptoUnavailableError` failures. |
-| `http/client.ts` | `node:module` | Reading package version | Embedded SDK version; Fetch transport, timeout, retries, errors and correlation IDs preserved. |
+| `http/client.ts` | `node:module` | Reading package version | Version generated from package.json during prebuild; browser-safe default Fetch invocation and AbortController/timer timeouts. |
 | `download/index.ts` | Web Crypto, `atob`, `btoa` | Download encryption and Base64 | Already portable; kept the existing download wire format. |
 | `xml.ts` | `@xmldom/xmldom` | XML parsing for exclusive canonicalization | Retained for full SDK verification. Excluded from issuer entry point. |
 | Generated models | Fetch and standard URL APIs | Serialization and API typing | Retained. Type-only imports disappear at runtime. |

@@ -2,6 +2,7 @@ import { CheqiApiError, ErrorCodes } from "../errors.js";
 import type { Logger } from "../logger.js";
 import { NoopLogger } from "../logger.js";
 import { sleep } from "../utils.js";
+import type { FetchResponse } from "../transport.js";
 
 /**
  * Whether a response status code should trigger a retry.
@@ -49,21 +50,25 @@ export class RetryHandler {
   }
 
   async executeWithRetry(
-    operation: () => Promise<Response>,
+    operation: () => Promise<FetchResponse>,
     operationName: string,
     allowRetries = true,
-    maxRetries?: number
-  ): Promise<Response> {
+    maxRetries?: number,
+    retryUnauthorized = false
+  ): Promise<FetchResponse> {
     const retryLimit = allowRetries ? maxRetries ?? this.maxRetries : 0;
     let attempt = 0;
     let lastError: unknown = null;
+    let authenticationRetried = false;
 
     while (attempt <= retryLimit) {
       try {
         const response = await operation();
 
-        if (isRetryableStatus(response.status) && attempt < retryLimit) {
-          const delay = this.calculateBackoff(attempt, response.status, response.headers.get("Retry-After"));
+        const refreshAuthentication = response.status === 401 && retryUnauthorized && !authenticationRetried;
+        if ((isRetryableStatus(response.status) || refreshAuthentication) && attempt < retryLimit) {
+          if (refreshAuthentication) authenticationRetried = true;
+          const delay = refreshAuthentication ? 0 : this.calculateBackoff(attempt, response.status, response.headers.get("Retry-After"));
           this.logger.warn(
             `${operationName} returned ${response.status}, retrying in ${delay}ms (attempt ${attempt + 1}/${retryLimit})`
           );
@@ -77,6 +82,7 @@ export class RetryHandler {
         }
         return response;
       } catch (error) {
+        if (error instanceof CheqiApiError && !error.isNetworkError() && !error.isRetryable) throw error;
         lastError = error;
         if (attempt >= retryLimit) {
           break;
@@ -91,6 +97,7 @@ export class RetryHandler {
     }
 
     this.logger.error(`${operationName} failed after ${attempt + 1} attempts`);
+    if (lastError instanceof CheqiApiError) throw lastError;
     throw new CheqiApiError(`Network error: ${String((lastError as Error | null)?.message ?? operationName)}`, {
       errorCode: ErrorCodes.NETWORK_ERROR,
       cause: lastError

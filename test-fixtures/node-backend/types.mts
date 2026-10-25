@@ -7,7 +7,7 @@ import { DownloadService, generateDownloadLink, encryptDownloadEnvelope, decrypt
 declare const identification: IdentificationDetailsShape;
 declare const payload: ReceiptPayload;
 const crypto: CryptoProvider = { subtle: globalThis.crypto.subtle, getRandomValues: globalThis.crypto.getRandomValues.bind(globalThis.crypto) };
-const sdk = new CheqiSDK({ apiEndpoint: Environment.PRODUCTION, apiKey: "server-secret", crypto });
+const sdk = new CheqiSDK({ apiEndpoint: Environment.PRODUCTION, apiKey: "server-secret", crypto, fetch: globalThis.fetch });
 void sdk.receiptService.issueReceipt(identification, payload);
 void sdk.verificationService.calculateCheqiReceiptHash(payload);
 const issuer = createCheqiIssuer({ apiEndpoint: Environment.TEST, accessTokenProvider: async () => "token", crypto });

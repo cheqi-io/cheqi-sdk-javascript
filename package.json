@@ -28,27 +28,33 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./download": {
       "types": "./dist/download/index.d.ts",
+      "import": "./dist/download/index.js",
       "default": "./dist/download/index.js"
     },
     "./issuer": {
       "types": "./dist/issuer.d.ts",
-      "import": "./dist/issuer.js"
+      "import": "./dist/issuer.js",
+      "default": "./dist/issuer.js"
     },
     "./crypto": {
       "types": "./dist/crypto-entry.d.ts",
-      "import": "./dist/crypto-entry.js"
+      "import": "./dist/crypto-entry.js",
+      "default": "./dist/crypto-entry.js"
     },
     "./models": {
       "types": "./dist/models/index.d.ts",
-      "import": "./dist/models/index.js"
+      "import": "./dist/models/index.js",
+      "default": "./dist/models/index.js"
     },
     "./verification": {
       "types": "./dist/verification-entry.d.ts",
-      "import": "./dist/verification-entry.js"
+      "import": "./dist/verification-entry.js",
+      "default": "./dist/verification-entry.js"
     }
   },
   "files": [
@@ -59,10 +65,10 @@
     "LICENSE"
   ],
   "scripts": {
-    "prebuild": "node ./scripts/clean-dist.mjs",
+    "prebuild": "node ./scripts/clean-dist.mjs && node ./scripts/generate-version.mjs",
     "build": "tsc -p tsconfig.build.json",
     "test": "npm run build && node --test test/*.test.js",
-    "test:node": "npm run build && node --test test/sdk.test.js test/interoperability.test.js test/runtime-crypto.test.js",
+    "test:node": "npm run build && node --test test/sdk.test.js test/interoperability.test.js test/runtime-crypto.test.js test/http-portability.test.js",
     "test:browser": "npm run build && node --test test/package-consumers.test.js",
     "check:package": "npm run build && node ./scripts/check-package.mjs",
     "typecheck": "tsc -p tsconfig.json",

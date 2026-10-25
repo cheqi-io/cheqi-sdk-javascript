@@ -6,7 +6,7 @@ import { CheqiSDKError, ErrorCodes } from "../errors.js";
  * Pass an OAuth access token here when acting on behalf of a connected company. The SDK never
  * stores or refreshes tokens: obtain them with `sdk.oauthService.requestAccessToken(...)`, cache
  * them per Grant in your own store, and pass the current one on each call. Without an access
- * token the call authenticates with the configured API key.
+ * token the call uses the configured token provider or API key.
  *
  * @example
  * ```ts
@@ -16,7 +16,7 @@ import { CheqiSDKError, ErrorCodes } from "../errors.js";
  * ```
  */
 export interface RequestOptions {
-  /** OAuth access token for this call. Omit to use the configured API key. */
+  /** OAuth access token for this call. Omit to use the configured token provider or API key. */
   accessToken?: string | null;
   /** Timeout for this call in seconds. Omit to use the configured timeout. */
   timeoutSeconds?: number;

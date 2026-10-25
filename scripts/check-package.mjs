@@ -7,6 +7,13 @@ import { fileURLToPath } from "node:url";
 const packageRootUrl = new URL("../", import.meta.url);
 const root = fileURLToPath(packageRootUrl);
 const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+const { SDK_VERSION } = await import("../dist/version.js");
+if (SDK_VERSION !== packageJson.version) {
+  throw new Error(`Built SDK version ${SDK_VERSION} differs from package version ${packageJson.version}; run npm run build`);
+}
+for (const [name, entry] of Object.entries(packageJson.exports)) {
+  if (!entry.import || entry.default !== entry.import) throw new Error(`Missing matching import/default exports for ${name}`);
+}
 const requiredFiles = [
   "LICENSE",
   "README.md",

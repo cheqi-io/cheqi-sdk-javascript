@@ -55,7 +55,7 @@ const token = await sdk.oauthService.requestAccessToken({
 // token.access_token, token.expires_in
 ```
 
-The SDK does not cache or refresh tokens. Store each token with its expiry in your own token store, request a new one before it expires, and pass the current token with `RequestOptions`.
+The SDK does not cache tokens or perform OAuth refresh itself. Store each token with its expiry in your own token store, request a new one before it expires, and pass the current one with `RequestOptions`. An `accessTokenProvider` is resolved on each attempt; eligible operations may resolve it again once after HTTP 401, within their retry budget. Non-idempotent submissions remain excluded from automatic retries.
 
 ## Browser and worker issuance
 
@@ -72,7 +72,7 @@ const issuer = createCheqiIssuer({
 const result = await issuer.issueReceipt(identificationDetails, receiptPayload);
 ```
 
-`accessTokenProvider` is called before each HTTP request. You can also pass an `accessToken` in individual receipt options. Node backends may use the same issuer entry point, while the root `CheqiSDK` remains the full backend SDK with verification, decryption, stores, credit notes, and management APIs.
+`accessTokenProvider` is called before each HTTP attempt. You can also pass an `accessToken` in individual receipt options. Node backends may use the same issuer entry point, while the root `CheqiSDK` remains the full backend SDK with verification, decryption, stores, credit notes, and management APIs. See [runtime requirements](docs/runtimes.md) for React Native/Hermes adapter setup and required polyfills.
 
 ## Receipt issuance
 

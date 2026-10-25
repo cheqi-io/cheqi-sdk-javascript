@@ -22,9 +22,10 @@
  */
 
 import { AES_KEY_LENGTH, GCM_IV_LENGTH, GCM_TAG_LENGTH } from "../crypto.js";
-import { base64ToBytes as fromBase64, bytesToBase64 as toBase64 } from "../bytes.js";
+import { base64ToBytes as fromBase64, bytesToBase64 as toBase64, bytesToArrayBuffer } from "../bytes.js";
 import { CryptoUnavailableError, DecryptionError, EncryptionError } from "../errors.js";
 import { cryptoOperation, randomBytes, requireSubtleCrypto, type CryptoProvider } from "../runtime-crypto.js";
+import type { CryptoKeyHandle } from "../runtime-crypto.js";
 import type { ReceiptEnvelope } from "../models/generated/ReceiptEnvelope.js";
 import { ReceiptEnvelopeFromJSON, ReceiptEnvelopeToJSON } from "../models/generated/ReceiptEnvelope.js";
 
@@ -54,7 +55,7 @@ function fromBase64Url(value: string): Uint8Array {
   return fromBase64(value.replaceAll("-", "+").replaceAll("_", "/"));
 }
 
-async function importContentKey(contentKey: string, usage: "encrypt" | "decrypt", provider?: CryptoProvider): Promise<CryptoKey> {
+async function importContentKey(contentKey: string, usage: "encrypt" | "decrypt", provider?: CryptoProvider): Promise<CryptoKeyHandle> {
   let keyBytes: Uint8Array;
   try {
     keyBytes = fromBase64Url(contentKey);
@@ -66,7 +67,7 @@ async function importContentKey(contentKey: string, usage: "encrypt" | "decrypt"
   }
   const subtle = requireSubtleCrypto(provider, "importKey", usage);
   return cryptoOperation("AES-256-GCM key import", () =>
-    subtle.importKey("raw", keyBytes as BufferSource, "AES-GCM", false, [usage]));
+    subtle.importKey("raw", bytesToArrayBuffer(keyBytes), "AES-GCM", false, [usage]));
 }
 
 /**
@@ -138,7 +139,7 @@ export async function encryptDownloadEnvelope(envelope: ReceiptEnvelope, content
 
   const encrypted = new Uint8Array(
     await cryptoOperation("AES-256-GCM encryption", () => requireSubtleCrypto(crypto, "encrypt")
-      .encrypt({ name: "AES-GCM", iv: iv as BufferSource, tagLength: 128 }, key, plaintext as BufferSource))
+      .encrypt({ name: "AES-GCM", iv: bytesToArrayBuffer(iv), tagLength: 128 }, key, bytesToArrayBuffer(plaintext)))
   );
 
   const combined = new Uint8Array(iv.length + encrypted.length);
@@ -172,9 +173,9 @@ export async function decryptDownloadEnvelope(encryptedEnvelope: string, content
   let plaintext: ArrayBuffer;
   try {
     plaintext = await cryptoOperation("AES-256-GCM decryption", () => requireSubtleCrypto(crypto, "decrypt").decrypt(
-      { name: "AES-GCM", iv: iv as BufferSource, tagLength: 128 },
+      { name: "AES-GCM", iv: bytesToArrayBuffer(iv), tagLength: 128 },
       key,
-      ciphertextWithTag as BufferSource
+      bytesToArrayBuffer(ciphertextWithTag)
     ));
   } catch (error) {
     if (error instanceof CryptoUnavailableError) throw error;

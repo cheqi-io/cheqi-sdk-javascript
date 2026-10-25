@@ -1378,7 +1378,7 @@ test("per-call maxRetries and timeoutSeconds override the configured values", as
     fetch: async (_url, init) => { signal = init.signal; return Response.json([]); } });
   await slow.companyService.listReceiptDestinations({ timeoutSeconds: 0.05 });
   await new Promise((resolve) => setTimeout(resolve, 100));
-  assert.equal(signal.aborted, true);
+  assert.equal(signal.aborted, false, "successful calls must release their timeout timer");
 });
 
 test("malformed per-call options are rejected before any request", async () => {

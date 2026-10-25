@@ -1,3 +1,5 @@
+import type { FetchLike } from "./transport.js";
+
 export type Nullable<T> = T | null;
 
 export type JsonPrimitive = string | number | boolean | null;
@@ -92,7 +94,7 @@ export interface HttpCallOptions {
   responseType?: "json" | "list" | "void";
 }
 
-export type FetchLike = typeof fetch;
+export type { FetchLike, FetchRequestInit, FetchResponse } from "./transport.js";
 
 /**
  * HTTP boundary used by the handwritten SDK services.

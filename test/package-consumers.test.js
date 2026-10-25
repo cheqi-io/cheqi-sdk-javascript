@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { cp, copyFile, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { cp, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
@@ -42,7 +42,15 @@ test("installed package works in Node and Chromium, with a small issuer bundle",
     assert.match(execFileSync("node", [join(temp, "backend.mjs")], { encoding: "utf8" }), /passed/);
     execFileSync(join(new URL("../node_modules/.bin/tsc", import.meta.url).pathname),
       ["--module", "NodeNext", "--moduleResolution", "NodeNext", "--target", "ES2022",
-        "--strict", "--skipLibCheck", "--noEmit", join(temp, "types.mts")]);
+        "--strict", "--noEmit", join(temp, "types.mts")]);
+
+    await copyFile(new URL("../test-fixtures/portable/types.mts", import.meta.url), join(temp, "portable.mts"));
+    await writeFile(join(temp, "tsconfig.portable.json"), JSON.stringify({ compilerOptions: {
+      target: "ES2022", module: "NodeNext", moduleResolution: "NodeNext", lib: ["es2022"],
+      types: [], strict: true, skipLibCheck: false, noEmit: true
+    }, files: ["portable.mts"] }));
+    execFileSync(join(new URL("../node_modules/.bin/tsc", import.meta.url).pathname),
+      ["--project", join(temp, "tsconfig.portable.json")]);
 
     const fixtureDir = join(temp, "test-fixtures", "browser");
     await mkdir(fixtureDir, { recursive: true });
@@ -50,7 +58,7 @@ test("installed package works in Node and Chromium, with a small issuer bundle",
       copyFile(new URL(`../test-fixtures/browser/${file}`, import.meta.url), join(fixtureDir, file))));
     execFileSync(join(new URL("../node_modules/.bin/tsc", import.meta.url).pathname),
       ["--module", "ESNext", "--moduleResolution", "Bundler", "--target", "ES2022", "--strict",
-        "--skipLibCheck", "--noEmit", ...["index.ts", "browser-test.ts"]
+        "--noEmit", ...["index.ts", "browser-test.ts"]
           .map((file) => join(fixtureDir, file))]);
     const issuerBundle = join(temp, "issuer.js");
     const issuerBuild = await build({ entryPoints: [join(fixtureDir, "index.ts")], outfile: issuerBundle,
@@ -67,7 +75,18 @@ test("installed package works in Node and Chromium, with a small issuer bundle",
     const script = await readFile(browserBundle, "utf8");
     browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
+    const nativeRequests = [];
     await page.route("https://fixture.test/**", (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path === "/recipient/resolve" || path === "/receipt/encrypted") {
+        const body = route.request().postDataJSON();
+        nativeRequests.push({ path, body });
+        const result = path === "/recipient/resolve" ? {
+          routeFound: true, deliveryRouteType: "DIGITAL", matchId: "native-match",
+          recipients: [{ id: "device", publicKey: fixture.publicKeyB64 }]
+        } : { cheqiReceiptId: "native-receipt", matchId: "native-match", status: "PENDING" };
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(result) });
+      }
       if (new URL(route.request().url()).pathname === "/browser.js") {
         return route.fulfill({ status: 200, contentType: "text/javascript", body: script });
       }
@@ -80,6 +99,12 @@ test("installed package works in Node and Chromium, with a small issuer bundle",
       return runBrowserTests(fixture);
     }, fixture);
     assert.equal(result.issuer.result.cheqiReceiptId, "browser-receipt");
+    assert.equal(result.nativeResult.cheqiReceiptId, "native-receipt");
+    assert.equal(result.injectedNativeResult.cheqiReceiptId, "native-receipt");
+    assert.deepEqual(nativeRequests.map((request) => request.path),
+      ["/recipient/resolve", "/receipt/encrypted", "/recipient/resolve", "/receipt/encrypted"]);
+    assert.equal(JSON.parse(legacyDecrypt(nativeRequests[1].body.deviceDeliveries[0])).documentNumber, "R-FIXTURE-0001");
+    assert.equal(JSON.parse(legacyDecrypt(nativeRequests[3].body.deviceDeliveries[0])).documentNumber, "R-FIXTURE-0001");
     assert.deepEqual(JSON.parse(JSON.stringify(result.decrypted)), result.envelope);
     assert.deepEqual(result.issuer.requests.map((request) => request.path),
       ["/recipient/resolve", "/receipt/encrypted"]);

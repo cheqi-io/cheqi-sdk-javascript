@@ -3,7 +3,7 @@ export const utf8ToBytes = (value: string): Uint8Array => new TextEncoder().enco
 export const bytesToUtf8 = (value: Uint8Array): string => new TextDecoder().decode(value);
 
 export function base64ToBytes(value: string): Uint8Array {
-  const binary = atob(value.replace(/\s+/g, ""));
+  const binary = atob(value.replace(/\s+/g, "").replaceAll("-", "+").replaceAll("_", "/"));
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }
 
@@ -25,7 +25,7 @@ export function concatBytes(...parts: Uint8Array[]): Uint8Array {
   return result;
 }
 
-/** Copy into an ArrayBuffer accepted by DOM Web Crypto typings. */
+/** Copy a byte view into an owned ArrayBuffer accepted by Web Crypto providers. */
 export function bytesToArrayBuffer(value: Uint8Array): ArrayBuffer {
   const copy = new Uint8Array(value.length);
   copy.set(value);

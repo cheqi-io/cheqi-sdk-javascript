@@ -1,4 +1,5 @@
-import { runIssuerFixture } from "./index.js";
+import { createFixturePayload, runIssuerFixture } from "./index.js";
+import { createCheqiIssuer } from "@cheqi/sdk/issuer";
 import { EncryptionService, DecryptionService, sha256Hex, base64ToBytes, bytesToBase64 } from "@cheqi/sdk/crypto";
 import { decryptDownloadEnvelope, parseDownloadUrl } from "@cheqi/sdk/download";
 
@@ -17,6 +18,21 @@ const delivery = (encrypted: CryptoFixture["encrypted"]) => ({
 
 export async function runBrowserTests(fixture: CryptoFixture) {
   const { publicKeyB64: publicKey, privateKeyB64: privateKey } = fixture;
+  // Exercise the real browser transport with no fetch option, and no AbortSignal.timeout.
+  const timeoutDescriptor = Object.getOwnPropertyDescriptor(AbortSignal, "timeout")!;
+  Object.defineProperty(AbortSignal, "timeout", { configurable: true, value: undefined });
+  let nativeResult;
+  let injectedNativeResult;
+  try {
+    const nativeIssuer = createCheqiIssuer({ apiEndpoint: "https://fixture.test", apiKey: "fixture-token",
+      maxRetries: 0, logger: { debug() {}, info() {}, warn() {}, error() {} } });
+    nativeResult = await nativeIssuer.issueReceipt({ cardDetails: { paymentAccountReference: "PAR-NATIVE-TEST" } }, createFixturePayload());
+    const injectedNativeIssuer = createCheqiIssuer({ apiEndpoint: "https://fixture.test", apiKey: "fixture-token",
+      fetch: globalThis.fetch, maxRetries: 0, logger: { debug() {}, info() {}, warn() {}, error() {} } });
+    injectedNativeResult = await injectedNativeIssuer.issueReceipt({ cardDetails: { paymentAccountReference: "PAR-INJECTED-TEST" } }, createFixturePayload());
+  } finally {
+    Object.defineProperty(AbortSignal, "timeout", timeoutDescriptor);
+  }
   const issuer = await runIssuerFixture(publicKey);
   const envelope = { cheqiReceiptId: "R-1", envelopeVersion: 1,
     receiptGeneratorVersion: "fixture", receiptUuid: "bd646ff8-8d36-4cc7-9c19-f70d201259bf", documents: {} };
@@ -50,7 +66,7 @@ export async function runBrowserTests(fixture: CryptoFixture) {
     try { await new EncryptionService().encryptForDevice("{}", { id: "device", publicKey }); }
     catch (error) { const failure = error as { name: string; message: string; capability?: string };
       missingCrypto = { name: failure.name, message: failure.message, capability: failure.capability }; }
-    return { issuer, envelope, decrypted, legacyPlaintext, spki, pkcs1, hash, injectedIssuer,
+    return { nativeResult, injectedNativeResult, issuer, envelope, decrypted, legacyPlaintext, spki, pkcs1, hash, injectedIssuer,
       fallback, download, downloadKey: url.contentKey, tamperErrorCode, missingCrypto };
   } finally {
     Object.defineProperty(globalThis, "crypto", descriptor);

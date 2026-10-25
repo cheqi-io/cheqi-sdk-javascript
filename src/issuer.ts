@@ -20,4 +20,5 @@ export { UnitCode } from "./models/generated/UnitCode.js";
 export { ReceiptIssueState, ReceiptResult } from "./models.js";
 export type { CheqiSDKOptions, ReceiptIssueOptions, IdentificationDetails, ReceiptPayload } from "./types.js";
 export type { CryptoProvider } from "./runtime-crypto.js";
+export type { FetchLike, FetchRequestInit, FetchResponse } from "./transport.js";
 export { CryptoUnavailableError } from "./errors.js";

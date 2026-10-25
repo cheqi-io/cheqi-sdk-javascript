@@ -1,10 +1,31 @@
 import { CryptoUnavailableError } from "./errors.js";
 
-/** Web Crypto subset needed by the SDK. No randomUUID or DOM is required. */
-export type CryptoProvider = Pick<Crypto, "subtle" | "getRandomValues">;
+/** An opaque key returned by and passed back to the configured provider. */
+export type CryptoKeyHandle = object;
+
+export interface CryptoAlgorithm {
+  name: string;
+  hash?: string | { name: string };
+  iv?: ArrayBuffer;
+  tagLength?: number;
+}
+
+/** The Web Crypto methods used by the SDK; no DOM type declarations are required. */
+export interface SubtleCryptoProvider {
+  importKey(format: "raw" | "spki" | "pkcs8", data: ArrayBuffer, algorithm: string | CryptoAlgorithm,
+    extractable: boolean, usages: Array<"encrypt" | "decrypt">): Promise<CryptoKeyHandle>;
+  encrypt(algorithm: string | CryptoAlgorithm, key: CryptoKeyHandle, data: ArrayBuffer): Promise<ArrayBuffer>;
+  decrypt(algorithm: string | CryptoAlgorithm, key: CryptoKeyHandle, data: ArrayBuffer): Promise<ArrayBuffer>;
+  digest(algorithm: string | CryptoAlgorithm, data: ArrayBuffer): Promise<ArrayBuffer>;
+}
+
+export interface CryptoProvider {
+  readonly subtle: SubtleCryptoProvider;
+  getRandomValues(array: Uint8Array): Uint8Array;
+}
 
 export function requireSubtleCrypto(provider: CryptoProvider | undefined,
-  ...methods: Array<keyof SubtleCrypto>): SubtleCrypto {
+  ...methods: Array<keyof SubtleCryptoProvider>): SubtleCryptoProvider {
   try {
     const subtle = (provider ?? globalThis.crypto)?.subtle;
     if (!subtle) throw new CryptoUnavailableError("crypto.subtle");

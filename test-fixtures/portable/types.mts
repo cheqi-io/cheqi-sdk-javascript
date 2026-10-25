@@ -1,0 +1,20 @@
+import { CheqiSDK, type CheqiSDKOptions, type FetchLike, type Generated } from "@cheqi/sdk";
+import { createCheqiIssuer, type CryptoProvider } from "@cheqi/sdk/issuer";
+import { EncryptionService, DecryptionService, sha256Hex } from "@cheqi/sdk/crypto";
+import { VerificationService } from "@cheqi/sdk/verification";
+import { DownloadService } from "@cheqi/sdk/download";
+
+declare const crypto: CryptoProvider;
+declare const fetch: FetchLike;
+declare const payload: Generated.ReceiptPayload;
+declare const envelope: Generated.ReceiptEnvelope;
+const options: CheqiSDKOptions = { apiEndpoint: "https://api.example.test", apiKey: "credential", crypto, fetch };
+const sdk = new CheqiSDK(options);
+void sdk.receiptService.issueReceipt({ cardDetails: { paymentAccountReference: "PAR" } }, payload);
+void createCheqiIssuer(options).issueDownloadReceipt({ paymentType: "CASH" }, payload);
+void new EncryptionService(crypto);
+void new DecryptionService(crypto);
+void new VerificationService(crypto).canonicalizeAndHashJson(payload);
+const downloads = new DownloadService(crypto);
+void downloads.encryptDownloadEnvelope(envelope, downloads.generateDownloadLink("https://receipt.example").contentKey);
+void sha256Hex("abc", crypto);

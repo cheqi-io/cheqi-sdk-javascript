@@ -32,14 +32,18 @@ export async function runIssuerFixture(publicKey: string, crypto?: CryptoProvide
       throw new Error(`Unexpected path: ${path}`);
     }
   });
-  const payload = createReceiptPayload({
+  const payload = createFixturePayload();
+  const result = await issuer.issueReceipt({ paymentType: PaymentType.CARD_PAYMENT,
+    cardDetails: { paymentAccountReference: "PAR-SYNTHETIC-TEST" } }, payload);
+  return { result, requests, payload };
+}
+
+export function createFixturePayload() {
+  return createReceiptPayload({
     documentNumber: "R-FIXTURE-0001", issueDate: new Date("2026-10-03T10:00:00Z"),
     currency: "EUR", receiptSubtotal: "10.00", totalBeforeTax: "10.00",
     totalTaxAmount: "2.10", totalAmount: "12.10", taxesApplied: true,
     products: [{ name: "Coffee", identifier: "SKU-1", quantity: 1,
       unitCode: UnitCode.C62, unitPrice: "10.00", subtotal: "10.00", total: "12.10" }]
   });
-  const result = await issuer.issueReceipt({ paymentType: PaymentType.CARD_PAYMENT,
-    cardDetails: { paymentAccountReference: "PAR-SYNTHETIC-TEST" } }, payload);
-  return { result, requests, payload };
 }
