@@ -85,12 +85,6 @@ export interface PageWebhookCompanyInvitationAccepted {
     sort?: SortObject;
     /**
      *
-     * @type {number}
-     * @memberof PageWebhookCompanyInvitationAccepted
-     */
-    numberOfElements?: number;
-    /**
-     *
      * @type {boolean}
      * @memberof PageWebhookCompanyInvitationAccepted
      */
@@ -101,6 +95,12 @@ export interface PageWebhookCompanyInvitationAccepted {
      * @memberof PageWebhookCompanyInvitationAccepted
      */
     last?: boolean;
+    /**
+     *
+     * @type {number}
+     * @memberof PageWebhookCompanyInvitationAccepted
+     */
+    numberOfElements?: number;
     /**
      *
      * @type {boolean}
@@ -133,9 +133,9 @@ export function PageWebhookCompanyInvitationAcceptedFromJSONTyped(json: any, ign
         'number': json['number'] == null ? undefined : json['number'],
         'pageable': json['pageable'] == null ? undefined : PageableObjectFromJSON(json['pageable']),
         'sort': json['sort'] == null ? undefined : SortObjectFromJSON(json['sort']),
-        'numberOfElements': json['numberOfElements'] == null ? undefined : json['numberOfElements'],
         'first': json['first'] == null ? undefined : json['first'],
         'last': json['last'] == null ? undefined : json['last'],
+        'numberOfElements': json['numberOfElements'] == null ? undefined : json['numberOfElements'],
         'empty': json['empty'] == null ? undefined : json['empty'],
     };
 }
@@ -158,9 +158,9 @@ export function PageWebhookCompanyInvitationAcceptedToJSONTyped(value?: PageWebh
         'number': value['number'],
         'pageable': PageableObjectToJSON(value['pageable']),
         'sort': SortObjectToJSON(value['sort']),
-        'numberOfElements': value['numberOfElements'],
         'first': value['first'],
         'last': value['last'],
+        'numberOfElements': value['numberOfElements'],
         'empty': value['empty'],
     };
 }

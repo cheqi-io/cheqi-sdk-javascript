@@ -1,3 +1,4 @@
+import { withRedactedInspection } from "../../utils/redacted-inspection.js";
 /* tslint:disable */
 /* eslint-disable */
 /**
@@ -60,13 +61,13 @@ export function AuthorizationCodeExchangeRequestFromJSONTyped(json: any, ignoreD
     if (json == null) {
         return json;
     }
-    return {
+    return withRedactedInspection({
 
         'client_id': json['client_id'] == null ? undefined : json['client_id'],
         'client_secret': json['client_secret'] == null ? undefined : json['client_secret'],
         'code': json['code'] == null ? undefined : json['code'],
         'code_verifier': json['code_verifier'] == null ? undefined : json['code_verifier'],
-    };
+    }, ["client_secret","code_verifier","code"]);
 }
 
 export function AuthorizationCodeExchangeRequestToJSON(json: any): AuthorizationCodeExchangeRequest {

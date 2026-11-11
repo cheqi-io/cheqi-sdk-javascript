@@ -42,6 +42,9 @@ export function SubmitEncryptedReceipt202ResponseFromJSONTyped(json: any, ignore
     if (json == null) {
         return json;
     }
+    if (typeof json !== 'object') {
+        return json;
+    }
     if (instanceOfMatchStatusResponse(json)) {
         return MatchStatusResponseFromJSONTyped(json, true);
     }
@@ -60,7 +63,9 @@ export function SubmitEncryptedReceipt202ResponseToJSONTyped(value?: SubmitEncry
     if (value == null) {
         return value;
     }
-
+    if (typeof value !== 'object') {
+        return value;
+    }
     if (instanceOfMatchStatusResponse(value)) {
         return MatchStatusResponseToJSON(value as MatchStatusResponse);
     }

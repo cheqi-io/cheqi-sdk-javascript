@@ -338,3 +338,15 @@ npm run test:browser
 npm run typecheck
 make generate
 ```
+
+### OAuth diagnostic redaction
+
+OAuth client secrets, access tokens, authorization codes, and PKCE verifiers are
+redacted in SDK model diagnostic strings. Token-endpoint errors omit response
+bodies and parser details that could contain credentials. Explicit JSON
+serialization and credential properties retain their values for authentication.
+Generated `FromJSON` helpers and token responses also redact Node.js console
+inspection. Caller-created plain objects and explicit JSON serialization are not
+redacted; use credential properties only when sending or storing credentials.
+Model regeneration preserves retired public DTOs for source compatibility while
+refreshing models still present in the production OpenAPI contract.

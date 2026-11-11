@@ -36,16 +36,17 @@ generate:
 		--global-property models,supportingFiles=runtime.ts \
 		--model-package models.generated \
 		--additional-properties=supportsES6=true,typescriptThreePlus=true,enumPropertyNaming=UPPERCASE,modelPropertyNaming=original
-	rm -rf $(GENERATED_DIR)
+	# Preserve retired public DTOs used by existing integrations.
 	mkdir -p $(GENERATED_DIR)
 	cp /tmp/cheqi-js-gen/models/*.ts $(GENERATED_DIR)/
 	cp /tmp/cheqi-js-gen/runtime.ts $(GENERATED_DIR)/
 	find $(GENERATED_DIR) -name '*.ts' -exec perl -pi -e "s|from '../runtime'|from './runtime'|g" {} +
-	find $(GENERATED_DIR) -name '*.ts' -exec perl -pi -e "s|from '\./([^']+)'|from './\$$1.js'|g" {} +
+	find $(GENERATED_DIR) -name '*.ts' -exec perl -pi -e "s|from '\./([^']+?)(?:\.js)?'|from './\$$1.js'|g" {} +
 	find $(GENERATED_DIR) -name '*.ts' -exec perl -pi -e 's/[ \t]+$$//' {} +
 	find $(GENERATED_DIR) -name '*.ts' -exec perl -0pi -e 's/\s+\z/\n/' {} +
 	cd $(GENERATED_DIR) && for f in *.ts; do [ "$$f" = "index.ts" ] || [ "$$f" = "runtime.ts" ] && continue; echo "export * from './$$( echo $$f | sed 's/\.ts$$//' ).js';"; done > index.ts
 	rm -rf /tmp/cheqi-js-gen
+	node scripts/prepare-generated-models.mjs
 	@echo "Models generated in $(GENERATED_DIR)/"
 
 build:

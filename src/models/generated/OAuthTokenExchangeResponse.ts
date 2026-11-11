@@ -1,3 +1,4 @@
+import { withRedactedInspection } from "../../utils/redacted-inspection.js";
 /* tslint:disable */
 /* eslint-disable */
 /**
@@ -74,13 +75,13 @@ export function OAuthTokenExchangeResponseFromJSONTyped(json: any, ignoreDiscrim
     if (json == null) {
         return json;
     }
-    return {
+    return withRedactedInspection({
 
         'access_token': json['access_token'] == null ? undefined : json['access_token'],
         'token_type': json['token_type'] == null ? undefined : json['token_type'],
         'expires_in': json['expires_in'] == null ? undefined : json['expires_in'],
         'scope': json['scope'] == null ? undefined : json['scope'],
-    };
+    }, ["access_token"]);
 }
 
 export function OAuthTokenExchangeResponseToJSON(json: any): OAuthTokenExchangeResponse {

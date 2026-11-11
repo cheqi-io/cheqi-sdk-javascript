@@ -205,7 +205,7 @@ export function createReceiptPayload(input: ReceiptPayloadInput): ReceiptPayload
     identifiers: copyArray(input.identifiers),
     discounts: input.discounts?.map(createDiscount),
     charges: input.charges?.map(createCharge),
-    taxes: input.taxes?.map(createTax),
+    taxes: input.taxes?.map(createTax) ?? [],
     barcodes: copyArray(input.barcodes),
     jurisdictionalData: input.jurisdictionalData == null
       ? undefined
