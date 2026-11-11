@@ -111,6 +111,18 @@ export interface CheqiReceipt {
      */
     totalAmount?: number;
     /**
+     * Issuer-supplied sum of the receipt-level discounts.
+     * @type {number}
+     * @memberof CheqiReceipt
+     */
+    totalDiscountAmount?: number;
+    /**
+     * Issuer-supplied sum of the receipt-level charges.
+     * @type {number}
+     * @memberof CheqiReceipt
+     */
+    totalChargeAmount?: number;
+    /**
      * The document number of the receipt, given by the seller, for example invoice number.
      * @type {string}
      * @memberof CheqiReceipt
@@ -262,6 +274,8 @@ export function CheqiReceiptFromJSONTyped(json: any, ignoreDiscriminator: boolea
     return {
 
         'totalAmount': json['totalAmount'] == null ? undefined : json['totalAmount'],
+        'totalDiscountAmount': json['totalDiscountAmount'] == null ? undefined : json['totalDiscountAmount'],
+        'totalChargeAmount': json['totalChargeAmount'] == null ? undefined : json['totalChargeAmount'],
         'documentNumber': json['documentNumber'] == null ? undefined : json['documentNumber'],
         'identifiers': json['identifiers'] == null ? undefined : ((json['identifiers'] as Array<any>).map(IdentifierFromJSON)),
         'issueDate': json['issueDate'] == null ? undefined : (new Date(json['issueDate'])),
@@ -299,6 +313,8 @@ export function CheqiReceiptToJSONTyped(value?: CheqiReceipt | null, ignoreDiscr
     return {
 
         'totalAmount': value['totalAmount'],
+        'totalDiscountAmount': value['totalDiscountAmount'],
+        'totalChargeAmount': value['totalChargeAmount'],
         'documentNumber': value['documentNumber'],
         'identifiers': value['identifiers'] == null ? undefined : ((value['identifiers'] as Array<any>).map(IdentifierToJSON)),
         'issueDate': value['issueDate'] == null ? undefined : ((value['issueDate']).toISOString()),

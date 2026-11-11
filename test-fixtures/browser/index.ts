@@ -43,6 +43,7 @@ export function createFixturePayload() {
     documentNumber: "R-FIXTURE-0001", issueDate: new Date("2026-10-03T10:00:00Z"),
     currency: "EUR", receiptSubtotal: "10.00", totalBeforeTax: "10.00",
     totalTaxAmount: "2.10", totalAmount: "12.10", taxesApplied: true,
+    paymentDetails: { paymentMeansCode: "48", paidAmount: 12.10, amountDue: 0, roundingAmount: 0 },
     products: [{ name: "Coffee", identifier: "SKU-1", quantity: 1,
       unitCode: UnitCode.C62, unitPrice: "10.00", subtotal: "10.00", total: "12.10" }]
   });

@@ -1271,7 +1271,7 @@ test("generated expense metadata survives wallet and download decryption", async
   const { privateKeyB64, publicKeyB64 } = rsaKeyPair();
   const envelope = {
     cheqiReceiptId: "receipt", envelopeVersion: 1, receiptGeneratorVersion: "v1",
-    receiptUuid: "706920f8-63a7-4d9d-a92a-5889545562ce", documents: {},
+    receiptUuid: "706920f8-63a7-4d9d-a92a-5889545562ce", documents: {}, documentProfiles: undefined,
     expenseSubmission: {
       expenseSubmissionId: "expense", targetCompanyId: "company", submittedByUserId: "user",
       submittedAt: new Date("2026-09-29T10:00:00Z"), reason: "Business lunch"

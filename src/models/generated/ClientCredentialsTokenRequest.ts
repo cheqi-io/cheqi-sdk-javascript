@@ -1,3 +1,4 @@
+import { withRedactedInspection } from "../../utils/redacted-inspection.js";
 /* tslint:disable */
 /* eslint-disable */
 /**
@@ -76,14 +77,14 @@ export function ClientCredentialsTokenRequestFromJSONTyped(json: any, ignoreDisc
     if (json == null) {
         return json;
     }
-    return {
+    return withRedactedInspection({
 
         'scope': json['scope'] == null ? undefined : json['scope'],
         'grant_type': json['grant_type'] == null ? undefined : json['grant_type'],
         'client_id': json['client_id'] == null ? undefined : json['client_id'],
         'client_secret': json['client_secret'] == null ? undefined : json['client_secret'],
         'grant_id': json['grant_id'] == null ? undefined : json['grant_id'],
-    };
+    }, ["client_secret"]);
 }
 
 export function ClientCredentialsTokenRequestToJSON(json: any): ClientCredentialsTokenRequest {
