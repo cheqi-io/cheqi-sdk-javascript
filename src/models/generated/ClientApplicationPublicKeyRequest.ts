@@ -1,4 +1,3 @@
-import { withRedactedInspection } from "../../utils/redacted-inspection.js";
 /* tslint:disable */
 /* eslint-disable */
 /**
@@ -74,13 +73,13 @@ export function ClientApplicationPublicKeyRequestFromJSONTyped(json: any, ignore
     if (json == null) {
         return json;
     }
-    return withRedactedInspection({
+    return {
 
         'client_secret': json['client_secret'] == null ? undefined : json['client_secret'],
         'publicKey': json['publicKey'],
         'keyAlgorithm': KeyAlgorithmFromJSON(json['keyAlgorithm']),
         'client_id': json['client_id'],
-    }, ["client_secret"]);
+    };
 }
 
 export function ClientApplicationPublicKeyRequestToJSON(json: any): ClientApplicationPublicKeyRequest {

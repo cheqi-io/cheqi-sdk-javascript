@@ -66,8 +66,6 @@ function buildErrorMessage(operation: string, status: number, responseText: stri
     return `${operation} failed: access forbidden — insufficient permissions`;
   }
 
-  if (operation === "requestAccessToken") return `${operation} failed with status ${status}`;
-
   let detail = responseText;
   if (responseText) {
     try {
@@ -459,8 +457,7 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
           errorCode: ErrorCodes.INVALID_RESPONSE,
           httpStatusCode: response.status,
           correlationId: response.headers.get("x-correlation-id"),
-          // A JSON parser message can include an access token from the response.
-          cause: operation === "requestAccessToken" ? undefined : error
+          cause: error
         });
       }
     } catch (cause) {
