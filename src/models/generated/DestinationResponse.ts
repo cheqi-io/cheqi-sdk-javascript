@@ -13,6 +13,14 @@
  */
 
 import { mapValues } from './runtime.js';
+import type { ReceiptFormat } from './ReceiptFormat.js';
+import {
+    ReceiptFormatFromJSON,
+    ReceiptFormatFromJSONTyped,
+    ReceiptFormatToJSON,
+    ReceiptFormatToJSONTyped,
+} from './ReceiptFormat.js';
+
 /**
  *
  * @export
@@ -55,6 +63,12 @@ export interface DestinationResponse {
      * @memberof DestinationResponse
      */
     acceptsEmployeeSubmissions?: boolean;
+    /**
+     *
+     * @type {Array<ReceiptFormat>}
+     * @memberof DestinationResponse
+     */
+    formatPreferences?: Array<ReceiptFormat>;
 }
 
 /**
@@ -80,6 +94,7 @@ export function DestinationResponseFromJSONTyped(json: any, ignoreDiscriminator:
         'keyAlgorithm': json['keyAlgorithm'] == null ? undefined : json['keyAlgorithm'],
         'active': json['active'] == null ? undefined : json['active'],
         'acceptsEmployeeSubmissions': json['acceptsEmployeeSubmissions'] == null ? undefined : json['acceptsEmployeeSubmissions'],
+        'formatPreferences': json['formatPreferences'] == null ? undefined : ((json['formatPreferences'] as Array<any>).map(ReceiptFormatFromJSON)),
     };
 }
 
@@ -100,5 +115,6 @@ export function DestinationResponseToJSONTyped(value?: DestinationResponse | nul
         'keyAlgorithm': value['keyAlgorithm'],
         'active': value['active'],
         'acceptsEmployeeSubmissions': value['acceptsEmployeeSubmissions'],
+        'formatPreferences': value['formatPreferences'] == null ? undefined : ((value['formatPreferences'] as Array<any>).map(ReceiptFormatToJSON)),
     };
 }

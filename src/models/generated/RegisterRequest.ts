@@ -13,6 +13,14 @@
  */
 
 import { mapValues } from './runtime.js';
+import type { ReceiptFormat } from './ReceiptFormat.js';
+import {
+    ReceiptFormatFromJSON,
+    ReceiptFormatFromJSONTyped,
+    ReceiptFormatToJSON,
+    ReceiptFormatToJSONTyped,
+} from './ReceiptFormat.js';
+
 /**
  *
  * @export
@@ -43,6 +51,12 @@ export interface RegisterRequest {
      * @memberof RegisterRequest
      */
     acceptsEmployeeSubmissions?: boolean;
+    /**
+     *
+     * @type {Array<ReceiptFormat>}
+     * @memberof RegisterRequest
+     */
+    formatPreferences?: Array<ReceiptFormat>;
 }
 
 /**
@@ -69,6 +83,7 @@ export function RegisterRequestFromJSONTyped(json: any, ignoreDiscriminator: boo
         'publicKey': json['publicKey'],
         'keyAlgorithm': json['keyAlgorithm'],
         'acceptsEmployeeSubmissions': json['acceptsEmployeeSubmissions'] == null ? undefined : json['acceptsEmployeeSubmissions'],
+        'formatPreferences': json['formatPreferences'] == null ? undefined : ((json['formatPreferences'] as Array<any>).map(ReceiptFormatFromJSON)),
     };
 }
 
@@ -87,5 +102,6 @@ export function RegisterRequestToJSONTyped(value?: RegisterRequest | null, ignor
         'publicKey': value['publicKey'],
         'keyAlgorithm': value['keyAlgorithm'],
         'acceptsEmployeeSubmissions': value['acceptsEmployeeSubmissions'],
+        'formatPreferences': value['formatPreferences'] == null ? undefined : ((value['formatPreferences'] as Array<any>).map(ReceiptFormatToJSON)),
     };
 }

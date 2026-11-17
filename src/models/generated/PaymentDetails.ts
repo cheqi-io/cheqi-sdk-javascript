@@ -13,6 +13,14 @@
  */
 
 import { mapValues } from './runtime.js';
+import type { PaymentMethod } from './PaymentMethod.js';
+import {
+    PaymentMethodFromJSON,
+    PaymentMethodFromJSONTyped,
+    PaymentMethodToJSON,
+    PaymentMethodToJSONTyped,
+} from './PaymentMethod.js';
+
 /**
  * Definitive issuer-supplied payment information encrypted as part of the ReceiptPayload. Cheqi never receives this object in plaintext.
  * @export
@@ -67,6 +75,42 @@ export interface PaymentDetails {
      * @memberof PaymentDetails
      */
     paymentTerminalId?: string;
+    /**
+     * Issuer-supplied amount paid when the receipt was issued, across all payment methods. Required in new ReceiptPayloads, including zero when unpaid. Cheqi never calculates or fills in this value; later payments do not change it.
+     * @type {number}
+     * @memberof PaymentDetails
+     */
+    paidAmount?: number;
+    /**
+     * Issuer-supplied amount still owed after the receipt was issued, for example 0 for a receipt paid in full. Required in every new ReceiptPayload. Must equal totalAmount minus paidAmount plus roundingAmount.
+     * @type {number}
+     * @memberof PaymentDetails
+     */
+    amountDue?: number;
+    /**
+     * Issuer-supplied rounding applied to the amount due, for example cash rounding. Required in new ReceiptPayloads; explicitly send zero when there is no rounding.
+     * @type {number}
+     * @memberof PaymentDetails
+     */
+    roundingAmount?: number;
+    /**
+     * Date by which a remaining amountDue must be paid (YYYY-MM-DD). When amountDue is positive, supply dueDate or paymentTerms.
+     * @type {Date}
+     * @memberof PaymentDetails
+     */
+    dueDate?: Date;
+    /**
+     * Free-text payment terms for a remaining amountDue.
+     * @type {string}
+     * @memberof PaymentDetails
+     */
+    paymentTerms?: string;
+    /**
+     * Split payment only: every payment method used, each with the amount paid with it. Their amounts must add up to paidAmount. When present, leave the single-method fields (paymentMeansCode, card and account fields) empty; a receipt paid with one method uses those fields instead of this list.
+     * @type {Array<PaymentMethod>}
+     * @memberof PaymentDetails
+     */
+    paymentMethods?: Array<PaymentMethod>;
 }
 
 /**
@@ -94,6 +138,12 @@ export function PaymentDetailsFromJSONTyped(json: any, ignoreDiscriminator: bool
         'accountIdentifierType': json['accountIdentifierType'] == null ? undefined : json['accountIdentifierType'],
         'merchantId': json['merchantId'] == null ? undefined : json['merchantId'],
         'paymentTerminalId': json['paymentTerminalId'] == null ? undefined : json['paymentTerminalId'],
+        'paidAmount': json['paidAmount'] == null ? undefined : json['paidAmount'],
+        'amountDue': json['amountDue'] == null ? undefined : json['amountDue'],
+        'roundingAmount': json['roundingAmount'] == null ? undefined : json['roundingAmount'],
+        'dueDate': json['dueDate'] == null ? undefined : (new Date(json['dueDate'])),
+        'paymentTerms': json['paymentTerms'] == null ? undefined : json['paymentTerms'],
+        'paymentMethods': json['paymentMethods'] == null ? undefined : ((json['paymentMethods'] as Array<any>).map(PaymentMethodFromJSON)),
     };
 }
 
@@ -116,5 +166,11 @@ export function PaymentDetailsToJSONTyped(value?: PaymentDetails | null, ignoreD
         'accountIdentifierType': value['accountIdentifierType'],
         'merchantId': value['merchantId'],
         'paymentTerminalId': value['paymentTerminalId'],
+        'paidAmount': value['paidAmount'],
+        'amountDue': value['amountDue'],
+        'roundingAmount': value['roundingAmount'],
+        'dueDate': value['dueDate'] == null ? undefined : ((value['dueDate']).toISOString().substring(0,10)),
+        'paymentTerms': value['paymentTerms'],
+        'paymentMethods': value['paymentMethods'] == null ? undefined : ((value['paymentMethods'] as Array<any>).map(PaymentMethodToJSON)),
     };
 }

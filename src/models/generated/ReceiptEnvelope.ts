@@ -20,6 +20,13 @@ import {
     ExpenseSubmissionEnvelopeToJSON,
     ExpenseSubmissionEnvelopeToJSONTyped,
 } from './ExpenseSubmissionEnvelope.js';
+import type { ReceiptDocumentProfile } from './ReceiptDocumentProfile.js';
+import {
+    ReceiptDocumentProfileFromJSON,
+    ReceiptDocumentProfileFromJSONTyped,
+    ReceiptDocumentProfileToJSON,
+    ReceiptDocumentProfileToJSONTyped,
+} from './ReceiptDocumentProfile.js';
 import type { ReceiptEnvelopeDocument } from './ReceiptEnvelopeDocument.js';
 import {
     ReceiptEnvelopeDocumentFromJSON,
@@ -70,6 +77,12 @@ export interface ReceiptEnvelope {
      * @memberof ReceiptEnvelope
      */
     receiptUuid: string;
+    /**
+     * Versioned profiles of documents inside this encrypted envelope. Recipients validate their decrypted documents against these profiles.
+     * @type {Array<ReceiptDocumentProfile>}
+     * @memberof ReceiptEnvelope
+     */
+    documentProfiles?: Array<ReceiptDocumentProfile>;
 }
 
 /**
@@ -100,6 +113,7 @@ export function ReceiptEnvelopeFromJSONTyped(json: any, ignoreDiscriminator: boo
         'expenseSubmission': json['expenseSubmission'] == null ? undefined : ExpenseSubmissionEnvelopeFromJSON(json['expenseSubmission']),
         'receiptGeneratorVersion': json['receiptGeneratorVersion'],
         'receiptUuid': json['receiptUuid'],
+        'documentProfiles': json['documentProfiles'] == null ? undefined : ((json['documentProfiles'] as Array<any>).map(ReceiptDocumentProfileFromJSON)),
     };
 }
 
@@ -120,5 +134,6 @@ export function ReceiptEnvelopeToJSONTyped(value?: ReceiptEnvelope | null, ignor
         'expenseSubmission': ExpenseSubmissionEnvelopeToJSON(value['expenseSubmission']),
         'receiptGeneratorVersion': value['receiptGeneratorVersion'],
         'receiptUuid': value['receiptUuid'],
+        'documentProfiles': value['documentProfiles'] == null ? undefined : ((value['documentProfiles'] as Array<any>).map(ReceiptDocumentProfileToJSON)),
     };
 }

@@ -14,7 +14,7 @@
 
 import { mapValues } from './runtime.js';
 /**
- * Encrypted credit note initiation request
+ * Encrypted credit note initiation request from a customer's device
  * @export
  * @interface EncryptedCreditNoteInitiationRequest
  */

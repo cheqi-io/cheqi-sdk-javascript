@@ -32,11 +32,12 @@ export interface ClientReceiptDownloadResponse {
      */
     createdAt?: Date;
     /**
-     * Timestamp after which the download link stops resolving.
+     * Always null: client-encrypted download links do not expire.
      * @type {Date}
      * @memberof ClientReceiptDownloadResponse
+     * @deprecated
      */
-    expiresAt?: Date;
+    expiresAt?: Date | null;
 }
 
 /**
@@ -75,6 +76,6 @@ export function ClientReceiptDownloadResponseToJSONTyped(value?: ClientReceiptDo
 
         'cheqiReceiptId': value['cheqiReceiptId'],
         'createdAt': value['createdAt'] == null ? undefined : ((value['createdAt']).toISOString()),
-        'expiresAt': value['expiresAt'] == null ? undefined : ((value['expiresAt']).toISOString()),
+        'expiresAt': value['expiresAt'] == null ? undefined : ((value['expiresAt'] as any).toISOString()),
     };
 }

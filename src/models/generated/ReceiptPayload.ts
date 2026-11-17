@@ -78,7 +78,7 @@ import {
 } from './Tax.js';
 
 /**
- * Definitive merchant-supplied receipt values encrypted independently for each matched owner device. Cheqi never receives this object in plaintext. All monetary, tax, fiscalization, signature, sequence, and QR values must be provided by the issuer; the SDK does not calculate them.
+ * Definitive merchant-supplied receipt values encrypted independently for each matched owner device. Cheqi never receives this object in plaintext. All monetary, tax, fiscalization, signature, sequence, and QR values must be provided by the issuer. Every new payload must satisfy the shared issuer validator, regardless of receiver formats; no financial values are inferred or repaired.
  * @export
  * @interface ReceiptPayload
  */
@@ -132,13 +132,25 @@ export interface ReceiptPayload {
      */
     totalAmount: number;
     /**
+     * Issuer-supplied sum of the receipt-level discounts. Cheqi never calculates or fills in this value; it only checks it against the discounts. Required whenever receipt-level discounts are present.
+     * @type {number}
+     * @memberof ReceiptPayload
+     */
+    totalDiscountAmount?: number;
+    /**
+     * Issuer-supplied sum of the receipt-level charges. Cheqi never calculates or fills in this value; it only checks it against the charges. Required whenever receipt-level charges are present.
+     * @type {number}
+     * @memberof ReceiptPayload
+     */
+    totalChargeAmount?: number;
+    /**
      * Issuer-supplied indication whether taxes apply to this receipt.
      * @type {boolean}
      * @memberof ReceiptPayload
      */
     taxesApplied: boolean;
     /**
-     * Issuer-supplied receipt line items.
+     * Issuer-supplied receipt line items. Each line must have exactly one VAT entry with an explicit category and tax amount, including zero tax.
      * @type {Array<Product>}
      * @memberof ReceiptPayload
      */
@@ -156,11 +168,11 @@ export interface ReceiptPayload {
      */
     charges?: Array<Charge>;
     /**
-     * Issuer-supplied receipt-level tax breakdown.
+     * Issuer-supplied VAT breakdown, including zero tax. Each entry must state category, rate, taxableAmount and amount.
      * @type {Array<Tax>}
      * @memberof ReceiptPayload
      */
-    taxes?: Array<Tax>;
+    taxes: Array<Tax>;
     /**
      * Transaction date when it differs from the issue date.
      * @type {Date}
@@ -190,7 +202,7 @@ export interface ReceiptPayload {
      * @type {PaymentDetails}
      * @memberof ReceiptPayload
      */
-    paymentDetails?: PaymentDetails;
+    paymentDetails: PaymentDetails;
     /**
      *
      * @type {JurisdictionalData}
@@ -212,6 +224,8 @@ export function instanceOfReceiptPayload(value: object): value is ReceiptPayload
     if (!('totalAmount' in value) || value['totalAmount'] === undefined) return false;
     if (!('taxesApplied' in value) || value['taxesApplied'] === undefined) return false;
     if (!('products' in value) || value['products'] === undefined) return false;
+    if (!('taxes' in value) || value['taxes'] === undefined) return false;
+    if (!('paymentDetails' in value) || value['paymentDetails'] === undefined) return false;
     return true;
 }
 
@@ -233,16 +247,18 @@ export function ReceiptPayloadFromJSONTyped(json: any, ignoreDiscriminator: bool
         'totalBeforeTax': json['totalBeforeTax'],
         'totalTaxAmount': json['totalTaxAmount'],
         'totalAmount': json['totalAmount'],
+        'totalDiscountAmount': json['totalDiscountAmount'] == null ? undefined : json['totalDiscountAmount'],
+        'totalChargeAmount': json['totalChargeAmount'] == null ? undefined : json['totalChargeAmount'],
         'taxesApplied': json['taxesApplied'],
         'products': ((json['products'] as Array<any>).map(ProductFromJSON)),
         'discounts': json['discounts'] == null ? undefined : ((json['discounts'] as Array<any>).map(DiscountFromJSON)),
         'charges': json['charges'] == null ? undefined : ((json['charges'] as Array<any>).map(ChargeFromJSON)),
-        'taxes': json['taxes'] == null ? undefined : ((json['taxes'] as Array<any>).map(TaxFromJSON)),
+        'taxes': ((json['taxes'] as Array<any>).map(TaxFromJSON)),
         'transactionDate': json['transactionDate'] == null ? undefined : (new Date(json['transactionDate'])),
         'purchaseDate': json['purchaseDate'] == null ? undefined : (new Date(json['purchaseDate'])),
         'period': json['period'] == null ? undefined : PeriodFromJSON(json['period']),
         'barcodes': json['barcodes'] == null ? undefined : ((json['barcodes'] as Array<any>).map(BarcodeFromJSON)),
-        'paymentDetails': json['paymentDetails'] == null ? undefined : PaymentDetailsFromJSON(json['paymentDetails']),
+        'paymentDetails': PaymentDetailsFromJSON(json['paymentDetails']),
         'jurisdictionalData': json['jurisdictionalData'] == null ? undefined : JurisdictionalDataFromJSON(json['jurisdictionalData']),
     };
 }
@@ -266,11 +282,13 @@ export function ReceiptPayloadToJSONTyped(value?: ReceiptPayload | null, ignoreD
         'totalBeforeTax': value['totalBeforeTax'],
         'totalTaxAmount': value['totalTaxAmount'],
         'totalAmount': value['totalAmount'],
+        'totalDiscountAmount': value['totalDiscountAmount'],
+        'totalChargeAmount': value['totalChargeAmount'],
         'taxesApplied': value['taxesApplied'],
         'products': ((value['products'] as Array<any>).map(ProductToJSON)),
         'discounts': value['discounts'] == null ? undefined : ((value['discounts'] as Array<any>).map(DiscountToJSON)),
         'charges': value['charges'] == null ? undefined : ((value['charges'] as Array<any>).map(ChargeToJSON)),
-        'taxes': value['taxes'] == null ? undefined : ((value['taxes'] as Array<any>).map(TaxToJSON)),
+        'taxes': ((value['taxes'] as Array<any>).map(TaxToJSON)),
         'transactionDate': value['transactionDate'] == null ? undefined : ((value['transactionDate']).toISOString()),
         'purchaseDate': value['purchaseDate'] == null ? undefined : ((value['purchaseDate']).toISOString()),
         'period': PeriodToJSON(value['period']),
