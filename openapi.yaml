@@ -116,14 +116,14 @@ paths:
               $ref: "#/components/schemas/AuthorizationCodeExchangeRequest"
         required: true
       responses:
-        "401":
-          description: Invalid client credentials
+        "200":
+          description: Authorization code exchanged successfully
           content:
             '*/*':
               schema:
                 $ref: "#/components/schemas/CompanyAuthorizationResponse"
-        "200":
-          description: Authorization code exchanged successfully
+        "401":
+          description: Invalid client credentials
           content:
             '*/*':
               schema:
@@ -236,12 +236,6 @@ paths:
           type: string
           format: uuid
       responses:
-        "200":
-          description: Store retrieved successfully
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/StoreDTO"
         "403":
           description: Not authorized to view this store
           content:
@@ -250,6 +244,12 @@ paths:
                 $ref: "#/components/schemas/StoreDTO"
         "404":
           description: Store or company not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/StoreDTO"
+        "200":
+          description: Store retrieved successfully
           content:
             '*/*':
               schema:
@@ -283,6 +283,12 @@ paths:
               $ref: "#/components/schemas/UpdateStoreRequest"
         required: true
       responses:
+        "200":
+          description: Store updated successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/StoreDTO"
         "404":
           description: Store or company not found
           content:
@@ -301,12 +307,6 @@ paths:
             '*/*':
               schema:
                 type: object
-        "200":
-          description: Store updated successfully
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/StoreDTO"
   /webhook/subscription:
     post:
       tags:
@@ -330,12 +330,6 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/WebhookResponse"
-        "200":
-          description: Webhook subscription created successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/WebhookResponse"
         "409":
           description: Duplicate webhook subscription already exists
           content:
@@ -346,6 +340,12 @@ paths:
           description: Insufficient permissions for one or more requested event types
           content:
             '*/*':
+              schema:
+                $ref: "#/components/schemas/WebhookResponse"
+        "200":
+          description: Webhook subscription created successfully
+          content:
+            application/json:
               schema:
                 $ref: "#/components/schemas/WebhookResponse"
       security:
@@ -427,6 +427,12 @@ paths:
               $ref: "#/components/schemas/CreateStoreRequest"
         required: true
       responses:
+        "201":
+          description: Store created successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/StoreDTO"
         "403":
           description: Not authorized to create stores for this company
           content:
@@ -445,12 +451,6 @@ paths:
             '*/*':
               schema:
                 type: object
-        "201":
-          description: Store created successfully
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/StoreDTO"
   /recipient/resolve:
     post:
       tags:
@@ -480,14 +480,14 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/RecipientResolutionResponse"
-        "401":
-          description: Authentication required
+        "200":
+          description: Recipient successfully resolved and matched
           content:
             '*/*':
               schema:
                 $ref: "#/components/schemas/RecipientResolutionResponse"
-        "200":
-          description: Recipient successfully resolved and matched
+        "401":
+          description: Authentication required
           content:
             '*/*':
               schema:
@@ -571,14 +571,12 @@ paths:
               $ref: "#/components/schemas/EncryptedReceiptEnvelope"
         required: true
       responses:
-        "202":
-          description: Encrypted receipt payload accepted for on-device formatting
+        "410":
+          description: Unsubmitted match expired
           content:
             '*/*':
               schema:
-                oneOf:
-                - $ref: "#/components/schemas/ReceiptSubmissionResponse"
-                - $ref: "#/components/schemas/MatchStatusResponse"
+                $ref: "#/components/schemas/MatchStatusResponse"
         "403":
           description: Insufficient permissions
           content:
@@ -591,12 +589,14 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/ReceiptSubmissionResponse"
-        "410":
-          description: Unsubmitted match expired
+        "202":
+          description: Encrypted receipt payload accepted for on-device formatting
           content:
             '*/*':
               schema:
-                $ref: "#/components/schemas/MatchStatusResponse"
+                oneOf:
+                - $ref: "#/components/schemas/ReceiptSubmissionResponse"
+                - $ref: "#/components/schemas/MatchStatusResponse"
         "404":
           description: Match absent or belongs to another requester
           content:
@@ -657,18 +657,6 @@ paths:
               $ref: "#/components/schemas/ClientReceiptDownloadRequest"
         required: true
       responses:
-        "200":
-          description: Idempotent replay of an identical earlier upload
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/ClientReceiptDownloadResponse"
-        "201":
-          description: Encrypted receipt stored
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/ClientReceiptDownloadResponse"
         "409":
           description: A different receipt is already stored under this download id
           content:
@@ -683,6 +671,18 @@ paths:
                 $ref: "#/components/schemas/ClientReceiptDownloadResponse"
         "403":
           description: Insufficient permissions - requires receipt:issue scope
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ClientReceiptDownloadResponse"
+        "201":
+          description: Encrypted receipt stored
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ClientReceiptDownloadResponse"
+        "200":
+          description: Idempotent replay of an identical earlier upload
           content:
             '*/*':
               schema:
@@ -714,14 +714,14 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/ReceiptSubmissionResponse"
-        "202":
-          description: Encrypted credit-note generation job accepted
+        "403":
+          description: Insufficient permissions - requires receipt:issue scope
           content:
             '*/*':
               schema:
                 $ref: "#/components/schemas/ReceiptSubmissionResponse"
-        "403":
-          description: Insufficient permissions - requires receipt:issue scope
+        "202":
+          description: Encrypted credit-note generation job accepted
           content:
             '*/*':
               schema:
@@ -913,14 +913,14 @@ paths:
           type: string
           format: uuid
       responses:
-        "404":
-          description: Client application not found or public key not configured
+        "200":
+          description: Public key retrieved successfully
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/PublicKeyResponse"
-        "200":
-          description: Public key retrieved successfully
+        "404":
+          description: Client application not found or public key not configured
           content:
             application/json:
               schema:
@@ -1158,14 +1158,14 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/StoreDTO"
-        "200":
-          description: Store activated successfully
+        "403":
+          description: Not authorized to activate this store
           content:
             '*/*':
               schema:
                 $ref: "#/components/schemas/StoreDTO"
-        "403":
-          description: Not authorized to activate this store
+        "200":
+          description: Store activated successfully
           content:
             '*/*':
               schema:
@@ -1366,14 +1366,14 @@ paths:
         **Accessible for:** Client Application
       operationId: getAuthorizedResources
       responses:
-        "200":
-          description: Authorized resources retrieved successfully
+        "401":
+          description: Invalid or missing access token
           content:
             '*/*':
               schema:
                 $ref: "#/components/schemas/AuthorizedResourcesResponse"
-        "401":
-          description: Invalid or missing access token
+        "200":
+          description: Authorized resources retrieved successfully
           content:
             '*/*':
               schema:
@@ -1831,27 +1831,6 @@ components:
             public key.
       description: One encrypted definitive receipt payload addressed to an owner
         device.
-    ReceiptSubmissionResponse:
-      type: object
-      properties:
-        cheqiReceiptId:
-          type: string
-          description: Stable Cheqi receipt identifier assigned to the processing
-            job.
-        matchId:
-          type: string
-        status:
-          type: string
-          description: Processing status of an encrypted receipt payload submission.
-          enum:
-          - PENDING
-          - CLAIMED
-          - COMPLETED
-          - FAILED_PERMANENT
-        createdAt:
-          type: string
-          format: date-time
-      description: Acknowledgement of an accepted encrypted receipt payload submission.
     MatchState:
       type: string
       description: State of a receipt match and its submission
@@ -1885,6 +1864,27 @@ components:
         retryAfterSeconds:
           type: integer
           format: int32
+    ReceiptSubmissionResponse:
+      type: object
+      properties:
+        cheqiReceiptId:
+          type: string
+          description: Stable Cheqi receipt identifier assigned to the processing
+            job.
+        matchId:
+          type: string
+        status:
+          type: string
+          description: Processing status of an encrypted receipt payload submission.
+          enum:
+          - PENDING
+          - CLAIMED
+          - COMPLETED
+          - FAILED_PERMANENT
+        createdAt:
+          type: string
+          format: date-time
+      description: Acknowledgement of an accepted encrypted receipt payload submission.
     Barcode:
       type: object
       properties:
@@ -2747,8 +2747,10 @@ components:
           format: date-time
         expiresAt:
           type: string
-          description: Timestamp after which the download link stops resolving.
+          description: "Always null: client-encrypted download links do not expire."
           format: date-time
+          nullable: true
+          deprecated: true
     ClientCredentialsTokenRequest:
       type: object
       properties:
@@ -3279,13 +3281,13 @@ components:
           $ref: "#/components/schemas/PageableObject"
         sort:
           $ref: "#/components/schemas/SortObject"
+        numberOfElements:
+          type: integer
+          format: int32
         first:
           type: boolean
         last:
           type: boolean
-        numberOfElements:
-          type: integer
-          format: int32
         empty:
           type: boolean
     PageableObject:
@@ -3294,14 +3296,14 @@ components:
         offset:
           type: integer
           format: int64
+        paged:
+          type: boolean
         pageNumber:
           type: integer
           format: int32
         pageSize:
           type: integer
           format: int32
-        paged:
-          type: boolean
         sort:
           $ref: "#/components/schemas/SortObject"
         unpaged:
@@ -3839,6 +3841,31 @@ components:
           $ref: "#/components/schemas/ReceivingParty"
       description: Receiving-party context in XML and Cheqi JSON forms for the resolved
         recipient.
+    EncryptedCreditNoteInitiationRequest:
+      required:
+      - cheqiReceiptId
+      - encryptedCreditNoteInitiationRequest
+      - encryptedSymmetricKey
+      - publicKey
+      type: object
+      properties:
+        cheqiReceiptId:
+          type: string
+          description: The Cheqi receipt ID for the original receipt
+        publicKey:
+          type: string
+          description: The public key of the requesting device
+        encryptedCreditNoteInitiationRequest:
+          type: string
+          description: Base64-encoded ciphertext containing the plaintext contract
+            documented as `CreditNoteInitiationRequest` in `components/schemas`
+        encryptedSymmetricKey:
+          type: string
+          description: The AES symmetric key encrypted with the recipient's RSA public
+            key
+      description: Encrypted credit note initiation request from a customer's device
+      x-tags:
+      - Credit Note Management
     CreditNoteInitiationRequest:
       required:
       - cheqiReceiptId
