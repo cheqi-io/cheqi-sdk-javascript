@@ -338,3 +338,31 @@ npm run test:browser
 npm run typecheck
 make generate
 ```
+
+## Credit notes in the web wallet
+
+For the web wallet, issue the credit note through an ordinary encrypted receipt
+link. Include its own `documentNumber`, the original invoice's exact number in
+`originatorDocumentReference`, and the normal `taxesApplied` boolean. The helper
+also accepts the existing generation wrapper with `taxesApplied` at its root and
+`creditNoteTemplateRequest` as its body. Amounts are preserved without calculations.
+
+The reference stays inside the ciphertext. There is no backend invoice lookup,
+reference hash, parent Cheqi ID or encrypted parent-link field. Once the customer
+opens the credit note's link, the wallet matches the decrypted reference to one
+local invoice with that exact document number from the same issuer. If no unique
+invoice is available, the note remains visible on its own and can link later.
+The original invoice is unchanged, and both documents support ordinary PDF/XML
+export and independent removal.
+
+Preparation is local and reuses the existing `PreparedReceiptDownload` result and
+backend-generated envelope/upload models. Persist it before upload; retry the same
+prepared ciphertext after uncertain outcomes. For a custom receipt host, supply
+`baseUrl` (`base_url` in Python) to preparation. The browser needs the updated
+credit-note envelope support; no new backend routing endpoint or migration is needed.
+
+```javascript
+const prepared = await sdk.creditNoteService.prepareDownload(creditNotePayload);
+// Persist prepared and show prepared.downloadUrl as the normal receipt link/QR.
+await sdk.receiptService.uploadPreparedDownload(prepared);
+```

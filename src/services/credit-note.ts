@@ -1,3 +1,6 @@
+import { encryptDownloadEnvelope, generateDownloadLink } from "../download/index.js";
+import { randomUuid, type CryptoProvider } from "../runtime-crypto.js";
+import type { PreparedReceiptDownload } from "../models.js";
 import { CheqiApiError, CheqiSDKError, ErrorCodes } from "../errors.js";
 import { CreditNoteResult } from "../models.js";
 import type {
@@ -21,11 +24,30 @@ export class CreditNoteService {
   constructor(
     private readonly apiClient: Pick<CheqiApiClient, "submitEncryptedCreditNote">,
     private readonly encryptionService: EncryptionService,
-    private readonly matchingService: MatchingService
+    private readonly matchingService: MatchingService,
+    private readonly crypto?: CryptoProvider
   ) {
     if (!apiClient) throw new TypeError("apiClient cannot be null");
     if (!encryptionService) throw new TypeError("encryptionService cannot be null");
     if (!matchingService) throw new TypeError("matchingService cannot be null");
+  }
+
+  /** Prepare a normal receipt link; the receiving wallet links the encrypted document reference locally. */
+  async prepareDownload(payload: unknown, baseUrl = "https://receipt.cheqi.io"): Promise<PreparedReceiptDownload> {
+    const node = typeof payload === "string" ? JSON.parse(payload) : JSON.parse(serializeJson(payload));
+    const body = node?.creditNoteTemplateRequest ?? node;
+    if (!body || typeof body.documentNumber !== "string" || typeof body.originatorDocumentReference !== "string")
+      throw validationError("documentNumber and originatorDocumentReference are required");
+    requireText(body.documentNumber, "documentNumber");
+    requireText(body.originatorDocumentReference, "originatorDocumentReference");
+    if (typeof node.taxesApplied !== "boolean") throw validationError("taxesApplied must be a boolean");
+    const link = generateDownloadLink(baseUrl, this.crypto);
+    const ciphertext = await encryptDownloadEnvelope({ envelopeVersion: 2, cheqiReceiptId: link.downloadId,
+      receiptUuid: randomUuid(this.crypto), receiptGeneratorVersion: "credit-note-payload-v1",
+      documents: { CREDIT_NOTE_PAYLOAD: { mediaType: "application/json",
+        content: serializeJson({ ...body, taxesApplied: node.taxesApplied }) } }
+    }, link.contentKey, this.crypto);
+    return { downloadUrl: link.url, uploadRequest: { downloadId: link.downloadId, ciphertext } };
   }
 
   /** Serializes and encrypts the supplied definitive credit-note payload without calculations. */

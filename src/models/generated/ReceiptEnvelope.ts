@@ -48,13 +48,13 @@ export interface ReceiptEnvelope {
      */
     cheqiReceiptId: string;
     /**
-     * Version 1 holds generated CHEQI/UBL documents. Version 2 download envelopes hold RECEIPT_PAYLOAD generation input and optional IDENTIFICATION_DETAILS. Each document's content is serialized JSON or XML, not a nested parsed document.
+     * Version 1 holds generated CHEQI/UBL documents. Version 2 download envelopes hold RECEIPT_PAYLOAD or CREDIT_NOTE_PAYLOAD generation input and optional IDENTIFICATION_DETAILS. Each document's content is serialized JSON or XML, not a nested parsed document.
      * @type {{ [key: string]: ReceiptEnvelopeDocument; }}
      * @memberof ReceiptEnvelope
      */
     documents: { [key: string]: ReceiptEnvelopeDocument; };
     /**
-     * Schema version of this encrypted plaintext envelope. Version 2 download envelopes carry RECEIPT_PAYLOAD generation input instead of a generated CHEQI document.
+     * Schema version of this encrypted plaintext envelope. Version 2 download envelopes carry RECEIPT_PAYLOAD or CREDIT_NOTE_PAYLOAD generation input instead of a generated CHEQI document.
      * @type {number}
      * @memberof ReceiptEnvelope
      */

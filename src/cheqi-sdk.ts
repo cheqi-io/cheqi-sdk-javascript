@@ -70,7 +70,8 @@ export class CheqiSDK {
     this.creditNoteService = new CreditNoteService(
       this.apiClient,
       this.encryptionService,
-      this.matchingService
+      this.matchingService,
+      options.crypto
     );
     this.oauthService = new OAuthService(this.apiClient);
   }
