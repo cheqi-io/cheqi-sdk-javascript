@@ -46,3 +46,5 @@ export type {
   RequestOptions,
   ReceiptIssueOptions
 } from "./types.js";
+
+export type { PreparedCreditNote } from "./models/generated/PreparedCreditNote.js";

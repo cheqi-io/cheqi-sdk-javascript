@@ -22,7 +22,7 @@ import {
 } from './EncryptedReceiptPayload.js';
 
 /**
- * Independently encrypted credit-note generation request for every owner device
+ * Encrypted definitive credit-note payloads submitted for on-device formatting.
  * @export
  * @interface EncryptedCreditNoteEnvelope
  */

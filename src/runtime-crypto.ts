@@ -12,6 +12,9 @@ export interface CryptoAlgorithm {
 
 /** The Web Crypto methods used by the SDK; no DOM type declarations are required. */
 export interface SubtleCryptoProvider {
+  generateKey?(algorithm: { name: "RSA-OAEP"; hash: "SHA-256"; modulusLength: number; publicExponent: Uint8Array<ArrayBuffer> },
+    extractable: boolean, usages: Array<"encrypt" | "decrypt">): Promise<{publicKey: CryptoKeyHandle; privateKey: CryptoKeyHandle}>;
+  exportKey?(format: "spki" | "pkcs8", key: CryptoKeyHandle): Promise<ArrayBuffer>;
   importKey(format: "raw" | "spki" | "pkcs8", data: ArrayBuffer, algorithm: string | CryptoAlgorithm,
     extractable: boolean, usages: Array<"encrypt" | "decrypt">): Promise<CryptoKeyHandle>;
   encrypt(algorithm: string | CryptoAlgorithm, key: CryptoKeyHandle, data: ArrayBuffer): Promise<ArrayBuffer>;

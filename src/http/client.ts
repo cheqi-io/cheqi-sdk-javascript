@@ -1,3 +1,4 @@
+import { CreditNoteReferenceResolutionFromJSON, type CreditNoteDocumentReference } from "../models/generated/index.js";
 import { CheqiSDKConfig } from "../config.js";
 import { CheqiApiError, ErrorCodes, SubmissionInProgressError } from "../errors.js";
 import type { Logger } from "../logger.js";
@@ -163,6 +164,12 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
       options,
       operation: "submitEncryptedReceipt"
     });
+  }
+
+  async resolveCreditNoteReference(request: CreditNoteDocumentReference, options?: RequestOptions | null) {
+    return CreditNoteReferenceResolutionFromJSON(await this.request("POST", "/credit-note/resolve", {
+      body: normalizeValue(request), options, operation: "resolveCreditNoteReference", retryable: true
+    }));
   }
 
   async uploadEncryptedDownloadReceipt(

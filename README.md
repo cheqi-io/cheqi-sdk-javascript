@@ -338,3 +338,29 @@ npm run test:browser
 npm run typecheck
 make generate
 ```
+
+## Credit notes by document number
+
+Issue the original receipt normally with your own `documentNumber`. Supply that exact
+number as the credit note's `originatorDocumentReference`, alongside its own
+`documentNumber` and definitive positive credit amounts. Preserve `taxesApplied`
+in the generation input. No Cheqi ID, original download URL, or decryption key is
+needed from your integration.
+
+The SDK resolves the reference within the authenticated issuing company and
+prepares encrypted delivery through the original device or browser route.
+A missing original returns 404; an ambiguous number returns 409. Do not create a
+new prepared submission after an uncertain upload: persist and retry the same
+ciphertext. `PreparedCreditNote` is generated from the backend OpenAPI schema;
+the SDK implements preparation and submission, not independent data models.
+
+This flow requires the updated backend reference endpoint and originals issued
+with document-reference support. Older encrypted originals cannot be upgraded
+automatically. The browser saves credit notes as separate documents under the
+original invoice, with normal viewing, PDF and XML export.
+
+```javascript
+const prepared = await sdk.creditNoteService.prepareCreditNote(generationInput);
+// Persist prepared before submitting; reuse it unchanged after an uncertain outcome.
+const result = await sdk.creditNoteService.submitPreparedCreditNote(prepared);
+```

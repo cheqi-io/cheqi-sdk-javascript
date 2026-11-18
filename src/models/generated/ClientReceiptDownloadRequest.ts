@@ -14,7 +14,7 @@
 
 import { mapValues } from './runtime.js';
 /**
- * Client-encrypted receipt payload
+ *
  * @export
  * @interface ClientReceiptDownloadRequest
  */
@@ -37,6 +37,43 @@ export interface ClientReceiptDownloadRequest {
      * @memberof ClientReceiptDownloadRequest
      */
     templateHash?: string | null;
+    /**
+     * Legacy symmetric-link protocol. For a credit note, the original invoice download ID. Must belong to the same issuing company and application. Supply together with encryptedParentLink; never include a URL fragment or key.
+     * @type {string}
+     * @memberof ClientReceiptDownloadRequest
+     * @deprecated
+     */
+    parentDownloadId?: string;
+    /**
+     * SDK-generated AES-GCM encrypted child link. Version 2 plaintext: {version:2,parentCheqiReceiptId,downloadId,contentKey}; its fresh AES key is wrapped in encryptedParentLinkKey. Never supply keys manually.
+     * @type {string}
+     * @memberof ClientReceiptDownloadRequest
+     */
+    encryptedParentLink?: string;
+    /**
+     * SDK-computed SHA-256 hex of UTF-8 cheqi:issuer-document:v1: followed by the exact documentNumber. Indexed within the authenticated issuing company for later credit-note resolution. This is a routing identifier, not encryption.
+     * @type {string}
+     * @memberof ClientReceiptDownloadRequest
+     */
+    documentReferenceHash?: string;
+    /**
+     * SDK-generated RSA public receiving key, base64 SPKI, 2048-4096 bits, RSA-OAEP SHA-256/MGF1 SHA-256. The corresponding PKCS8 private key is only inside the encrypted original envelope.
+     * @type {string}
+     * @memberof ClientReceiptDownloadRequest
+     */
+    creditNotePublicKey?: string;
+    /**
+     * SDK-internal original identifier returned by POST /credit-note/resolve. Merchants supply originatorDocumentReference in their encrypted credit-note payload.
+     * @type {string}
+     * @memberof ClientReceiptDownloadRequest
+     */
+    parentCheqiReceiptId?: string;
+    /**
+     * SDK-generated base64 RSA-OAEP SHA-256/MGF1 SHA-256 wrapped AES key for encryptedParentLink. Supply with parentCheqiReceiptId and encryptedParentLink.
+     * @type {string}
+     * @memberof ClientReceiptDownloadRequest
+     */
+    encryptedParentLinkKey?: string;
 }
 
 /**
@@ -61,6 +98,12 @@ export function ClientReceiptDownloadRequestFromJSONTyped(json: any, ignoreDiscr
         'downloadId': json['downloadId'],
         'ciphertext': json['ciphertext'],
         'templateHash': json['templateHash'] == null ? undefined : json['templateHash'],
+        'parentDownloadId': json['parentDownloadId'] == null ? undefined : json['parentDownloadId'],
+        'encryptedParentLink': json['encryptedParentLink'] == null ? undefined : json['encryptedParentLink'],
+        'documentReferenceHash': json['documentReferenceHash'] == null ? undefined : json['documentReferenceHash'],
+        'creditNotePublicKey': json['creditNotePublicKey'] == null ? undefined : json['creditNotePublicKey'],
+        'parentCheqiReceiptId': json['parentCheqiReceiptId'] == null ? undefined : json['parentCheqiReceiptId'],
+        'encryptedParentLinkKey': json['encryptedParentLinkKey'] == null ? undefined : json['encryptedParentLinkKey'],
     };
 }
 
@@ -78,5 +121,11 @@ export function ClientReceiptDownloadRequestToJSONTyped(value?: ClientReceiptDow
         'downloadId': value['downloadId'],
         'ciphertext': value['ciphertext'],
         'templateHash': value['templateHash'],
+        'parentDownloadId': value['parentDownloadId'],
+        'encryptedParentLink': value['encryptedParentLink'],
+        'documentReferenceHash': value['documentReferenceHash'],
+        'creditNotePublicKey': value['creditNotePublicKey'],
+        'parentCheqiReceiptId': value['parentCheqiReceiptId'],
+        'encryptedParentLinkKey': value['encryptedParentLinkKey'],
     };
 }

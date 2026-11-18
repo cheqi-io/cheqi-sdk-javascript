@@ -55,6 +55,36 @@ export interface PageWebhookCompanyInvitationAccepted {
     totalPages?: number;
     /**
      *
+     * @type {PageableObject}
+     * @memberof PageWebhookCompanyInvitationAccepted
+     */
+    pageable?: PageableObject;
+    /**
+     *
+     * @type {SortObject}
+     * @memberof PageWebhookCompanyInvitationAccepted
+     */
+    sort?: SortObject;
+    /**
+     *
+     * @type {boolean}
+     * @memberof PageWebhookCompanyInvitationAccepted
+     */
+    first?: boolean;
+    /**
+     *
+     * @type {boolean}
+     * @memberof PageWebhookCompanyInvitationAccepted
+     */
+    last?: boolean;
+    /**
+     *
+     * @type {number}
+     * @memberof PageWebhookCompanyInvitationAccepted
+     */
+    numberOfElements?: number;
+    /**
+     *
      * @type {number}
      * @memberof PageWebhookCompanyInvitationAccepted
      */
@@ -71,36 +101,6 @@ export interface PageWebhookCompanyInvitationAccepted {
      * @memberof PageWebhookCompanyInvitationAccepted
      */
     number?: number;
-    /**
-     *
-     * @type {PageableObject}
-     * @memberof PageWebhookCompanyInvitationAccepted
-     */
-    pageable?: PageableObject;
-    /**
-     *
-     * @type {SortObject}
-     * @memberof PageWebhookCompanyInvitationAccepted
-     */
-    sort?: SortObject;
-    /**
-     *
-     * @type {number}
-     * @memberof PageWebhookCompanyInvitationAccepted
-     */
-    numberOfElements?: number;
-    /**
-     *
-     * @type {boolean}
-     * @memberof PageWebhookCompanyInvitationAccepted
-     */
-    first?: boolean;
-    /**
-     *
-     * @type {boolean}
-     * @memberof PageWebhookCompanyInvitationAccepted
-     */
-    last?: boolean;
     /**
      *
      * @type {boolean}
@@ -128,14 +128,14 @@ export function PageWebhookCompanyInvitationAcceptedFromJSONTyped(json: any, ign
 
         'totalElements': json['totalElements'] == null ? undefined : json['totalElements'],
         'totalPages': json['totalPages'] == null ? undefined : json['totalPages'],
+        'pageable': json['pageable'] == null ? undefined : PageableObjectFromJSON(json['pageable']),
+        'sort': json['sort'] == null ? undefined : SortObjectFromJSON(json['sort']),
+        'first': json['first'] == null ? undefined : json['first'],
+        'last': json['last'] == null ? undefined : json['last'],
+        'numberOfElements': json['numberOfElements'] == null ? undefined : json['numberOfElements'],
         'size': json['size'] == null ? undefined : json['size'],
         'content': json['content'] == null ? undefined : ((json['content'] as Array<any>).map(WebhookCompanyInvitationAcceptedFromJSON)),
         'number': json['number'] == null ? undefined : json['number'],
-        'pageable': json['pageable'] == null ? undefined : PageableObjectFromJSON(json['pageable']),
-        'sort': json['sort'] == null ? undefined : SortObjectFromJSON(json['sort']),
-        'numberOfElements': json['numberOfElements'] == null ? undefined : json['numberOfElements'],
-        'first': json['first'] == null ? undefined : json['first'],
-        'last': json['last'] == null ? undefined : json['last'],
         'empty': json['empty'] == null ? undefined : json['empty'],
     };
 }
@@ -153,14 +153,14 @@ export function PageWebhookCompanyInvitationAcceptedToJSONTyped(value?: PageWebh
 
         'totalElements': value['totalElements'],
         'totalPages': value['totalPages'],
+        'pageable': PageableObjectToJSON(value['pageable']),
+        'sort': SortObjectToJSON(value['sort']),
+        'first': value['first'],
+        'last': value['last'],
+        'numberOfElements': value['numberOfElements'],
         'size': value['size'],
         'content': value['content'] == null ? undefined : ((value['content'] as Array<any>).map(WebhookCompanyInvitationAcceptedToJSON)),
         'number': value['number'],
-        'pageable': PageableObjectToJSON(value['pageable']),
-        'sort': SortObjectToJSON(value['sort']),
-        'numberOfElements': value['numberOfElements'],
-        'first': value['first'],
-        'last': value['last'],
         'empty': value['empty'],
     };
 }

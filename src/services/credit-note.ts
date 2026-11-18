@@ -1,3 +1,10 @@
+import type { CryptoProvider } from "../runtime-crypto.js";
+import { randomUuid } from "../runtime-crypto.js";
+import { generateDownloadLink, encryptDownloadEnvelope } from "../download/index.js";
+import { documentReferenceHash } from "./document-reference.js";
+
+import type { PreparedCreditNote } from "../models/generated/PreparedCreditNote.js";
+
 import { CheqiApiError, CheqiSDKError, ErrorCodes } from "../errors.js";
 import { CreditNoteResult } from "../models.js";
 import type {
@@ -19,13 +26,80 @@ import { MatchingService } from "./matching.js";
 /** Issues definitive credit-note values through the encrypted credit-note endpoint. */
 export class CreditNoteService {
   constructor(
-    private readonly apiClient: Pick<CheqiApiClient, "submitEncryptedCreditNote">,
+    private readonly apiClient: Pick<CheqiApiClient, "submitEncryptedCreditNote"> & Partial<Pick<CheqiApiClient, "resolveCreditNoteReference" | "uploadEncryptedDownloadReceipt">>,
     private readonly encryptionService: EncryptionService,
-    private readonly matchingService: MatchingService
+    private readonly matchingService: MatchingService,
+    private readonly crypto?: CryptoProvider
   ) {
     if (!apiClient) throw new TypeError("apiClient cannot be null");
     if (!encryptionService) throw new TypeError("encryptionService cannot be null");
     if (!matchingService) throw new TypeError("matchingService cannot be null");
+  }
+
+  async prepareCreditNote(payload: unknown, options?: ReceiptIssueOptions | null): Promise<PreparedCreditNote> {
+    const node = typeof payload === "string" ? JSON.parse(payload) : JSON.parse(serializeJson(payload));
+    const body = node?.creditNoteTemplateRequest ?? node;
+    if (!body || typeof body.originatorDocumentReference !== "string" || !body.originatorDocumentReference.trim())
+      throw validationError("originatorDocumentReference must contain the original documentNumber");
+    const { storeId, ...requestOptions } = validateRequestOptions(options) as ReceiptIssueOptions;
+    if (!this.apiClient.resolveCreditNoteReference) throw validationError("API client does not support document-reference resolution");
+    try {
+      const original = await this.apiClient.resolveCreditNoteReference({
+        documentReferenceHash: await documentReferenceHash(body.originatorDocumentReference, this.crypto)
+      }, requestOptions);
+      requireText(original?.parentCheqiReceiptId, "resolved parentCheqiReceiptId");
+      const parent = original.parentCheqiReceiptId;
+      if (original.deliveryRoute === "DIGITAL") {
+        if (typeof node.taxesApplied !== "boolean") throw validationError("taxesApplied must be a boolean for device generation");
+        const match = await this.matchingService.matchCustomer({ cheqiReceiptId: parent }, requestOptions);
+        validateDeviceRoute(match);
+        if (match.deliveryRouteType !== "DIGITAL") throw validationError("Original owner-device route is unavailable");
+        const generation = node.creditNoteTemplateRequest ? node : { taxesApplied: node.taxesApplied, creditNoteTemplateRequest: body };
+        return { parentCheqiReceiptId: parent, deviceSubmission: { parentCheqiReceiptId: parent,
+          matchId: match.matchId!, storeId: storeId ?? original.storeId ?? undefined,
+          deviceDeliveries: await this.encryptForDevices(serializeJson(generation), match.recipients!) } };
+      }
+      if (original.deliveryRoute !== "DOWNLOAD") throw validationError("Unsupported original document route");
+      if (storeId) throw validationError("Download delivery does not support store-scoped issuance");
+      requireText(original.creditNotePublicKey, "creditNotePublicKey");
+      const child = generateDownloadLink("https://receipt.cheqi.io", this.crypto);
+      const link = await this.encryptionService.encryptForDevice(serializeJson({ version: 2,
+        parentCheqiReceiptId: parent, downloadId: child.downloadId, contentKey: child.contentKey }),
+        { id: parent, publicKey: original.creditNotePublicKey });
+      const ciphertext = await encryptDownloadEnvelope({ envelopeVersion: 2, cheqiReceiptId: child.downloadId,
+        receiptUuid: randomUuid(this.crypto), receiptGeneratorVersion: "credit-note-payload-v1",
+        documents: { CREDIT_NOTE_PAYLOAD: { mediaType: "application/json", content: serializeJson(body) } }
+      }, child.contentKey, this.crypto);
+      return { parentCheqiReceiptId: parent, downloadSubmission: { downloadId: child.downloadId, ciphertext,
+        parentCheqiReceiptId: parent, encryptedParentLink: link.encryptedContent, encryptedParentLinkKey: link.encryptedAesKey } };
+    } catch (error) {
+      if (error instanceof CheqiApiError) throw wrapApiError("Credit-note reference preparation failed", error);
+      throw error;
+    }
+  }
+
+  async submitPreparedCreditNote(prepared: PreparedCreditNote, options?: RequestOptions | null): Promise<CreditNoteResult> {
+    validateRequestOptions(options);
+    if (!prepared || Boolean(prepared.deviceSubmission) === Boolean(prepared.downloadSubmission))
+      throw validationError("Exactly one prepared submission is required");
+    const submission = prepared.deviceSubmission ?? prepared.downloadSubmission!;
+    if (!prepared.parentCheqiReceiptId || submission.parentCheqiReceiptId !== prepared.parentCheqiReceiptId)
+      throw validationError("Credit-note parent mismatch");
+    try {
+      if (prepared.deviceSubmission) {
+        const response = await this.apiClient.submitEncryptedCreditNote(prepared.deviceSubmission, options);
+        if (!response?.cheqiReceiptId || response.matchId !== prepared.deviceSubmission.matchId)
+          throw validationError("Credit-note acceptance is not confirmed");
+        return CreditNoteResult.accepted(prepared.parentCheqiReceiptId, response);
+      }
+      if (!this.apiClient.uploadEncryptedDownloadReceipt) throw validationError("API client does not support downloads");
+      const response = await this.apiClient.uploadEncryptedDownloadReceipt(prepared.downloadSubmission!, options);
+      if (!response?.cheqiReceiptId) throw validationError("Credit-note acceptance is not confirmed");
+      return CreditNoteResult.accepted(prepared.parentCheqiReceiptId, { ...response, status: "COMPLETED" });
+    } catch (error) {
+      if (error instanceof CheqiApiError) throw wrapApiError("Credit-note submission failed; retain the prepared submission", error);
+      throw error;
+    }
   }
 
   /** Serializes and encrypts the supplied definitive credit-note payload without calculations. */
