@@ -55,18 +55,6 @@ export interface PageWebhookCompanyInvitationAccepted {
     totalPages?: number;
     /**
      *
-     * @type {PageableObject}
-     * @memberof PageWebhookCompanyInvitationAccepted
-     */
-    pageable?: PageableObject;
-    /**
-     *
-     * @type {SortObject}
-     * @memberof PageWebhookCompanyInvitationAccepted
-     */
-    sort?: SortObject;
-    /**
-     *
      * @type {boolean}
      * @memberof PageWebhookCompanyInvitationAccepted
      */
@@ -83,6 +71,18 @@ export interface PageWebhookCompanyInvitationAccepted {
      * @memberof PageWebhookCompanyInvitationAccepted
      */
     numberOfElements?: number;
+    /**
+     *
+     * @type {PageableObject}
+     * @memberof PageWebhookCompanyInvitationAccepted
+     */
+    pageable?: PageableObject;
+    /**
+     *
+     * @type {SortObject}
+     * @memberof PageWebhookCompanyInvitationAccepted
+     */
+    sort?: SortObject;
     /**
      *
      * @type {number}
@@ -128,11 +128,11 @@ export function PageWebhookCompanyInvitationAcceptedFromJSONTyped(json: any, ign
 
         'totalElements': json['totalElements'] == null ? undefined : json['totalElements'],
         'totalPages': json['totalPages'] == null ? undefined : json['totalPages'],
-        'pageable': json['pageable'] == null ? undefined : PageableObjectFromJSON(json['pageable']),
-        'sort': json['sort'] == null ? undefined : SortObjectFromJSON(json['sort']),
         'first': json['first'] == null ? undefined : json['first'],
         'last': json['last'] == null ? undefined : json['last'],
         'numberOfElements': json['numberOfElements'] == null ? undefined : json['numberOfElements'],
+        'pageable': json['pageable'] == null ? undefined : PageableObjectFromJSON(json['pageable']),
+        'sort': json['sort'] == null ? undefined : SortObjectFromJSON(json['sort']),
         'size': json['size'] == null ? undefined : json['size'],
         'content': json['content'] == null ? undefined : ((json['content'] as Array<any>).map(WebhookCompanyInvitationAcceptedFromJSON)),
         'number': json['number'] == null ? undefined : json['number'],
@@ -153,11 +153,11 @@ export function PageWebhookCompanyInvitationAcceptedToJSONTyped(value?: PageWebh
 
         'totalElements': value['totalElements'],
         'totalPages': value['totalPages'],
-        'pageable': PageableObjectToJSON(value['pageable']),
-        'sort': SortObjectToJSON(value['sort']),
         'first': value['first'],
         'last': value['last'],
         'numberOfElements': value['numberOfElements'],
+        'pageable': PageableObjectToJSON(value['pageable']),
+        'sort': SortObjectToJSON(value['sort']),
         'size': value['size'],
         'content': value['content'] == null ? undefined : ((value['content'] as Array<any>).map(WebhookCompanyInvitationAcceptedToJSON)),
         'number': value['number'],

@@ -24,13 +24,13 @@ export interface SortObject {
      * @type {boolean}
      * @memberof SortObject
      */
-    unsorted?: boolean;
+    sorted?: boolean;
     /**
      *
      * @type {boolean}
      * @memberof SortObject
      */
-    sorted?: boolean;
+    unsorted?: boolean;
     /**
      *
      * @type {boolean}
@@ -56,8 +56,8 @@ export function SortObjectFromJSONTyped(json: any, ignoreDiscriminator: boolean)
     }
     return {
 
-        'unsorted': json['unsorted'] == null ? undefined : json['unsorted'],
         'sorted': json['sorted'] == null ? undefined : json['sorted'],
+        'unsorted': json['unsorted'] == null ? undefined : json['unsorted'],
         'empty': json['empty'] == null ? undefined : json['empty'],
     };
 }
@@ -73,8 +73,8 @@ export function SortObjectToJSONTyped(value?: SortObject | null, ignoreDiscrimin
 
     return {
 
-        'unsorted': value['unsorted'],
         'sorted': value['sorted'],
+        'unsorted': value['unsorted'],
         'empty': value['empty'],
     };
 }

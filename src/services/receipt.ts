@@ -1,4 +1,3 @@
-import { documentReferenceHash, addDownloadRecipient } from "./document-reference.js";
 import { CheqiApiError, CheqiSDKError, ErrorCodes, SubmissionInProgressError } from "../errors.js";
 import {
   encryptDownloadEnvelope,
@@ -202,7 +201,6 @@ export class ReceiptService {
       throw validationError("Match must contain owner devices");
     }
     return { matchId, storeId: storeId ?? undefined,
-      documentReferenceHash: await documentReferenceHash(payload.documentNumber, this.crypto),
       deviceDeliveries: await this.encryptForDevices(serializeJson(payload), recipients) };
   }
 
@@ -349,14 +347,12 @@ export class ReceiptService {
         })
       }
     };
-    const creditNotePublicKey = await addDownloadRecipient(envelope, this.crypto);
     return {
       downloadUrl: link.url,
       uploadRequest: {
         downloadId: link.downloadId,
         ciphertext: await encryptDownloadEnvelope(envelope, link.contentKey, this.crypto),
-        templateHash: await sha256Hex(canonicalizeJson(payloadDocument), this.crypto),
-        documentReferenceHash: await documentReferenceHash(receiptPayload.documentNumber, this.crypto), creditNotePublicKey
+        templateHash: await sha256Hex(canonicalizeJson(payloadDocument), this.crypto)
       }
     };
   }

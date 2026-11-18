@@ -101,8 +101,6 @@ export type { FetchLike, FetchRequestInit, FetchResponse } from "./transport.js"
  * Every call takes optional {@link RequestOptions} as its last argument.
  */
 export interface CheqiApiClient {
-  resolveCreditNoteReference?(request: import("./models/generated/index.js").CreditNoteDocumentReference,
-    options?: RequestOptions | null): Promise<import("./models/generated/index.js").CreditNoteReferenceResolution>;
   requestAccessToken(
     request: import("./models/generated/index.js").ClientCredentialsTokenRequest,
     options?: RequestOptions | null

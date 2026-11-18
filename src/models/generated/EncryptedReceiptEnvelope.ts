@@ -28,12 +28,6 @@ import {
  */
 export interface EncryptedReceiptEnvelope {
     /**
-     * SDK-computed SHA-256 hex of UTF-8 cheqi:issuer-document:v1: followed by the exact documentNumber; scoped to the authenticated issuer for credit-note resolution.
-     * @type {string}
-     * @memberof EncryptedReceiptEnvelope
-     */
-    documentReferenceHash?: string;
-    /**
      * Device-processing match ID returned by POST /recipient/resolve.
      * @type {string}
      * @memberof EncryptedReceiptEnvelope
@@ -79,7 +73,6 @@ export function EncryptedReceiptEnvelopeFromJSONTyped(json: any, ignoreDiscrimin
     }
     return {
 
-        'documentReferenceHash': json['documentReferenceHash'] == null ? undefined : json['documentReferenceHash'],
         'matchId': json['matchId'],
         'childCompanyId': json['childCompanyId'] == null ? undefined : json['childCompanyId'],
         'storeId': json['storeId'] == null ? undefined : json['storeId'],
@@ -98,7 +91,6 @@ export function EncryptedReceiptEnvelopeToJSONTyped(value?: EncryptedReceiptEnve
 
     return {
 
-        'documentReferenceHash': value['documentReferenceHash'],
         'matchId': value['matchId'],
         'childCompanyId': value['childCompanyId'],
         'storeId': value['storeId'],

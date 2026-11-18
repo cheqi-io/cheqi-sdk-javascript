@@ -100,7 +100,7 @@ test("injected crypto covers fallback, UUIDv4 and deferred uploads without uploa
   const result = await issuer.issueReceipt({ paymentType: "CASH" }, payload());
   const { contentKey } = parseDownloadUrl(result.getDownloadUrl());
   const upload = requests[1].body;
-  assert.deepEqual(Object.keys(upload).sort(), ["ciphertext", "creditNotePublicKey", "documentReferenceHash", "downloadId", "templateHash"]);
+  assert.deepEqual(Object.keys(upload).sort(), ["ciphertext", "downloadId", "templateHash"]);
   assert.ok(!JSON.stringify(requests).includes(contentKey));
   assert.ok(!JSON.stringify(requests).includes("PRIVATE-RECEIPT"));
   const decrypted = await decryptDownloadEnvelope(upload.ciphertext, contentKey, provider);

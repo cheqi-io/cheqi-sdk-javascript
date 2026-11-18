@@ -339,28 +339,30 @@ npm run typecheck
 make generate
 ```
 
-## Credit notes by document number
+## Credit notes in the web wallet
 
-Issue the original receipt normally with your own `documentNumber`. Supply that exact
-number as the credit note's `originatorDocumentReference`, alongside its own
-`documentNumber` and definitive positive credit amounts. Preserve `taxesApplied`
-in the generation input. No Cheqi ID, original download URL, or decryption key is
-needed from your integration.
+For the web wallet, issue the credit note through an ordinary encrypted receipt
+link. Include its own `documentNumber`, the original invoice's exact number in
+`originatorDocumentReference`, and the normal `taxesApplied` boolean. The helper
+also accepts the existing generation wrapper with `taxesApplied` at its root and
+`creditNoteTemplateRequest` as its body. Amounts are preserved without calculations.
 
-The SDK resolves the reference within the authenticated issuing company and
-prepares encrypted delivery through the original device or browser route.
-A missing original returns 404; an ambiguous number returns 409. Do not create a
-new prepared submission after an uncertain upload: persist and retry the same
-ciphertext. `PreparedCreditNote` is generated from the backend OpenAPI schema;
-the SDK implements preparation and submission, not independent data models.
+The reference stays inside the ciphertext. There is no backend invoice lookup,
+reference hash, parent Cheqi ID or encrypted parent-link field. Once the customer
+opens the credit note's link, the wallet matches the decrypted reference to one
+local invoice with that exact document number from the same issuer. If no unique
+invoice is available, the note remains visible on its own and can link later.
+The original invoice is unchanged, and both documents support ordinary PDF/XML
+export and independent removal.
 
-This flow requires the updated backend reference endpoint and originals issued
-with document-reference support. Older encrypted originals cannot be upgraded
-automatically. The browser saves credit notes as separate documents under the
-original invoice, with normal viewing, PDF and XML export.
+Preparation is local and reuses the existing `PreparedReceiptDownload` result and
+backend-generated envelope/upload models. Persist it before upload; retry the same
+prepared ciphertext after uncertain outcomes. For a custom receipt host, supply
+`baseUrl` (`base_url` in Python) to preparation. The browser needs the updated
+credit-note envelope support; no new backend routing endpoint or migration is needed.
 
 ```javascript
-const prepared = await sdk.creditNoteService.prepareCreditNote(generationInput);
-// Persist prepared before submitting; reuse it unchanged after an uncertain outcome.
-const result = await sdk.creditNoteService.submitPreparedCreditNote(prepared);
+const prepared = await sdk.creditNoteService.prepareDownload(creditNotePayload);
+// Persist prepared and show prepared.downloadUrl as the normal receipt link/QR.
+await sdk.receiptService.uploadPreparedDownload(prepared);
 ```

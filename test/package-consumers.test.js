@@ -128,7 +128,7 @@ test("installed package works in Node and Chromium, with a small issuer bundle",
     const fallback = result.fallback;
     assert.deepEqual(fallback.requests.map((request) => request.path), ["/recipient/resolve", "/receipt/download"]);
     const upload = fallback.requests[1].body;
-    assert.deepEqual(Object.keys(upload).sort(), ["ciphertext", "creditNotePublicKey", "documentReferenceHash", "downloadId", "templateHash"]);
+    assert.deepEqual(Object.keys(upload).sort(), ["ciphertext", "downloadId", "templateHash"]);
     assert.ok(fallback.result.downloadUrl.endsWith(`#${result.downloadKey}`));
     assert.ok(!JSON.stringify(fallback.requests).includes(result.downloadKey));
     assert.ok(!JSON.stringify([...injected.requests, ...fallback.requests]).includes(injected.payload.documentNumber));

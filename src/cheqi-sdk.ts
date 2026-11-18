@@ -71,7 +71,7 @@ export class CheqiSDK {
       this.apiClient,
       this.encryptionService,
       this.matchingService,
-      this.config.crypto
+      options.crypto
     );
     this.oauthService = new OAuthService(this.apiClient);
   }
