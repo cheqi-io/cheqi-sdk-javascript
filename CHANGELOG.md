@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.1.0
+
+- Add encrypted credit-note download preparation using the normal receipt upload flow, with the original invoice document reference kept inside the encrypted payload.
+- Refresh generated models from the production OpenAPI specification.
+
 ## 3.0.0
 
 - Use shared Fetch and Web Crypto code for Node.js 20+ and portable runtimes; test Node and Chromium in CI.
