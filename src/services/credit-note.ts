@@ -49,8 +49,8 @@ export class CreditNoteService {
       }, requestOptions);
       requireText(original?.parentCheqiReceiptId, "resolved parentCheqiReceiptId");
       const parent = original.parentCheqiReceiptId;
+      if (typeof node.taxesApplied !== "boolean") throw validationError("taxesApplied must be a boolean");
       if (original.deliveryRoute === "DIGITAL") {
-        if (typeof node.taxesApplied !== "boolean") throw validationError("taxesApplied must be a boolean for device generation");
         const match = await this.matchingService.matchCustomer({ cheqiReceiptId: parent }, requestOptions);
         validateDeviceRoute(match);
         if (match.deliveryRouteType !== "DIGITAL") throw validationError("Original owner-device route is unavailable");
@@ -68,7 +68,7 @@ export class CreditNoteService {
         { id: parent, publicKey: original.creditNotePublicKey });
       const ciphertext = await encryptDownloadEnvelope({ envelopeVersion: 2, cheqiReceiptId: child.downloadId,
         receiptUuid: randomUuid(this.crypto), receiptGeneratorVersion: "credit-note-payload-v1",
-        documents: { CREDIT_NOTE_PAYLOAD: { mediaType: "application/json", content: serializeJson(body) } }
+        documents: { CREDIT_NOTE_PAYLOAD: { mediaType: "application/json", content: serializeJson({ ...body, taxesApplied: node.taxesApplied }) } }
       }, child.contentKey, this.crypto);
       return { parentCheqiReceiptId: parent, downloadSubmission: { downloadId: child.downloadId, ciphertext,
         parentCheqiReceiptId: parent, encryptedParentLink: link.encryptedContent, encryptedParentLinkKey: link.encryptedAesKey } };

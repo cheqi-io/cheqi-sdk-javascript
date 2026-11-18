@@ -40,7 +40,8 @@ test("reference hashes preserve exact document numbers across SDKs", async () =>
 test("download credit note resolves by reference and persists encrypted retry state", async () => {
   const keys = await receiver();
   const { sdk, requests } = harness({ deliveryRoute: "DOWNLOAD", parentCheqiReceiptId: "original", creditNotePublicKey: keys.publicKey });
-  const prepared = await sdk.creditNoteService.prepareCreditNote(payload);
+  const { taxesApplied, ...body } = payload;
+  const prepared = await sdk.creditNoteService.prepareCreditNote({ taxesApplied, creditNoteTemplateRequest: body });
   const saved = JSON.stringify(prepared);
   assert.ok(!/INV-123|CN-123|contentKey|privateKey/.test(saved));
   const restored = JSON.parse(saved);
