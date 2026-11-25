@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.1.1
+
+- Let browsers and Shopify POS supply the `User-Agent` header for SDK requests. Node.js continues to send the SDK name and version.
+
 ## 3.1.0
 
 - Add encrypted credit-note download preparation using the normal receipt upload flow, with the original invoice document reference kept inside the encrypted payload.

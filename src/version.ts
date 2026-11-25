@@ -1,2 +1,2 @@
 // Generated from package.json by scripts/generate-version.mjs.
-export const SDK_VERSION = "3.1.0";
+export const SDK_VERSION = "3.1.1";
