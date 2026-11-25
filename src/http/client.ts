@@ -90,7 +90,6 @@ function buildErrorMessage(operation: string, status: number, responseText: stri
  */
 export class DefaultCheqiApiClient implements CheqiApiClient {
   private readonly retryHandler: RetryHandler;
-  private readonly userAgent: string;
   private readonly logger: Logger;
 
   constructor(
@@ -102,7 +101,6 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
     }
     this.logger = config.logger ?? new NoopLogger();
     this.retryHandler = new RetryHandler({ maxRetries: config.maxRetries, logger: this.logger });
-    this.userAgent = `CheqiSDK-TypeScript/${SDK_VERSION}`;
   }
 
   async requestAccessToken(
@@ -348,10 +346,11 @@ export class DefaultCheqiApiClient implements CheqiApiClient {
 
   /** Uses per-call credentials, the token provider, then the configured API key. */
   private async headers(options: RequestOptions, authenticate: boolean): Promise<Record<string, string>> {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      "User-Agent": this.userAgent
-    };
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    // Browsers and POS workers supply their own User-Agent on the wire.
+    if (globalThis.process?.release?.name === "node") {
+      headers["User-Agent"] = `CheqiSDK-TypeScript/${SDK_VERSION}`;
+    }
     if (!authenticate) return headers;
     let token = options.accessToken ?? this.config.apiKey;
     if (options.accessToken == null && this.config.accessTokenProvider) {

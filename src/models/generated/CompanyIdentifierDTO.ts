@@ -46,7 +46,7 @@ export interface CompanyIdentifierDTO {
      */
     registrationScheme?: CompanyIdentifierDTORegistrationSchemeEnum;
     /**
-     * The actual identifier value
+     * Identifier value, 1–255 characters without control characters. KVK requires exactly 8 digits; Dutch VAT requires NL followed by 9 digits, B and 2 digits. VAT must have an issuing country prefix and passes national format checks for all EU countries and XI. VAT spaces are removed and letters upper-cased. These are format checks, not registry or checksum verification.
      * @type {string}
      * @memberof CompanyIdentifierDTO
      */
@@ -58,7 +58,7 @@ export interface CompanyIdentifierDTO {
      */
     label?: string;
     /**
-     * ISO 3166-1 alpha-2 country code
+     * Issuing country from the canonical receipt country list, normalized to upper case. VAT prefix must match this country (GR uses EL, MC uses FR, LI uses CH; GB also accepts XI for Northern Ireland). May differ from the company address country.
      * @type {string}
      * @memberof CompanyIdentifierDTO
      */

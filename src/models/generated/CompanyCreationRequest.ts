@@ -49,13 +49,13 @@ import {
  */
 export interface CompanyCreationRequest {
     /**
-     * Display name of the company
+     * Display name of the company; trimmed, 1–255 characters without control characters
      * @type {string}
      * @memberof CompanyCreationRequest
      */
     companyName: string;
     /**
-     * Legal registered name of the company
+     * Legal registered name of the company; trimmed, 1–255 characters without control characters
      * @type {string}
      * @memberof CompanyCreationRequest
      */

@@ -116,14 +116,14 @@ paths:
               $ref: "#/components/schemas/AuthorizationCodeExchangeRequest"
         required: true
       responses:
-        "401":
-          description: Invalid client credentials
+        "200":
+          description: Authorization code exchanged successfully
           content:
             '*/*':
               schema:
                 $ref: "#/components/schemas/CompanyAuthorizationResponse"
-        "200":
-          description: Authorization code exchanged successfully
+        "401":
+          description: Invalid client credentials
           content:
             '*/*':
               schema:
@@ -190,6 +190,12 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/OAuthTokenExchangeResponse"
+        "400":
+          description: Invalid authorization code or request parameters
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/OAuthTokenExchangeResponse"
         "200":
           description: OAuth exchange completed successfully
           content:
@@ -205,12 +211,6 @@ paths:
                     token_type: bearer
                     expires_in: 900
                     scope: receipt:issue
-        "400":
-          description: Invalid authorization code or request parameters
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/OAuthTokenExchangeResponse"
       security: []
   /company/{companyId}/stores/{storeId}:
     get:
@@ -283,12 +283,6 @@ paths:
               $ref: "#/components/schemas/UpdateStoreRequest"
         required: true
       responses:
-        "200":
-          description: Store updated successfully
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/StoreDTO"
         "404":
           description: Store or company not found
           content:
@@ -301,6 +295,12 @@ paths:
             '*/*':
               schema:
                 type: object
+        "200":
+          description: Store updated successfully
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/StoreDTO"
         "400":
           description: Invalid request data
           content:
@@ -474,6 +474,12 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/RecipientResolutionResponse"
+        "200":
+          description: Recipient successfully resolved and matched
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/RecipientResolutionResponse"
         "403":
           description: Insufficient permissions - requires receipt:issue scope
           content:
@@ -488,12 +494,6 @@ paths:
                 $ref: "#/components/schemas/RecipientResolutionResponse"
         "400":
           description: Invalid identification details provided
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/RecipientResolutionResponse"
-        "200":
-          description: Recipient successfully resolved and matched
           content:
             '*/*':
               schema:
@@ -669,6 +669,12 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/ClientReceiptDownloadResponse"
+        "200":
+          description: Idempotent replay of an identical earlier upload
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ClientReceiptDownloadResponse"
         "201":
           description: Encrypted receipt stored
           content:
@@ -677,12 +683,6 @@ paths:
                 $ref: "#/components/schemas/ClientReceiptDownloadResponse"
         "403":
           description: Insufficient permissions - requires receipt:issue scope
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/ClientReceiptDownloadResponse"
-        "200":
-          description: Idempotent replay of an identical earlier upload
           content:
             '*/*':
               schema:
@@ -755,6 +755,12 @@ paths:
               $ref: "#/components/schemas/CreateChildCompanyRequest"
         required: true
       responses:
+        "400":
+          description: Invalid company details or company identifier format
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
         "403":
           description: User is not authorized to create child companies for this parent
           content:
@@ -799,6 +805,12 @@ paths:
               $ref: "#/components/schemas/InviteEmployeeRequest"
         required: true
       responses:
+        "200":
+          description: "Existing members, new invitations, and pending invitations"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InviteEmployeesResponse"
         "400":
           description: Invalid invitation request
           content:
@@ -807,12 +819,6 @@ paths:
                 $ref: "#/components/schemas/InviteEmployeesResponse"
         "404":
           description: Company not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/InviteEmployeesResponse"
-        "200":
-          description: "Existing members, new invitations, and pending invitations"
           content:
             application/json:
               schema:
@@ -1158,14 +1164,14 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/StoreDTO"
-        "403":
-          description: Not authorized to activate this store
+        "200":
+          description: Store activated successfully
           content:
             '*/*':
               schema:
                 $ref: "#/components/schemas/StoreDTO"
-        "200":
-          description: Store activated successfully
+        "403":
+          description: Not authorized to activate this store
           content:
             '*/*':
               schema:
@@ -1214,12 +1220,6 @@ paths:
         **Accessible for:** Client Application, Company
       operationId: getQueuedReceipts
       responses:
-        "200":
-          description: Queued receipts returned successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/EncryptedReceiptDeliveryResponse"
         "403":
           description: Insufficient receipt read permission
           content:
@@ -1229,6 +1229,12 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/EncryptedReceiptDeliveryResponse"
+        "200":
+          description: Queued receipts returned successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EncryptedReceiptDeliveryResponse"
       security:
       - cheqi_oauth:
         - receipt:read
@@ -2069,7 +2075,12 @@ components:
           - OTHER
         value:
           type: string
-          description: The actual identifier value
+          description: "Identifier value, 1–255 characters without control characters.\
+            \ KVK requires exactly 8 digits; Dutch VAT requires NL followed by 9 digits,\
+            \ B and 2 digits. VAT must have an issuing country prefix and passes national\
+            \ format checks for all EU countries and XI. VAT spaces are removed and\
+            \ letters upper-cased. These are format checks, not registry or checksum\
+            \ verification."
           example: "12345678"
         label:
           type: string
@@ -2077,7 +2088,10 @@ components:
           example: KVK Number
         countryCode:
           type: string
-          description: ISO 3166-1 alpha-2 country code
+          description: "Issuing country from the canonical receipt country list, normalized\
+            \ to upper case. VAT prefix must match this country (GR uses EL, MC uses\
+            \ FR, LI uses CH; GB also accepts XI for Northern Ireland). May differ\
+            \ from the company address country."
           example: NL
         isVerified:
           type: boolean
@@ -2892,11 +2906,13 @@ components:
       properties:
         companyName:
           type: string
-          description: Display name of the company
+          description: "Display name of the company; trimmed, 1–255 characters without\
+            \ control characters"
           example: Example Coffee Shop
         companyLegalName:
           type: string
-          description: Legal registered name of the company
+          description: "Legal registered name of the company; trimmed, 1–255 characters\
+            \ without control characters"
           example: Example Coffee Shop B.V.
         address:
           $ref: "#/components/schemas/AddressDTO"
@@ -2984,6 +3000,31 @@ components:
       enum:
       - MANUAL
       - AUTOMATED
+    ApiError:
+      type: object
+      properties:
+        path:
+          type: string
+        message:
+          type: string
+        statusCode:
+          type: integer
+          format: int32
+        localDateTime:
+          type: string
+          format: date-time
+        errorCode:
+          type: string
+        fieldErrors:
+          type: object
+          additionalProperties:
+            type: string
+            description: "Optional validation messages keyed by request field. Company\
+              \ identifiers use stable keys identifiers.TYPE or identifiers.TYPE.SCHEME\
+              \ (upper-case), rather than collection indexes."
+          description: "Optional validation messages keyed by request field. Company\
+            \ identifiers use stable keys identifiers.TYPE or identifiers.TYPE.SCHEME\
+            \ (upper-case), rather than collection indexes."
     CompanyResponse:
       type: object
       properties:

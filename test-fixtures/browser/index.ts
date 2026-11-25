@@ -17,6 +17,9 @@ export async function runIssuerFixture(publicKey: string, crypto?: CryptoProvide
     crypto,
     logger: { debug() {}, info() {}, warn() {}, error() {} },
     fetch: async (url, init) => {
+      if (new Headers(init?.headers).has("User-Agent")) {
+        throw new Error("The SDK set a User-Agent header in the browser");
+      }
       const path = new URL(String(url)).pathname;
       const body = JSON.parse(String(init?.body));
       requests.push({ path, body, authorization: (init?.headers as Record<string, string>).Authorization ?? null });
