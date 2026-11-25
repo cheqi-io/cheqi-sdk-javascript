@@ -1,6 +1,7 @@
 export * from './AccountIdentifierType.js';
 export * from './AcknowledgeRequest.js';
 export * from './AddressDTO.js';
+export * from './ApiError.js';
 export * from './AuthorizationCodeExchangeRequest.js';
 export * from './AuthorizedCardDTO.js';
 export * from './AuthorizedCompanyDTO.js';
